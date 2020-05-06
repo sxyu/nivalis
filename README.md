@@ -2,7 +2,7 @@
 
 ## Installation
 - Install nana <https://github.com/qPCR4vir/nana>
-- Compile with CMake: `cd build && cmake .. -DCMAKE_BUILD_TYPE=Release`
+- Build with CMake: `cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j8`
 
 ## Usage 
 - `./nivalis`
