@@ -2,10 +2,13 @@
 
 ## Installation
 - Install Nana <https://github.com/qPCR4vir/nana>
-    - Use CMake. Install `libnana.a` to `/usr/local/lib` and
-      copy `include/nana` directory to `/usr/local/include` (on Linux) 
-        - Have to rename `build/makefile` included in repo,
-          else CMake build will break
+    - You may use CMake to build.
+        Unfortunately CMake install doesn't work for Nana.
+      Manually install `libnana.a` to `/usr/local/lib` and
+          copy `include/nana` directory to `/usr/local/include` (on Linux) 
+        - Also, if you build in `build` directory, you have to rename
+          the `build/makefile` directory in repo,
+          else CMake's build will break
 - Build with CMake: `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j8`
     - You may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
 
