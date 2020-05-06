@@ -32,7 +32,7 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 # set( Boost_USE_STATIC ON )
 
 # find_package(Boost REQUIRED COMPONENTS system program_options filesystem )
-# find_package(Threads REQUIRED)
+find_package(Threads REQUIRED)
 find_package(X11 REQUIRED)
 # find_package(Freetype REQUIRED)
 find_package(Fontconfig REQUIRED)
@@ -71,7 +71,6 @@ set (NANA_LINK_LIBS
     ${X11_X11_LIB}
     ${X11_Xft_LIB}
     ${CMAKE_THREAD_LIBS_INIT}
-    # ${FREETYPE_LIBRARIES}
     ${Fontconfig_LIBRARIES}
     ${JPEG_LIBRARIES}
 )
@@ -83,8 +82,6 @@ target_link_libraries( ${PROJ_NAME}  #${Boost_LIBRARIES}
 
 if ( MSVC )
     set_property(TARGET ${PROJ_NAME} APPEND PROPERTY LINK_FLAGS /DEBUG)
-else()
-    target_link_libraries( ${PROJ_NAME} pthread )
 endif ( MSVC )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_libraries( ${PROJ_NAME} stdc++fs )
