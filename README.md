@@ -27,3 +27,4 @@
     - Ctrl/Alt +- to zoom asymmetrically
     - Ctrl+H or click the reset view button to reset to home view (around origin)
 ![Screenshot](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
+![Screenshot: implicit functions](https://github.com/sxyu/nivalis/blob/master/readme_img/implicit.png?raw=true)
