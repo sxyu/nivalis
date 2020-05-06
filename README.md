@@ -7,7 +7,8 @@
 ## Usage 
 - `./nivalis`
 - Enter expressions to evaluate them
-    - Some functions available: `exp ln log10 log2 sin cos tan asin acos atan abs fact gamma'
+    - Exponentiation is `^`, other operators are standard
+    - Some functions available: `exp ln log10 log2 sin cos tan asin acos atan abs fact gamma`
     - Piecewise: `{x<0 : x, x>=0 : x^2}`
 - Enter `plot` to show plotter GUI
     - E to edit expression (or click the textbox)
