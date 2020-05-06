@@ -1,13 +1,17 @@
 # Nivalis Plotter
 
+A simple expression evaluator + interactive function plotter in C++, supporting implicit functions.
+The evaluator parses expressions into custom bytecode, which is optimized before evaluation, leading to quite good performance. 
+
+## Dependencies
+- C++ 17
+- Nana (GUI library)
+
 ## Installation
 - Install Nana <https://github.com/qPCR4vir/nana>
-    - You may use CMake to build.
-        Unfortunately CMake install doesn't work for Nana.
-      Manually install `libnana.a` to `/usr/local/lib` and
-          copy `include/nana` directory to `/usr/local/include` (on Linux) 
-        - Also, if you build in `build` directory, you have to rename
-          the `build/makefile` directory in repo,
+    - I used CMake to build. You may also try one of the other provided methods. Unfortunately CMake install doesn't appear to be set up correctly.
+      Aftr build, you'll need to manually install `libnana.a` to `/usr/local/lib` and copy `include/nana` directory to `/usr/local/include` (on Linux) 
+        - A danger: if you decided to use CMake and build in the `build` directory, you must first rename the `build/makefile` directory in repo, or
           else CMake's build will break
 - Build with CMake: `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j8`
     - You may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
