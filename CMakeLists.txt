@@ -83,7 +83,7 @@ target_link_libraries( ${PROJ_NAME}  #${Boost_LIBRARIES}
 if ( MSVC )
     set_property(TARGET ${PROJ_NAME} APPEND PROPERTY LINK_FLAGS /DEBUG)
 endif ( MSVC )
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_link_libraries( ${PROJ_NAME} stdc++fs )
 endif ()
 # Create source group for headers
