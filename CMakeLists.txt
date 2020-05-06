@@ -28,10 +28,10 @@ if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -O3 -g" )
 endif ( CMAKE_COMPILER_IS_GNUCXX )
 
-set( Boost_USE_STATIC_LIBS ON )
-set( Boost_USE_STATIC ON )
+# set( Boost_USE_STATIC_LIBS ON )
+# set( Boost_USE_STATIC ON )
 
-find_package(Boost REQUIRED COMPONENTS system program_options filesystem )
+# find_package(Boost REQUIRED COMPONENTS system program_options filesystem )
 # find_package(Threads REQUIRED)
 find_package(X11 REQUIRED)
 # find_package(Freetype REQUIRED)
@@ -40,7 +40,7 @@ find_package(JPEG REQUIRED)
 find_package(Nana REQUIRED)
 include_directories(
     ${INCLUDE_DIR}
-    ${Boost_INCLUDE_DIRS}
+    # ${Boost_INCLUDE_DIRS}
     ${X11_INCLUDE_DIR}
     # ${FREETYPE_INCLUDE_DIRS}
     ${Fontconfig_INCLUDE_DIRS}
@@ -78,7 +78,7 @@ set (NANA_LINK_LIBS
 
 add_executable( ${PROJ_NAME} ${HEADERS} ${SOURCES} )
 set_target_properties( ${PROJ_NAME} PROPERTIES OUTPUT_NAME ${OUTPUT_NAME} )
-target_link_libraries( ${PROJ_NAME}  ${Boost_LIBRARIES}
+target_link_libraries( ${PROJ_NAME}  #${Boost_LIBRARIES}
      ${NANA_LIBRARIES} ${NANA_LINK_LIBS} )
 
 if ( MSVC )
