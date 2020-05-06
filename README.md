@@ -23,10 +23,10 @@
             - Implicit function (slower, less detail):
               e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
         - Updates plot automatically
-    - `Up`/`Down` arrow keys (or use `<` `>` buttons below textbox) to switch functions or add new functions (by going past last defined function)
+    - `Up`/`Down` arrow keys in textbox (or use `<` `>` buttons below textbox) to switch functions or add new functions (by going past last defined function)
     - `Delete` or click the x button to delete current function
-    - Drag mouse to move, scroll to zoom
-    - `Ctrl`/`Alt` `+``-` to zoom asymmetrically
+    - Drag mouse (or arrow keys) to move, scroll (or `=`/`-`)  to zoom
+    - `Ctrl`/`Alt` and `=`/`-` to zoom asymmetrically
     - Ctrl+H or click the reset view button to reset to home view (around origin)
 ![Screenshot](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
 ![Screenshot: implicit functions](https://github.com/sxyu/nivalis/blob/master/readme_img/implicit.png?raw=true)
