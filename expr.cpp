@@ -3,12 +3,14 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <algorithm>
 #include "util.hpp"
 namespace nivalis {
 
 namespace {
 #define EV_NEXT eval_ast(env, ast)
 #define EV_NEXT_SKIP eval_ast_skip(ast)
+#define EV_NEXT_FIND_VAR if (eval_ast_find_var(ast, var_id)) { return true; }
 #define EV_NEXT_DC nontrivial |= eval_ast_detect_constexpr(ast, begin, is_constexpr)
 #define EV_NEXT_OPTIM do{\
     if(skip_node) eval_ast_skip(ast); \
@@ -27,7 +29,7 @@ void eval_ast_skip(const uint32_t** ast) {
         case ref: ++*ast; break;
         case bnz: EV_NEXT_SKIP; EV_NEXT_SKIP; EV_NEXT_SKIP; break;
         // Binary
-        case add: case sub: case mul: case div: case mod:
+        case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case lt: case le: case eq: case ne: case ge: case gt:
@@ -36,6 +38,31 @@ void eval_ast_skip(const uint32_t** ast) {
         // Unary
         default: EV_NEXT_SKIP;
     }
+}
+
+// Walk through AST to check if variable is present
+bool eval_ast_find_var(const uint32_t** ast, uint32_t var_id) {
+    using namespace nivalis::OpCode;
+    uint32_t opcode = **ast;
+    ++*ast;
+    switch(opcode) {
+        case val: *ast += 2; break;
+        case ref:
+          if (**ast == var_id) return true;
+          ++*ast;
+          break;
+        case bnz: EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
+        // Binary
+        case bsel: case add: case sub: case mul: case div: case mod:
+        case power: case logbase: case max: case min:
+        case land: case lor: case lxor:
+        case lt: case le: case eq: case ne: case ge: case gt:
+            EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
+        case null: break;
+        // Unary
+        default: EV_NEXT_FIND_VAR;
+    }
+    return false;
 }
 
 // Evaluate AST from node
@@ -59,6 +86,7 @@ double eval_ast(Environment& env, const uint32_t** ast) {
             }
             break;
 
+        case bsel: EV_NEXT; ret = EV_NEXT; break;
         case add: ret = EV_NEXT + EV_NEXT; break;
         case sub: ret = EV_NEXT; ret -= EV_NEXT; break;
         case mul: ret = EV_NEXT * EV_NEXT; break;
@@ -111,7 +139,6 @@ double eval_ast(Environment& env, const uint32_t** ast) {
                         std::cout << std::defaultfloat << std::setprecision(ss);
                     }
                 break;
-
         default: RET_NONE; break;
     }
     return ret;
@@ -132,7 +159,7 @@ bool eval_ast_detect_constexpr(const uint32_t** ast,
         case ref: ++*ast; nontrivial = true; break;
         case bnz: EV_NEXT_DC; EV_NEXT_DC; EV_NEXT_DC; break;
         // Binary
-        case add: case sub: case mul: case div: case mod:
+        case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case lt: case le: case eq: case ne: case ge: case gt:
@@ -174,7 +201,7 @@ void eval_ast_optim_constexpr(
             break;
         case bnz: EV_NEXT_OPTIM; EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
         // Binary
-        case add: case sub: case mul: case div: case mod:
+        case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case lt: case le: case eq: case ne: case ge: case gt:
@@ -183,6 +210,24 @@ void eval_ast_optim_constexpr(
         // Unary
         default: EV_NEXT_OPTIM;
     }
+}
+
+Expr combine_expr(uint32_t opcode, const Expr& a, const Expr& b) {
+    Expr new_expr;
+    new_expr.ast.clear();
+    new_expr.ast.reserve(a.ast.size() + b.ast.size() + 1);
+    new_expr.ast.push_back(opcode);
+    std::copy(a.ast.begin(), a.ast.end(), std::back_inserter(new_expr.ast));
+    std::copy(b.ast.begin(), b.ast.end(), std::back_inserter(new_expr.ast));
+    return new_expr;
+}
+Expr wrap_expr(uint32_t opcode, const Expr& a) {
+    Expr new_expr;
+    new_expr.ast.clear();
+    new_expr.ast.reserve(a.ast.size() + 1);
+    new_expr.ast.push_back(opcode);
+    std::copy(a.ast.begin(), a.ast.end(), std::back_inserter(new_expr.ast));
+    return new_expr;
 }
 
 }  // namespace
@@ -195,7 +240,65 @@ double Expr::operator()(Environment& env) const {
     return eval_ast(env, &astptr);
 }
 
+Expr Expr::operator+(const Expr& other) const {
+    return combine_expr(OpCode::add, *this, other);
+}
+Expr Expr::operator-(const Expr& other) const {
+    return combine_expr(OpCode::sub, *this, other);
+}
+Expr Expr::operator*(const Expr& other) const {
+    return combine_expr(OpCode::mul, *this, other);
+}
+Expr Expr::operator/(const Expr& other) const {
+    return combine_expr(OpCode::div, *this, other);
+}
+Expr Expr::operator^(const Expr& other) const {
+    return combine_expr(OpCode::power, *this, other);
+}
+Expr Expr::combine(uint32_t opcode, const Expr& other) const {
+    return combine_expr(opcode, *this, other);
+}
+Expr Expr::operator-() const {
+    return wrap_expr(OpCode::uminusb, *this);
+}
+Expr Expr::wrap(uint32_t opcode) const {
+    return wrap_expr(opcode, *this);
+}
+
+bool Expr::has_var(uint32_t addr) const {
+    const uint32_t* astptr = &ast[0];
+    return eval_ast_find_var(&astptr, addr);
+}
+
+Expr Expr::null() {
+    return Expr();
+}
+Expr Expr::zero() {
+    return constant(0);
+}
+Expr Expr::constant(double val) {
+    Expr z;
+    z.ast.clear();
+    util::push_dbl(z.ast, val);
+    return z;
+}
+uint32_t Expr::opcode_from_opchar(char c) {
+    switch (c) {
+        case '+': return OpCode::add;
+        case '-': return OpCode::sub;
+        case '*': return OpCode::mul;
+        case '/': return OpCode::div;
+        case '%': return OpCode::mod;
+        case '^': return OpCode::power;
+        case '<': return OpCode::lt;
+        case '>': return OpCode::gt;
+        case '=': return OpCode::eq;
+        default: return OpCode::bsel;
+    };
+}
+
 void Expr::optimize() {
+    if (ast.empty()) return;
     std::vector<bool> is_constexpr(ast.size());
     const uint32_t* astptr = &ast[0];
     eval_ast_detect_constexpr(&astptr, astptr, is_constexpr);
@@ -208,7 +311,11 @@ void Expr::optimize() {
 }
 
 std::ostream& operator<<(std::ostream& os, const Expr& expr) {
-    os << "Expr";
+    os << "Expr[";
+    for (uint32_t i : expr.ast) {
+        os << i << " ";
+    }
+    os << "]";
     return os;
 }
 

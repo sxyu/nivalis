@@ -63,13 +63,30 @@ struct PlotGUI::impl {
         tb.caption(init_expr);
 
         int edit_expr_idx = 0;
-        auto upd_expr = [&](){ 
+        auto reparse_expr = [&]() {
             size_t idx = edit_expr_idx;
             auto& expr = exprs[idx];
             auto& expr_str = expr_strs[idx];
             expr_str = tb.caption();
-            util::trim(expr_str);
-            expr = parser(expr_str, env);
+            size_t eqpos = util::find_equality(expr_str);
+            if ((is_implicit[idx] = ~eqpos)) {
+                auto lhs = expr_str.substr(0, eqpos),
+                     rhs = expr_str.substr(eqpos+1);
+                util::trim(lhs); util::trim(rhs);
+                if (lhs == "y" || rhs == "y") {
+                    expr = parser(lhs == "y" ? rhs : lhs, env);
+                    if (!expr.has_var(y_var)) {
+                        // if one side is y and other side has no y,
+                        // treat as explicit function 
+                        is_implicit[idx] = false;
+                    }
+                }
+                if (is_implicit[idx]) {
+                    expr = parser(lhs, env) - parser(rhs, env);
+                }
+            } else {
+                expr = parser(expr_str, env);
+            }
             expr.optimize();
             update();
         };
@@ -97,6 +114,7 @@ struct PlotGUI::impl {
                 if (!tmp.empty()) {
                     exprs.emplace_back();
                     expr_strs.emplace_back();
+                    is_implicit.push_back(false);
                     if (reuse_colors.empty()) {
                         expr_colors.push_back(color_from_int(last_expr_color++));
                     } else {
@@ -120,17 +138,18 @@ struct PlotGUI::impl {
                 expr_strs.erase(expr_strs.begin() + edit_expr_idx);
                 reuse_colors.push(expr_colors[edit_expr_idx]);
                 expr_colors.erase(expr_colors.begin() + edit_expr_idx);
+                is_implicit.erase(is_implicit.begin() + edit_expr_idx);
                 if (edit_expr_idx >= exprs.size()) {
                     edit_expr_idx--;
                 }
             } else {
                 expr_strs[0] = "";
             }
-            upd_expr();
+            reparse_expr();
             seek_func(0);
         };
         tb.events().key_release([&](const nana::arg_keyboard& arg) {
-            upd_expr();
+            reparse_expr();
             if (arg.key == 38 || arg.key == 40) {
                 // Up/down: go to different funcs
                 seek_func(arg.key == 38 ? -1 : 1);
@@ -287,12 +306,14 @@ struct PlotGUI::impl {
         dw.draw([this](paint::graphics& graph){ graph.rectangle(true, colors::white); });
 
         x_var = env.addr_of("x", false);
-        env.vars[x_var] = 3.0;
+        y_var = env.addr_of("y", false);
 
         exprs.push_back(parser(init_expr, env));
         expr_strs.push_back(init_expr);
         expr_colors.push_back(color_from_int(last_expr_color++));
-        exprs[0].optimize();
+        is_implicit.push_back(false);
+        reparse_expr();
+        // *** Main drawing code ***
         dw.draw([this, &edit_expr_idx](paint::graphics& graph) {
             int swid = fm.size().width, shigh = fm.size().height;
             double xdiff = xmax - xmin, ydiff = ymax - ymin;
@@ -412,42 +433,90 @@ struct PlotGUI::impl {
                 int psx = -1, psy = -1;
                 auto& expr = exprs[exprid];
                 const color& func_color = expr_colors[exprid];
-                for (double sxd = 0; sxd < swid; sxd += 0.25) {
-                    const double x = sxd / swid * xdiff + xmin;
-                    env.vars[x_var] = x;
-                    double y = expr(env);
-                    if (!std::isnan(y)) {
-                        reinit = true;
-                        if (std::isinf(y)) {
-                            if (y>0) y = ymax+(ymax-ymin)*1000;
-                            else y = ymin-(ymax-ymin)*1000;
-                        }
-                        int sy = (ymax - y) / ydiff * shigh;
-                        int sx = static_cast<int>(sxd);
-                        if (reinit) {
-                            if (!(y > ymax || y < ymin)) {
-                                reinit = false;
-                                if (~psx) {
-                                    graph.line(point(psx, psy), point(sx,sy), func_color);
+                if (is_implicit[exprid]) {
+                    // implicit function
+                    const int interval = 3;
+                    std::vector<double> line(swid / interval + 2);
+                    for (int sx = 0; sx < swid; sx += interval) {
+                        int idx = 0;
+                        for (int sy = 0; sy < shigh; sy += interval, ++idx) {
+                            const double x = 1.*sx / swid * xdiff + xmin;
+                            const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
+                            env.vars[x_var] = x; env.vars[y_var] = y;
+                            double z = expr(env);
+                            if (std::fabs(z) > 10.0) {
+                                line[idx] = line[idx+1] = z;
+                                ++idx; sy += interval;
+                                continue;
+                            }
+                            if (sy > 0) {
+                                double zup = line[idx-1];
+                                if ((zup <= 0 && z >= 0) || (zup >= 0 && z <= 0)) {
+                                    graph.set_pixel(sx-1, sy-1, func_color);
+                                    graph.set_pixel(sx, sy-1, func_color);
+                                    graph.set_pixel(sx+1, sy-1, func_color);
                                     if (edit_expr_idx == exprid) {
-                                        // Thicken current function
-                                        graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
-                                        graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                                        graph.set_pixel(sx-1, sy-2, func_color);
+                                        graph.set_pixel(sx, sy-2, func_color);
+                                        graph.set_pixel(sx+1, sy-2, func_color);
                                     }
                                 }
                             }
-                        } else {
-                            graph.line(point(psx, psy), point(sx,sy), func_color);
-                            if (edit_expr_idx == exprid) {
-                                graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
-                                graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                            if (sx > 0) {
+                                double zleft = line[idx];
+                                if ((zleft <= 0 && z >= 0) || (zleft >= 0 && z <= 0)) {
+                                    graph.set_pixel(sx-2, sy-1, func_color);
+                                    graph.set_pixel(sx-2, sy, func_color);
+                                    graph.set_pixel(sx-2, sy+1, func_color);
+                                    if (edit_expr_idx == exprid) {
+                                        graph.set_pixel(sx-1, sy-1, func_color);
+                                        graph.set_pixel(sx-1, sy, func_color);
+                                        graph.set_pixel(sx-1, sy+1, func_color);
+                                    }
+                                }
                             }
-                            if (y > ymax || y < ymin) {
-                                reinit = true;
-                            }
+                            line[idx] = z;
                         }
-                        psx = sx;
-                        psy = sy;
+                    }
+                } else {
+                    // explicit function
+                    for (double sxd = 0; sxd < swid; sxd += 0.25) {
+                        const double x = sxd / swid * xdiff + xmin;
+                        env.vars[x_var] = x;
+                        double y = expr(env);
+                        if (!std::isnan(y)) {
+                            reinit = true;
+                            if (std::isinf(y)) {
+                                if (y>0) y = ymax+(ymax-ymin)*1000;
+                                else y = ymin-(ymax-ymin)*1000;
+                            }
+                            int sy = (ymax - y) / ydiff * shigh;
+                            int sx = static_cast<int>(sxd);
+                            if (reinit) {
+                                if (!(y > ymax || y < ymin)) {
+                                    reinit = false;
+                                    if (~psx) {
+                                        graph.line(point(psx, psy), point(sx,sy), func_color);
+                                        if (edit_expr_idx == exprid) {
+                                            // Thicken current function
+                                            graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
+                                            graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                                        }
+                                    }
+                                }
+                            } else {
+                                graph.line(point(psx, psy), point(sx,sy), func_color);
+                                if (edit_expr_idx == exprid) {
+                                    graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
+                                    graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                                }
+                                if (y > ymax || y < ymin) {
+                                    reinit = true;
+                                }
+                            }
+                            psx = sx;
+                            psy = sy;
+                        }
                     }
                 }
             }
@@ -467,12 +536,13 @@ private:
 
     Environment env;
     Parser parser;
+    std::vector<bool> is_implicit;
     std::vector<Expr> exprs;
     std::vector<std::string> expr_strs;
     std::queue<color> reuse_colors;
     size_t last_expr_color = 0;
     std::vector<color> expr_colors;
-    uint32_t x_var;
+    uint32_t x_var, y_var;
 
     // nana::threads::pool pool;
 };

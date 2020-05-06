@@ -8,25 +8,37 @@
 namespace nivalis {
 
 namespace OpCode {
+// nivalis bytecode
 enum _OpCode {
-    null = 0, val, ref,
-    bnz = 16,
+    null = 0, // returns NaN
+    val,      // stores value in 8 bytes after
+    ref,      // stores address of var in env in 4 bytes after
+    bsel = 8, // ignore first, return second
+    bnz = 16, // if first is not zero, second, else third (short-circuiting)
 
+    // binary arithmetic operators
     add = 32, sub,
     mul = 48, div, mod,
     power = 64, logbase,
     max = 80, min,
     land, lor, lxor,
+
+    // binary comparison operators
     lt = 96, le, eq, ne, ge, gt,
 
-    nop = 32768, uminusb, notb,
+    // unary operators
+    nop = 32768, // idenitity
+    uminusb, notb,
     absb, sqrtb, sgnb, floorb, ceilb, roundb,
     expb, logb, log10b, log2b,
     sinb, cosb, tanb, asinb, acosb, atanb, sinhb, coshb, tanhb,
     gammab, factb,
-    
+
+    // printing
     printc = 65534, print,
-    dead = 57005
+
+    // diagnostics
+    dead = 57005,
 };
 }  // namespace OpCode
 
@@ -36,6 +48,33 @@ struct Expr {
 
     // Evaluate expression in environment
     double operator()(Environment& env) const;
+
+    // Combine expressions with basic operator
+    Expr operator+(const Expr& other) const;
+    Expr operator-(const Expr& other) const;
+    Expr operator*(const Expr& other) const;
+    Expr operator/(const Expr& other) const;
+    Expr operator^(const Expr& other) const;
+    // Combine with other using binary operator
+    Expr combine(uint32_t opcode, const Expr& other) const;
+    // Unary minus wrapping
+    Expr operator-() const;
+    // Wrap in unary operator with opcode
+    Expr wrap(uint32_t opcode) const;
+
+    // Checks if expression refers to given variable
+    bool has_var(uint32_t addr) const;
+
+    // Null expr
+    static Expr null();
+    // Zero expr
+    static Expr zero();
+    // Const expr
+    static Expr constant(double val);
+
+    // Get opcode of binary operator from char e.g. '+' -> 32
+    // If not a valid operator, returns bsel
+    static uint32_t opcode_from_opchar(char c);
 
     // Optimize expression
     void optimize();

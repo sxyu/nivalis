@@ -10,7 +10,6 @@ namespace nivalis {
 
 namespace {
     // Constants, lookup tables
-    bool is_bracket[256], is_operator[256];
     char lb[] = "([{", rb[] = ")]}";
     std::map<std::string, uint32_t> func_opcodes;
 
@@ -93,6 +92,8 @@ private:
     }
 
     bool _parse(int64_t left, int64_t right, int pri) {
+        while (std::isspace(expr[right-1])) --right;
+        while (std::isspace(expr[left])) ++left;
         switch(pri) {
             case PRI_COMPARISON:
                 for (int64_t i = right - 1; i >= left; --i) {
@@ -130,8 +131,7 @@ private:
                 for (int64_t i = right - 1; i >= left; --i) {
                     const char c = expr[i];
                     if ((c == '+' || c == '-') && 
-                            i > left &&
-                            !is_operator[expr[i-1]]) {
+                            i > left && !util::is_operator(expr[i-1])) {
                         result.ast.push_back(c == '+' ? OpCode::add :
                                 OpCode::sub);
                         RETURN_IF_FALSE(_parse(left, i, pri));
@@ -199,10 +199,10 @@ private:
                     bool last_colon = false;
                     for (int64_t i = left + 1; i < right - 1; ++i) {
                         const char cc = expr[i];
-                        if (cc == '{' || cc == '(' || cc == ']') {
+                        if (util::is_open_bracket(cc)) {
                             ++stkh;
                         }
-                        else if (cc == '}' || cc == ')' || cc == ']') {
+                        else if (util::is_close_bracket(cc)) {
                             --stkh;
                         }
                         else if (stkh == 0) {
@@ -275,7 +275,8 @@ private:
                     util::push_dbl(result.ast, std::strtod(
                                 tmp.c_str(), &endptr));
                     if (endptr != tmp.c_str() + (right-left)) {
-                        std::cout << "Numeric parsing failed on '" << tmp << "'\n";
+                        std::cout << "Numeric parsing failed on '"
+                            << tmp << "'\n";
                         return false;
                     }
                     return true;
@@ -327,16 +328,8 @@ private:
 };
 
 Parser::Parser(){
-    if (!is_bracket[lb[0]]){
+    if (func_opcodes.empty()){
         // Set lookup tables
-        for (size_t i = 0; i < sizeof lb; ++i) {
-            is_bracket[lb[i]] = true;
-            is_bracket[rb[i]] = true;
-        }
-        is_operator['>'] = is_operator['='] = is_operator['<'] =
-        is_operator['+'] = is_operator['-'] = is_operator['*'] =
-        is_operator['/'] = is_operator['%'] = is_operator['^'] = true;
-
         func_opcodes["pow"] = OpCode::power;
         func_opcodes["log"] = OpCode::logbase;
         func_opcodes["max"] = OpCode::max;

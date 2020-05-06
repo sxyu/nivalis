@@ -80,6 +80,31 @@ double atof(const char* p, const char* end) {
     return sign * (frac ? (value / scale) : (value * scale));
 }
 
+bool is_varname(const std::string& expr) {
+    if(!util::is_varname_first(expr[0])) return false;
+    for (size_t k = 1; k < expr.size(); ++k) {
+        if (!util::is_literal(expr[k])) return false;
+    }
+    return true;
+}
+size_t find_equality(const std::string& expr) {
+    size_t stkh = 0;
+    for (size_t i = 0; i < expr.size(); ++i) {
+        const char c = expr[i];
+        if (is_open_bracket(c)) {
+            ++stkh;
+        } else if (is_close_bracket(c)) {
+            --stkh;
+        } else if (stkh == 0 && c == '=' && 
+                   i > 0 && i < expr.size()-1 &&
+                   !util::is_comp_operator(expr[i-1]) &&
+                   !util::is_comp_operator(expr[i+1])) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void ltrim(std::string &s) {
     s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
         return !std::isspace(ch);

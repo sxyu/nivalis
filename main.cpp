@@ -57,6 +57,7 @@ int main(int argc, char ** argv) {
     std::cout << "Nivalis 0.0.1 (c) Alex Yu 2020\n";
 
     std::string orig_line, line, var;
+    int assn_opcode = OpCode::bsel;
     int N;
     Environment env;
     Parser parse;
@@ -89,16 +90,19 @@ int main(int argc, char ** argv) {
         } else {
             // Evaluate
             var.clear();
-
+            assn_opcode = OpCode::bsel;
             if (util::is_varname_first(line[0])) {
-                size_t pos = 0;
-                while(pos < line.size() && util::is_literal(line[pos]))
-                    ++pos;
-                if (pos < line.size() && line[pos] == '=' &&
-                        (pos == line.size()-1 || line[pos+1] != '=')) {
-                    // Assignment
+                size_t pos = util::find_equality(line);
+                if (~pos) {
                     var = line.substr(0, pos);
-                    line = line.substr(pos + 1);
+                    if (util::is_arith_operator(var.back())) {
+                        assn_opcode = Expr::opcode_from_opchar(var.back());
+                        var.pop_back();
+                    }
+                    if (util::is_varname(var)) {
+                        // Assignment
+                        line = line.substr(pos + 1);
+                    }
                 }
             }
 
@@ -108,8 +112,22 @@ int main(int argc, char ** argv) {
                 !std::isnan(output = expr(env))) {
                 expr.optimize();
                 if (var.size()) {
-                    env.set(var, output);
-                    std::cout << var << " <- " << output << std::endl;
+                    double var_val;
+                    if (assn_opcode != OpCode::bsel) {
+                        auto addr = env.addr_of(var, true);
+                        if (addr == -1) {
+                            std::cout << "Undefined variable \"" << var
+                                << "\" (operator assignment)\n";
+                            continue;
+                        }
+                        var_val = Expr::constant(env.vars[addr])
+                            .combine(assn_opcode,
+                                    Expr::constant(output))(env);
+                    } else {
+                        var_val = output;
+                    }
+                    env.set(var, var_val);
+                    std::cout << var << " = " << var_val << std::endl;
                 } else {
                     std::cout << output << std::endl;
                 }
