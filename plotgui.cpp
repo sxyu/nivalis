@@ -18,66 +18,152 @@
 
 #include "expr.hpp"
 #include "parser.hpp"
+#include "util.hpp"
 
 namespace nivalis {
 using namespace nana;
 
-namespace { }  // namespace
+namespace {
+const color& color_from_int(size_t color_index)
+{
+    static const color palette[] = {
+        colors::red, colors::royal_blue, colors::green, colors::orange,
+        colors::purple, colors::black,
+        color(255, 220, 0), color(201, 13, 177), color(34, 255, 94),
+        color(255, 65, 54), color(255, 255, 64), color(0, 116, 217),
+        color(27, 133, 255), color(190, 18, 240), color(20, 31, 210),
+        color(75, 20, 133), color(255, 219, 127), color(204, 204, 57),
+        color(112, 153, 61), color(64, 204, 46), color(112, 255, 1),
+        color(170, 170, 170), color(225, 30, 42)
+    };
+    return palette[color_index % (sizeof palette / sizeof palette[0])];
+}
+}  // namespace
 
 struct PlotGUI::impl {
     std::chrono::high_resolution_clock::time_point lazy_start;
-    bool lazy_init = true;
-    void update() {
+    void update(bool force = false) {
         auto finish = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - lazy_start).count();
-        if (lazy_init || elapsed > 1000) {
-            lazy_init = false;
+        if (force || elapsed > 1000) {
             dw.update();
             lazy_start = std::chrono::high_resolution_clock::now();
         }
     }
     impl(Environment expr_env, std::string init_expr)
         : fm(API::make_center(1000, 600)), dw(fm),
-             env(expr_env), expr_str(init_expr) {
+             env(expr_env) {
         fm.caption("Nivalis");
-        // Change function
-        button btn_upd_expr(fm, rectangle{20, 60, 120, 30});
-        btn_upd_expr.caption(L"Update");
-        btn_upd_expr.transparent(true);
-        textbox tb(fm, rectangle{20, 20, 160, 40});
-        tb.caption(expr_str);
+        // Func label
+        label label_func(fm, rectangle{20, 20, 230, 30});
+        label_func.caption("Function 0");
+        label_func.transparent(true);
+        // Textbook for editing functions
+        textbox tb(fm, rectangle{20, 40, 230, 40});
+        tb.caption(init_expr);
 
+        int edit_expr_idx = 0;
         auto upd_expr = [&](){ 
+            size_t idx = edit_expr_idx;
+            auto& expr = exprs[idx];
+            auto& expr_str = expr_strs[idx];
             expr_str = tb.caption();
+            util::trim(expr_str);
             expr = parser(expr_str, env);
             expr.optimize();
             update();
-            fm.focus();
         };
-        btn_upd_expr.events().click(upd_expr);
-        tb.events().key_char([&](const nana::arg_keyboard& _arg) {
-            if (keyboard::enter == _arg.key)
-            {
-                upd_expr();
-                _arg.ignore = true;
-            }
-            else if (keyboard::escape == _arg.key)
-            {
+        tb.events().key_char([&](const nana::arg_keyboard& arg) {
+            switch(arg.key) {
+            case keyboard::enter:
+                arg.ignore = true;
+                break;
+            case keyboard::escape:
+                arg.ignore = true;
                 fm.focus();
-                _arg.ignore = true;
+                break;
+            }
+        });
+        auto seek_func = [&](int delta){
+            edit_expr_idx += delta;
+            std::string suffix;
+            if (edit_expr_idx < 0) {
+                edit_expr_idx = 0;
+                return;
+            }
+            else if (edit_expr_idx >= exprs.size()) {
+                std::string tmp = expr_strs.back();
+                util::trim(tmp);
+                if (!tmp.empty()) {
+                    exprs.emplace_back();
+                    expr_strs.emplace_back();
+                    if (reuse_colors.empty()) {
+                        expr_colors.push_back(color_from_int(last_expr_color++));
+                    } else {
+                        expr_colors.push_back(reuse_colors.front());
+                        reuse_colors.pop();
+                    }
+                    suffix = " [new]";
+                } else {
+                    edit_expr_idx = exprs.size()-1;
+                    return;
+                }
+            }
+            label_func.caption("Function " +
+                    std::to_string(edit_expr_idx) + suffix);
+            tb.caption(expr_strs[edit_expr_idx]);
+            update(true);
+        };
+        auto delete_func = [&]() {
+            if (exprs.size() > 1) {
+                exprs.erase(exprs.begin() + edit_expr_idx);
+                expr_strs.erase(expr_strs.begin() + edit_expr_idx);
+                reuse_colors.push(expr_colors[edit_expr_idx]);
+                expr_colors.erase(expr_colors.begin() + edit_expr_idx);
+                if (edit_expr_idx >= exprs.size()) {
+                    edit_expr_idx--;
+                }
+            } else {
+                expr_strs[0] = "";
+            }
+            upd_expr();
+            seek_func(0);
+        };
+        tb.events().key_release([&](const nana::arg_keyboard& arg) {
+            upd_expr();
+            if (arg.key == 38 || arg.key == 40) {
+                // Up/down: go to different funcs
+                seek_func(arg.key == 38 ? -1 : 1);
+            } else if (arg.key == 127) {
+                // Delete
+                delete_func();
             }
         });
 
         // Home button
-        button btn_home(fm, rectangle{140, 60, 40, 30});
+        button btn_home(fm, rectangle{20, 80, 110, 30});
         btn_home.transparent(true);
-        btn_home.caption(L"\u2302");
+        btn_home.caption(L"Reset View");
         btn_home.events().click([&](){ 
             xmax = 10.0; xmin = -10.0;
             ymax = 6.0; ymin = -6.0;
             update();
             fm.focus();
         });
+
+        // Prev/next/del-func button
+        button btn_prev(fm, rectangle{130, 80, 40, 30});
+        btn_prev.transparent(true);
+        btn_prev.caption(L"<");
+        btn_prev.events().click([&](){ seek_func(-1); fm.focus(); });
+        button btn_next(fm, rectangle{170, 80, 40, 30});
+        btn_next.transparent(true);
+        btn_next.caption(L">");
+        btn_next.events().click([&](){ seek_func(1); fm.focus(); });
+        button btn_del(fm, rectangle{210, 80, 40, 30});
+        btn_del.transparent(true);
+        btn_del.caption(L"x");
+        btn_del.events().click([&](){ delete_func(); fm.focus(); });
 
         // Form keyboard handle
         auto keyn_handle = fm.events().key_release([&](const nana::arg_keyboard&arg)
@@ -203,13 +289,13 @@ struct PlotGUI::impl {
         x_var = env.addr_of("x", false);
         env.vars[x_var] = 3.0;
 
-        expr = parser(expr_str, env);
-        expr.optimize();
-        dw.draw([this](paint::graphics& graph) {
+        exprs.push_back(parser(init_expr, env));
+        expr_strs.push_back(init_expr);
+        expr_colors.push_back(color_from_int(last_expr_color++));
+        exprs[0].optimize();
+        dw.draw([this, &edit_expr_idx](paint::graphics& graph) {
             int swid = fm.size().width, shigh = fm.size().height;
             double xdiff = xmax - xmin, ydiff = ymax - ymin;
-            bool reinit = true;
-            int psx = -1, psy;
 
             int sx0 = 0, sy0 = 0;
             int cnt_visible_axis = 0;
@@ -320,42 +406,53 @@ struct PlotGUI::impl {
                 graph.string(point(sx0 - 12, sy0 + 5), "0");
             }
 
-            // Draw function
-            for (double sxd = 0; sxd < swid; sxd += 0.1) {
-                const double x = sxd / swid * xdiff + xmin;
-                env.vars[x_var] = x;
-                double y = expr(env);
-                if (!std::isnan(y)) {
-                    reinit = true;
-                    if (std::isinf(y)) {
-                        if (y>0) y = ymax+(ymax-ymin)*1000;
-                        else y = ymin-(ymax-ymin)*1000;
-                    }
-                    int sy = (ymax - y) / ydiff * shigh;
-                    int sx = static_cast<int>(sxd);
-                    if (reinit) {
-                        if (!(y > ymax || y < ymin)) {
-                            reinit = false;
-                            if (~psx) {
-                                graph.line(point(psx, psy), point(sx,sy), colors::red);
-                                graph.line(point(psx+1, psy), point(sx+1,sy), colors::red);
-                                graph.line(point(psx, psy+1), point(sx,sy+1), colors::red);
+            // Draw functions
+            for (size_t exprid = 0; exprid < exprs.size(); ++exprid) {
+                bool reinit = true;
+                int psx = -1, psy = -1;
+                auto& expr = exprs[exprid];
+                const color& func_color = expr_colors[exprid];
+                for (double sxd = 0; sxd < swid; sxd += 0.25) {
+                    const double x = sxd / swid * xdiff + xmin;
+                    env.vars[x_var] = x;
+                    double y = expr(env);
+                    if (!std::isnan(y)) {
+                        reinit = true;
+                        if (std::isinf(y)) {
+                            if (y>0) y = ymax+(ymax-ymin)*1000;
+                            else y = ymin-(ymax-ymin)*1000;
+                        }
+                        int sy = (ymax - y) / ydiff * shigh;
+                        int sx = static_cast<int>(sxd);
+                        if (reinit) {
+                            if (!(y > ymax || y < ymin)) {
+                                reinit = false;
+                                if (~psx) {
+                                    graph.line(point(psx, psy), point(sx,sy), func_color);
+                                    if (edit_expr_idx == exprid) {
+                                        // Thicken current function
+                                        graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
+                                        graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                                    }
+                                }
+                            }
+                        } else {
+                            graph.line(point(psx, psy), point(sx,sy), func_color);
+                            if (edit_expr_idx == exprid) {
+                                graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
+                                graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                            }
+                            if (y > ymax || y < ymin) {
+                                reinit = true;
                             }
                         }
-                    } else {
-                        graph.line(point(psx, psy), point(sx,sy), colors::red);
-                        graph.line(point(psx+1, psy), point(sx+1,sy), colors::red);
-                        graph.line(point(psx, psy+1), point(sx,sy+1), colors::red);
-                        if (y > ymax || y < ymin) {
-                            reinit = true;
-                        }
+                        psx = sx;
+                        psy = sy;
                     }
-                    psx = sx;
-                    psy = sy;
                 }
             }
         });
-        update();
+        update(true);
     
         fm.show();
         exec();
@@ -370,8 +467,11 @@ private:
 
     Environment env;
     Parser parser;
-    std::string expr_str;
-    Expr expr;
+    std::vector<Expr> exprs;
+    std::vector<std::string> expr_strs;
+    std::queue<color> reuse_colors;
+    size_t last_expr_color = 0;
+    std::vector<color> expr_colors;
     uint32_t x_var;
 
     // nana::threads::pool pool;
