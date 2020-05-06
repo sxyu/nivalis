@@ -480,12 +480,11 @@ struct PlotGUI::impl {
                     }
                 } else {
                     // explicit function
-                    for (double sxd = 0; sxd < swid; sxd += 0.25) {
+                    for (double sxd = 0; sxd < swid; sxd += 0.2) {
                         const double x = sxd / swid * xdiff + xmin;
                         env.vars[x_var] = x;
                         double y = expr(env);
                         if (!std::isnan(y)) {
-                            reinit = true;
                             if (std::isinf(y)) {
                                 if (y>0) y = ymax+(ymax-ymin)*1000;
                                 else y = ymin-(ymax-ymin)*1000;
@@ -495,16 +494,9 @@ struct PlotGUI::impl {
                             if (reinit) {
                                 if (!(y > ymax || y < ymin)) {
                                     reinit = false;
-                                    if (~psx) {
-                                        graph.line(point(psx, psy), point(sx,sy), func_color);
-                                        if (edit_expr_idx == exprid) {
-                                            // Thicken current function
-                                            graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
-                                            graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
-                                        }
-                                    }
                                 }
-                            } else {
+                            }
+                            if (!reinit && ~psx) {
                                 graph.line(point(psx, psy), point(sx,sy), func_color);
                                 if (edit_expr_idx == exprid) {
                                     graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
@@ -512,10 +504,13 @@ struct PlotGUI::impl {
                                 }
                                 if (y > ymax || y < ymin) {
                                     reinit = true;
+                                    psx = -1;
                                 }
                             }
                             psx = sx;
                             psy = sy;
+                        } else {
+                            reinit = true;
                         }
                     }
                 }
