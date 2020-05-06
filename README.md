@@ -2,7 +2,7 @@
 
 ## Installation
 - Install Nana <https://github.com/qPCR4vir/nana>
-    - Use CMake. Install `libnana.a` to `/usr/local/lib' and
+    - Use CMake. Install `libnana.a` to `/usr/local/lib` and
       copy `include/nana` directory to `/usr/local/include` (on Linux) 
         - Have to rename `build/makefile` included in repo,
           else CMake build will break
@@ -16,11 +16,12 @@
     - Some functions available: `exp ln log10 log2 sin cos tan asin acos atan abs fact gamma`
     - Piecewise: `{x<0 : x, x>=0 : x^2}`
 ### GUI
-- Enter `plot` to show plotter GUI
-    - `E` to edit function expression (or click the textbox)
-        - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`
-        - Implicit function (slower, less detail):
-          e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
+- Enter `plot` to show plotter GUI, or `plot <function_expr>` to plot a function expression
+    - After launch, `E` to edit function expression (or click the textbox)
+        - Function expressions can be:
+            - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`
+            - Implicit function (slower, less detail):
+              e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
         - Updates plot automatically
     - `Up`/`Down` arrow keys (or use `<` `>` buttons below textbox) to switch functions or add new functions (by going past last defined function)
     - `Delete` or click the x button to delete current function
