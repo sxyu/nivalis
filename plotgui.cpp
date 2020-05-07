@@ -337,6 +337,7 @@ struct PlotGUI::impl {
             if (ymin <= 0 && ymax >= 0) {
                 double y0 = ymax / (ymax - ymin);
                 sy0 = static_cast<int>(shigh * y0);
+                graph.line(point(0, sy0-1), point(swid, sy0-1), colors::dark_gray);
                 graph.line(point(0, sy0), point(swid, sy0), colors::dark_gray);
                 graph.line(point(0, sy0+1), point(swid, sy0+1), colors::dark_gray);
                 ++cnt_visible_axis;
@@ -347,6 +348,7 @@ struct PlotGUI::impl {
             if (xmin <= 0 && xmax >= 0) {
                 double x0 = - xmin / (xmax - xmin);
                 sx0 = static_cast<int>(swid * x0);
+                graph.line(point(sx0-1,0), point(sx0-1, swid), colors::dark_gray);
                 graph.line(point(sx0,0), point(sx0, shigh), colors::dark_gray);
                 graph.line(point(sx0+1,0), point(sx0+1, swid), colors::dark_gray);
                 ++cnt_visible_axis;
