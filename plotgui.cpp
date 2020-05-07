@@ -55,11 +55,15 @@ struct PlotGUI::impl {
              env(expr_env) {
         fm.caption("Nivalis");
         // Func label
-        label label_func(fm, rectangle{20, 20, 230, 30});
+        label label_func(fm, rectangle{20, 20, 250, 30});
         label_func.caption("Function 0");
         label_func.transparent(true);
+        // Error label
+        label label_err(fm, rectangle{20, 115, 250, 30});
+        label_err.caption();
+        label_err.transparent(true);
         // Textbook for editing functions
-        textbox tb(fm, rectangle{20, 40, 230, 40});
+        textbox tb(fm, rectangle{20, 40, 250, 40});
         tb.caption(init_expr);
 
         size_t edit_expr_idx = 0;
@@ -74,7 +78,10 @@ struct PlotGUI::impl {
                      rhs = expr_str.substr(eqpos+1);
                 util::trim(lhs); util::trim(rhs);
                 if (lhs == "y" || rhs == "y") {
-                    expr = parser(lhs == "y" ? rhs : lhs, env);
+                    expr = parser(lhs == "y" ? rhs : lhs, env,
+                            true, // explicit
+                            true  // quiet
+                           );
                     if (!expr.has_var(y_var)) {
                         // if one side is y and other side has no y,
                         // treat as explicit function 
@@ -82,11 +89,12 @@ struct PlotGUI::impl {
                     }
                 }
                 if (is_implicit[idx]) {
-                    expr = parser(lhs, env) - parser(rhs, env);
+                    expr = parser(lhs, env, true, true) - parser(rhs, env, true, true);
                 }
             } else {
-                expr = parser(expr_str, env);
+                expr = parser(expr_str, env, true, true);
             }
+            label_err.caption(parser.error_msg);
             expr.optimize();
             update();
         };
@@ -160,8 +168,9 @@ struct PlotGUI::impl {
         });
 
         // Home button
-        button btn_home(fm, rectangle{20, 80, 110, 30});
+        button btn_home(fm, rectangle{20, 80, 130, 30});
         btn_home.transparent(true);
+        btn_home.edge_effects(false);
         btn_home.caption(L"Reset View");
         btn_home.events().click([&](){ 
             xmax = 10.0; xmin = -10.0;
@@ -171,16 +180,19 @@ struct PlotGUI::impl {
         });
 
         // Prev/next/del-func button
-        button btn_prev(fm, rectangle{130, 80, 40, 30});
+        button btn_prev(fm, rectangle{150, 80, 40, 30});
         btn_prev.transparent(true);
+        btn_prev.edge_effects(false);
         btn_prev.caption(L"<");
         btn_prev.events().click([&](){ seek_func(-1); fm.focus(); });
-        button btn_next(fm, rectangle{170, 80, 40, 30});
+        button btn_next(fm, rectangle{190, 80, 40, 30});
         btn_next.transparent(true);
+        btn_next.edge_effects(false);
         btn_next.caption(L">");
         btn_next.events().click([&](){ seek_func(1); fm.focus(); });
-        button btn_del(fm, rectangle{210, 80, 40, 30});
+        button btn_del(fm, rectangle{230, 80, 40, 30});
         btn_del.transparent(true);
+        btn_del.edge_effects(false);
         btn_del.caption(L"x");
         btn_del.events().click([&](){ delete_func(); fm.focus(); });
 
@@ -208,9 +220,10 @@ struct PlotGUI::impl {
                     update();
                     break;
                 case 61: case 45:
+                case 187: case 189:
                     // Zooming +-
                     {
-                        auto fa = (arg.key == 45) ? 1.05 : 0.95;
+                        auto fa = (arg.key == 45 || arg.key == 189) ? 1.05 : 0.95;
                         auto dy = (ymax - ymin) * (fa - 1.) /2;
                         auto dx = (xmax - xmin) * (fa - 1.) /2;
                         if (arg.ctrl) dy = 0.; // x-only
@@ -480,6 +493,7 @@ struct PlotGUI::impl {
                     }
                 } else {
                     // explicit function
+                    env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
                     for (double sxd = 0; sxd < swid; sxd += 0.2) {
                         const double x = sxd / swid * xdiff + xmin;
                         env.vars[x_var] = x;

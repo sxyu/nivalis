@@ -6,9 +6,6 @@
 namespace nivalis {
 namespace util {
 
-// atof for part of string (C++ committee fail)
-double atof(const char* p, const char* end);
-
 // true if is literal char (a-zA-Z0-9_$'#)
 constexpr bool is_literal(char c) {
     return

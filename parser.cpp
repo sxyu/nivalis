@@ -4,6 +4,7 @@
 #include<vector>
 #include<map>
 #include<string>
+#include<sstream>
 #include<cmath>
 #include<cctype>
 #include "util.hpp"
@@ -15,6 +16,12 @@ namespace {
     std::map<std::string, uint32_t> func_opcodes;
 
 #define RETURN_IF_FALSE(todo) if(!todo) return false;
+#define PRINT_ERR(toprint) do { \
+     error_msg_stream.str("");\
+     error_msg_stream << toprint;\
+     error_msg = error_msg_stream.str(); \
+     if(!quiet) std::cout << error_msg; \
+   } while(false)
 }  // namespace
 
 struct ParseSession {
@@ -33,11 +40,11 @@ struct ParseSession {
     // env: parsing environment (to check/define variables)
     // mode_explicit: if true, errors when encounters undefined variable;
     //                else defines it
-    ParseSession(const std::string& expr, Environment& env)
-        : env(env), expr(expr) { }
+    ParseSession(const std::string& expr, Environment& env, std::string& error_msg,
+                 bool mode_explicit, bool quiet)
+        : env(env), expr(expr), error_msg(error_msg), mode_explicit(mode_explicit), quiet(quiet) { }
 
-    Expr parse(bool mode_explicit = true) {
-        this->mode_explicit = mode_explicit;
+    Expr parse() {
         tok_link.resize(expr.size(), -1);
         result.ast.clear();
         if (!_mk_tok_link() ||
@@ -69,7 +76,7 @@ private:
                     starts[i].push_back(pos);
                 } else if (c == rb[i]) {
                     if (starts[i].empty()) {
-                        std::cout << "Unmatched '" << rb[i] << "'\n";
+                        PRINT_ERR("Unmatched '" << rb[i] << "'\n");
                         return false;
                     }
                     tok_link[starts[i].back()] = pos;
@@ -80,7 +87,7 @@ private:
         }
         for (int i = 0; i < 3; ++i) {
             if (!starts[i].empty()) {
-                std::cout << "Unmatched '" << lb[i] << "'\n";
+                PRINT_ERR("Unmatched '" << lb[i] << "'\n");
                 return false;
             }
         }
@@ -122,8 +129,8 @@ private:
                             opcode = c == '<' ? OpCode::lt : OpCode::gt;
                         }
                         result.ast.push_back(opcode);
-                        RETURN_IF_FALSE(_parse(left, i - off, pri));
-                        return _parse(i + 1, right, pri + 1);
+                        return _parse(left, i - off, pri) &&
+                               _parse(i + 1, right, pri + 1);
                     }
                     else if (~tok_link[i]) {
                         i = tok_link[i];
@@ -137,8 +144,7 @@ private:
                             i > left && !util::is_operator(expr[i-1])) {
                         result.ast.push_back(c == '+' ? OpCode::add :
                                 OpCode::sub);
-                        RETURN_IF_FALSE(_parse(left, i, pri));
-                        return _parse(i + 1, right, pri + 1);
+                        return _parse(left, i, pri) && _parse(i + 1, right, pri + 1);
                     }
                     else if (~tok_link[i]) {
                         i = tok_link[i];
@@ -151,8 +157,7 @@ private:
                     if (c == '*' || c == '/' || c == '%') {
                         result.ast.push_back(c == '*' ? OpCode::mul : (
                                     c == '/' ? OpCode::div : OpCode::mod));
-                        RETURN_IF_FALSE(_parse(left, i, pri));
-                        return _parse(i + 1, right, pri + 1);
+                        return _parse(left, i, pri) && _parse(i + 1, right, pri + 1);
                     }
                     else if (~tok_link[i]) {
                         i = tok_link[i];
@@ -164,8 +169,7 @@ private:
                     const char c = expr[i];
                     if (c == '^') {
                         result.ast.push_back(OpCode::power);
-                        RETURN_IF_FALSE(_parse(left, i, pri + 1));
-                        return _parse(i + 1, right, pri);
+                        return _parse(left, i, pri + 1) && _parse(i + 1, right, pri);
                     }
                     else if (~tok_link[i]) {
                         i = tok_link[i];
@@ -187,7 +191,7 @@ private:
             case PRI_BRACKETS:
                 const char c = expr[left], cr = expr[right-1];
                 if (left >= right) {
-                    std::cout << "Syntax error\n";
+                    PRINT_ERR("Syntax error\n");
                     return false;
                 }
                 if ((c == '(' && cr == ')') ||
@@ -211,8 +215,8 @@ private:
                         else if (stkh == 0) {
                             if (cc == ':') {
                                 if (last_colon) {
-                                    std::cout << "Syntax error: consecutive : "
-                                        "in conditional clause\n";
+                                    PRINT_ERR("Syntax error: consecutive : "
+                                              "in conditional clause\n");
                                     return false;
                                 }
                                 result.ast.push_back(OpCode::bnz);
@@ -223,8 +227,8 @@ private:
                             }
                             else if (cc == ',') {
                                 if (!last_colon && i > left+1) {
-                                    std::cout << "Syntax error: consecutive , "
-                                        "in conditional clause\n";
+                                    PRINT_ERR("Syntax error: consecutive , "
+                                              "in conditional clause\n");
                                     return false;
                                 }
                                 RETURN_IF_FALSE(_parse(last_begin, i, _PRI_LOWEST));
@@ -244,7 +248,7 @@ private:
                     // Function
                     int64_t funname_end = tok_link[left] + 1;
                     if (expr[funname_end] != '(') {
-                        std::cout << "Invalid function call syntax\n";
+                        PRINT_ERR("Invalid function call syntax\n");
                         return false;
                     }
                     const std::string func_name = expr.substr(left, funname_end - left);
@@ -267,7 +271,7 @@ private:
                         }
                         return _parse(last_begin, right-1, _PRI_LOWEST);
                     } else {
-                        std::cout << "Unrecognized function '" << func_name << "'\n";
+                        PRINT_ERR("Unrecognized function '" << func_name << "'\n");
                         return false;
                     }
                 }
@@ -278,8 +282,8 @@ private:
                     util::push_dbl(result.ast, std::strtod(
                                 tmp.c_str(), &endptr));
                     if (endptr != tmp.c_str() + (right-left)) {
-                        std::cout << "Numeric parsing failed on '"
-                            << tmp << "'\n";
+                        PRINT_ERR("Numeric parsing failed on '"
+                                  << tmp << "'\n");
                         return false;
                     }
                     return true;
@@ -290,8 +294,7 @@ private:
                         expr.substr(left, right - left);
                     if ((result.ast.back()
                                 = env.addr_of(varname, mode_explicit)) == -1) {
-                        std::cout << "Undefined variable \"" << varname <<
-                                    "\" (parser in explicit mode)\n";
+                        PRINT_ERR("Undefined variable \"" << varname + "\"\n");
                         return false;
                     }
                     return true;
@@ -305,13 +308,13 @@ private:
                         util::push_dbl(result.ast, env.vars[idx]);
                         return true;
                     } else {
-                        std::cout << "Undefined variable \"" << varname <<
-                                    "\", cannot use as constant (parser in explicit mode)\n";
+                        PRINT_ERR("Undefined variable \"" << varname <<
+                                  "\", cannot use as constant\n");
                         return false;
                     }
                 } else {
-                        std::cout << "Unrecognized literal '" <<
-                            expr.substr(left, right - left) << "'\n";
+                    PRINT_ERR("Unrecognized literal '" <<
+                        expr.substr(left, right - left) << "'\n");
                     return false;
                 }
         }
@@ -320,8 +323,10 @@ private:
     }
     Environment& env;
     const std::string& expr;
+    std::string& error_msg;
+    std::stringstream error_msg_stream;
     Expr result;
-    bool mode_explicit;
+    bool mode_explicit, quiet;
 
     // 'Token links':
     // Pos. of last char in token if at first char
@@ -372,10 +377,12 @@ Parser::Parser(){
     }
 }
 
-Expr Parser::operator()(const std::string& expr, Environment& env, bool mode_explicit) const {
+Expr Parser::operator()(const std::string& expr, Environment& env,
+                        bool mode_explicit, bool quiet) const {
+    error_msg.clear();
     if (expr.empty()) return Expr();
-    ParseSession sess(expr, env);
-    return sess.parse(mode_explicit);
+    ParseSession sess(expr, env, error_msg, mode_explicit, quiet);
+    return sess.parse();
 }
 
 }  // namespace nivalis
