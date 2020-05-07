@@ -350,9 +350,9 @@ struct PlotGUI::impl {
                     while(1./fa > step) {
                         fan = fa; fa *= 2; subdiv = 5;
                         if(1./fa <= step) break;
-                        fan = fa; fa /= 2; fa *= 5; subdiv = 4;
+                        fan = fa; fa /= 2; fa *= 5; subdiv = 5;
                         if(1./fa <= step) break;
-                        fan = fa; fa *= 2; subdiv = 5;
+                        fan = fa; fa *= 2; subdiv = 4;
                     }
                     return std::pair<double, double>(1./fan/subdiv, 1./fan);
                 } else {
