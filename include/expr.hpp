@@ -13,8 +13,12 @@ enum _OpCode {
     null = 0, // returns NaN
     val,      // stores value in 8 bytes after
     ref,      // stores address of var in env in 4 bytes after
-    bsel = 8, // ignore first, return second
+    bsel = 8, // evaluate first and ignore; evaluate and return second
+
+    // control and special forms
     bnz = 16, // if first is not zero, second, else third (short-circuiting)
+    sums,
+    prods,
 
     // binary arithmetic operators
     add = 32, sub,
@@ -22,6 +26,8 @@ enum _OpCode {
     power = 64, logbase,
     max = 80, min,
     land, lor, lxor,
+    choose, // n choose k
+    fafact, // falling factorial
 
     // binary comparison operators
     lt = 96, le, eq, ne, ge, gt,

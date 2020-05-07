@@ -16,11 +16,12 @@ namespace {
     std::map<std::string, uint32_t> func_opcodes;
 
 #define RETURN_IF_FALSE(todo) if(!todo) return false;
-#define PRINT_ERR(toprint) do { \
+#define PARSE_ERR(toprint) do { \
      error_msg_stream.str("");\
      error_msg_stream << toprint;\
      error_msg = error_msg_stream.str(); \
      if(!quiet) std::cout << error_msg; \
+     return false; \
    } while(false)
 }  // namespace
 
@@ -76,8 +77,7 @@ private:
                     starts[i].push_back(pos);
                 } else if (c == rb[i]) {
                     if (starts[i].empty()) {
-                        PRINT_ERR("Unmatched '" << rb[i] << "'\n");
-                        return false;
+                        PARSE_ERR("Unmatched '" << rb[i] << "'\n");
                     }
                     tok_link[starts[i].back()] = pos;
                     tok_link[pos] = starts[i].back();
@@ -87,8 +87,7 @@ private:
         }
         for (int i = 0; i < 3; ++i) {
             if (!starts[i].empty()) {
-                PRINT_ERR("Unmatched '" << lb[i] << "'\n");
-                return false;
+                PARSE_ERR("Unmatched '" << lb[i] << "'\n");
             }
         }
         if (lit_start != -1) {
@@ -191,8 +190,7 @@ private:
             case PRI_BRACKETS:
                 const char c = expr[left], cr = expr[right-1];
                 if (left >= right) {
-                    PRINT_ERR("Syntax error\n");
-                    return false;
+                    PARSE_ERR("Syntax error\n");
                 }
                 if ((c == '(' && cr == ')') ||
                     (c == '[' && cr == ']')) {
@@ -201,7 +199,6 @@ private:
                 }
                 if (c == '{' && cr == '}') {
                     // Conditional clause
-                    // Special handling
                     int64_t stkh = 0, last_begin = left+1;
                     bool last_colon = false;
                     for (int64_t i = left + 1; i < right - 1; ++i) {
@@ -215,9 +212,8 @@ private:
                         else if (stkh == 0) {
                             if (cc == ':') {
                                 if (last_colon) {
-                                    PRINT_ERR("Syntax error: consecutive : "
+                                    PARSE_ERR("Syntax error: consecutive : "
                                               "in conditional clause\n");
-                                    return false;
                                 }
                                 result.ast.push_back(OpCode::bnz);
                                 RETURN_IF_FALSE(_parse(last_begin, i, _PRI_LOWEST));
@@ -227,9 +223,8 @@ private:
                             }
                             else if (cc == ',') {
                                 if (!last_colon && i > left+1) {
-                                    PRINT_ERR("Syntax error: consecutive , "
+                                    PARSE_ERR("Syntax error: consecutive , "
                                               "in conditional clause\n");
-                                    return false;
                                 }
                                 RETURN_IF_FALSE(_parse(last_begin, i, _PRI_LOWEST));
                                 last_begin = i+1;
@@ -244,12 +239,51 @@ private:
                     }
                     return true;
                 }
+                else if (cr == ']' && ~tok_link[left] &&
+                        tok_link[left]+1 < expr.size() &&
+                         (expr[tok_link[left]+1] == '(' ||
+                          expr[tok_link[left]+1] == '[')) {
+                    // Special form
+                    int64_t funname_end = tok_link[left] + 1;
+                    int64_t arg_end = 
+                        expr[tok_link[left]+1] == '(' ?
+                        tok_link[tok_link[left]+1] + 1 :
+                        tok_link[left] + 1;
+                    if (expr[arg_end] != '[') {
+                        PARSE_ERR("Expected '[' after special form argument\n");
+                    }
+                    const std::string func_name = expr.substr(left, funname_end - left);
+                    
+                    size_t var_end = -1, comma_pos = -1;
+                    for (size_t k = funname_end+1; k < arg_end - 1; ++k) {
+                        if (expr[k] == ':') var_end = k;
+                        else if (~var_end && expr[k] == ',') comma_pos = k;
+                    }
+                    if (func_name == "sum" || func_name == "prod") {
+                        if (!~var_end || !~comma_pos) {
+                            PARSE_ERR(func_name << " expected argument syntax "
+                                       "(<var>:<begin>,<end>)\n");
+                        }
+                        result.ast.push_back(func_name[0] == 's' ? 
+                                             OpCode::sums : OpCode::prods);
+                        std::string varname =
+                            expr.substr(funname_end + 1, var_end -
+                                   funname_end-1);
+                        result.ast.push_back(env.addr_of(varname, false));
+                        RETURN_IF_FALSE(
+                                _parse(var_end+1, comma_pos, _PRI_LOWEST));
+                        RETURN_IF_FALSE(
+                                _parse(comma_pos+1, arg_end-1, _PRI_LOWEST));
+                        return _parse(arg_end + 1, right - 1, _PRI_LOWEST);
+                    } else {
+                        PARSE_ERR("Unrecognized special form '" << func_name << "'\n");
+                    }
+                }
                 else if (cr == ')' && ~tok_link[left]) {
                     // Function
                     int64_t funname_end = tok_link[left] + 1;
                     if (expr[funname_end] != '(') {
-                        PRINT_ERR("Invalid function call syntax\n");
-                        return false;
+                        PARSE_ERR("Invalid function call syntax\n");
                     }
                     const std::string func_name = expr.substr(left, funname_end - left);
                     auto it = func_opcodes.find(func_name);
@@ -271,8 +305,7 @@ private:
                         }
                         return _parse(last_begin, right-1, _PRI_LOWEST);
                     } else {
-                        PRINT_ERR("Unrecognized function '" << func_name << "'\n");
-                        return false;
+                        PARSE_ERR("Unrecognized function '" << func_name << "'\n");
                     }
                 }
                 else if ((c >= '0' && c <= '9') || c == '.') {
@@ -282,20 +315,19 @@ private:
                     util::push_dbl(result.ast, std::strtod(
                                 tmp.c_str(), &endptr));
                     if (endptr != tmp.c_str() + (right-left)) {
-                        PRINT_ERR("Numeric parsing failed on '"
+                        PARSE_ERR("Numeric parsing failed on '"
                                   << tmp << "'\n");
-                        return false;
                     }
                     return true;
-                } else if (util::is_varname_first(c)) {
+                } else if (util::is_varname_first(c) && 
+                           util::is_literal(cr)) {
                     // Variable name
                     result.ast.resize(result.ast.size() + 2, OpCode::ref);
                     const std::string varname =
                         expr.substr(left, right - left);
                     if ((result.ast.back()
                                 = env.addr_of(varname, mode_explicit)) == -1) {
-                        PRINT_ERR("Undefined variable \"" << varname + "\"\n");
-                        return false;
+                        PARSE_ERR("Undefined variable \"" << varname + "\"\n");
                     }
                     return true;
                 } else if (c == '#' &&
@@ -308,14 +340,12 @@ private:
                         util::push_dbl(result.ast, env.vars[idx]);
                         return true;
                     } else {
-                        PRINT_ERR("Undefined variable \"" << varname <<
+                        PARSE_ERR("Undefined variable \"" << varname <<
                                   "\", cannot use as constant\n");
-                        return false;
                     }
                 } else {
-                    PRINT_ERR("Unrecognized literal '" <<
+                    PARSE_ERR("Unrecognized literal '" <<
                         expr.substr(left, right - left) << "'\n");
-                    return false;
                 }
         }
         return _parse(left, right, pri+1);
@@ -371,6 +401,8 @@ Parser::Parser(){
 
         func_opcodes["gamma"] = OpCode::gammab;
         func_opcodes["fact"] = OpCode::factb;
+        func_opcodes["choose"] = OpCode::choose;
+        func_opcodes["fafact"] = OpCode::fafact;
 
         func_opcodes["print"] = OpCode::print;
         func_opcodes["printchar"] = OpCode::printc;

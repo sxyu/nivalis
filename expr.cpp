@@ -19,6 +19,16 @@ namespace {
 #define EV_WRAP(func) ret = func(eval_ast(env, ast)); break;
 #define RET_NONE ret=std::numeric_limits<double>::quiet_NaN()
 
+// Falling factorial
+double fa_fact (size_t x, size_t to_exc = 1) {
+    if (x-to_exc >= 175) // too expensive
+        return std::numeric_limits<double>::quiet_NaN();
+    double result = 1.;
+    while (x > to_exc) result *= x--;
+    return result;
+}
+
+
 // Walk through AST from node with minimum computations
 void eval_ast_skip(const uint32_t** ast) {
     using namespace nivalis::OpCode;
@@ -28,10 +38,12 @@ void eval_ast_skip(const uint32_t** ast) {
         case val: *ast += 2; break;
         case ref: ++*ast; break;
         case bnz: EV_NEXT_SKIP; EV_NEXT_SKIP; EV_NEXT_SKIP; break;
+        case sums: case prods:
+              ++*ast; EV_NEXT_SKIP; EV_NEXT_SKIP; EV_NEXT_SKIP; break;
         // Binary
         case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
-        case land: case lor: case lxor:
+        case land: case lor: case lxor: case choose: case fafact:
         case lt: case le: case eq: case ne: case ge: case gt:
             EV_NEXT_SKIP; EV_NEXT_SKIP; break;
         case null: break;
@@ -52,10 +64,13 @@ bool eval_ast_find_var(const uint32_t** ast, uint32_t var_id) {
           ++*ast;
           break;
         case bnz: EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
+        case sums: case prods:
+              if (**ast == var_id) return true;
+              ++*ast; EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
         // Binary
         case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
-        case land: case lor: case lxor:
+        case land: case lor: case lxor: case choose: case fafact:
         case lt: case le: case eq: case ne: case ge: case gt:
             EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
         case null: break;
@@ -85,6 +100,40 @@ double eval_ast(Environment& env, const uint32_t** ast) {
                 }
             }
             break;
+        case sums:
+            {
+                uint32_t var_id = **ast;
+                ++*ast;
+                auto istart = static_cast<int64_t>(EV_NEXT);
+                auto iend = static_cast<int64_t>(EV_NEXT);
+                int64_t step = (istart <= iend) ? 1 : -1;
+                iend += step;
+                ret = 0.0;
+                for (int64_t i = istart; i != iend; i += step) {
+                    const uint32_t* tmp = *ast;
+                    env.vars[var_id] = i;
+                    ret += eval_ast(env, &tmp);
+                }
+                EV_NEXT_SKIP;
+            }
+            break;
+        case prods:
+            {
+                uint32_t var_id = **ast;
+                ++*ast;
+                auto istart = static_cast<int64_t>(EV_NEXT);
+                auto iend = static_cast<int64_t>(EV_NEXT);
+                int64_t step = (istart <= iend) ? 1 : -1;
+                iend += step;
+                ret = 1.0;
+                for (int64_t i = istart; i != iend; i += step) {
+                    const uint32_t* tmp = *ast;
+                    env.vars[var_id] = i;
+                    ret *= eval_ast(env, &tmp);
+                }
+                EV_NEXT_SKIP;
+            }
+            break;
 
         case bsel: EV_NEXT; ret = EV_NEXT; break;
         case add: ret = EV_NEXT + EV_NEXT; break;
@@ -100,7 +149,29 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case land: ret = EV_NEXT && EV_NEXT; break;
         case lor: ret = EV_NEXT || EV_NEXT; break;
         case lxor: ret = static_cast<bool>(EV_NEXT) ^ static_cast<bool>(EV_NEXT); break;
-
+        case choose: 
+                   {
+                       double ad = std::round(EV_NEXT);
+                       double bd = std::round(EV_NEXT);
+                       if (ad < 0 || bd < 0) {
+                           ret = std::numeric_limits<double>::quiet_NaN(); break;
+                       }
+                       size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
+                       b = std::min(b, a-b);
+                       ret = fa_fact(a, a-b) / fa_fact(b);
+                   }
+                   break;
+        case fafact:
+                   {
+                       double ad = std::round(EV_NEXT);
+                       double bd = std::round(EV_NEXT);
+                       if (ad < 0 || bd < 0) {
+                           ret = std::numeric_limits<double>::quiet_NaN(); break;
+                       }
+                       size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
+                       ret = fa_fact(a, a-b);
+                   }
+                   break;
         case lt: ret = EV_NEXT; ret = ret < EV_NEXT; break;
         case le: ret = EV_NEXT; ret = ret <= EV_NEXT; break;
         case eq: ret = EV_NEXT == EV_NEXT; break;
@@ -157,11 +228,14 @@ bool eval_ast_detect_constexpr(const uint32_t** ast,
         case val: *ast += 2; break;
         case ref: ++*ast; nontrivial = true; break;
         case bnz: EV_NEXT_DC; EV_NEXT_DC; EV_NEXT_DC; break;
+        case sums: case prods:
+          ++*ast; nontrivial = true; EV_NEXT_DC; EV_NEXT_DC; EV_NEXT_DC; break;
         // Binary
         case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case lt: case le: case eq: case ne: case ge: case gt:
+        case choose: case fafact:
             EV_NEXT_DC; EV_NEXT_DC; break;
         case null: break;
         // Unary
@@ -199,11 +273,15 @@ void eval_ast_optim_constexpr(
             ast_out.push_back(**ast); ++*ast;
             break;
         case bnz: EV_NEXT_OPTIM; EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
+        case sums: case prods:
+                  ast_out.push_back(**ast); ++*ast;
+            EV_NEXT_OPTIM; EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
         // Binary
         case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case lt: case le: case eq: case ne: case ge: case gt:
+        case choose: case fafact:
             EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
         case null: break;
         // Unary
