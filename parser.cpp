@@ -384,6 +384,7 @@ Parser::Parser(){
         func_opcodes["round"] = OpCode::roundb;
 
         func_opcodes["exp"] = OpCode::expb;
+        func_opcodes["exp2"] = OpCode::exp2b;
         func_opcodes["ln"] = OpCode::logb;
         func_opcodes["log10"] = OpCode::log10b;
         func_opcodes["log2"] = OpCode::log2b;

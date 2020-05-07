@@ -189,7 +189,8 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case floorb: EV_WRAP(floor); case ceilb: EV_WRAP(ceil);
         case roundb: EV_WRAP(round);
 
-        case expb:  EV_WRAP(exp);   case logb:   EV_WRAP(log);
+        case expb:  EV_WRAP(exp);   case exp2b:  EV_WRAP(exp2); 
+        case logb:  EV_WRAP(log);
         case log2b: EV_WRAP(log2);  case log10b: EV_WRAP(log10);
         case sinb:  EV_WRAP(sin);   case cosb:   EV_WRAP(cos);
         case tanb:  EV_WRAP(tan);   case asinb:  EV_WRAP(asin);

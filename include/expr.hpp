@@ -36,7 +36,7 @@ enum _OpCode {
     nop = 32768, // idenitity
     uminusb, notb,
     absb, sqrtb, sgnb, floorb, ceilb, roundb,
-    expb, logb, log10b, log2b,
+    expb, exp2b, logb, log10b, log2b,
     sinb, cosb, tanb, asinb, acosb, atanb, sinhb, coshb, tanhb,
     gammab, factb,
 
