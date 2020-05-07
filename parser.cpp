@@ -29,8 +29,8 @@ struct ParseSession {
         PRI_COMPARISON,
         PRI_ADD_SUB,
         PRI_MUL_DIV,
-        PRI_POW,
         PRI_UNARY_PLUS_MINUS,
+        PRI_POW,
         PRI_BRACKETS,
         _PRI_COUNT,
         _PRI_LOWEST = 0
@@ -164,24 +164,24 @@ private:
                     }
                 }
                 break;
-            case PRI_POW:
-                for (int64_t i = left; i < right; ++i) {
-                    const char c = expr[i];
-                    if (c == '^') {
-                        result.ast.push_back(OpCode::power);
-                        return _parse(left, i, pri + 1) && _parse(i + 1, right, pri);
-                    }
-                    else if (~tok_link[i]) {
-                        i = tok_link[i];
-                    }
-                }
-                break;
             case PRI_UNARY_PLUS_MINUS:
                 for (int64_t i = left; i < right; ++i) {
                     const char c = expr[i];
                     if (c == '+' || c == '-') {
                         result.ast.push_back(c == '+' ? OpCode::nop : OpCode::uminusb);
                         return _parse(i + 1, right, pri);
+                    }
+                    else if (~tok_link[i]) {
+                        i = tok_link[i];
+                    }
+                }
+                break;
+            case PRI_POW:
+                for (int64_t i = left; i < right; ++i) {
+                    const char c = expr[i];
+                    if (c == '^') {
+                        result.ast.push_back(OpCode::power);
+                        return _parse(left, i, pri + 1) && _parse(i + 1, right, pri);
                     }
                     else if (~tok_link[i]) {
                         i = tok_link[i];

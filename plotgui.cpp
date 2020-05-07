@@ -469,6 +469,7 @@ struct PlotGUI::impl {
                                     graph.set_pixel(sx, sy-1, func_color);
                                     graph.set_pixel(sx+1, sy-1, func_color);
                                     if (edit_expr_idx == exprid) {
+                                        // current function, thicken
                                         graph.set_pixel(sx-1, sy-2, func_color);
                                         graph.set_pixel(sx, sy-2, func_color);
                                         graph.set_pixel(sx+1, sy-2, func_color);
@@ -482,6 +483,7 @@ struct PlotGUI::impl {
                                     graph.set_pixel(sx-2, sy, func_color);
                                     graph.set_pixel(sx-2, sy+1, func_color);
                                     if (edit_expr_idx == exprid) {
+                                        // current function, thicken
                                         graph.set_pixel(sx-1, sy-1, func_color);
                                         graph.set_pixel(sx-1, sy, func_color);
                                         graph.set_pixel(sx-1, sy+1, func_color);
@@ -513,8 +515,11 @@ struct PlotGUI::impl {
                             if (!reinit && ~psx) {
                                 graph.line(point(psx, psy), point(sx,sy), func_color);
                                 if (edit_expr_idx == exprid) {
+                                    // current function, thicken
                                     graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
                                     graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                                    graph.line(point(psx-1, psy), point(sx-1,sy), func_color);
+                                    graph.line(point(psx, psy-1), point(sx,sy-1), func_color);
                                 }
                                 if (y > ymax || y < ymin) {
                                     reinit = true;
