@@ -140,7 +140,7 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case sub: ret = EV_NEXT; ret -= EV_NEXT; break;
         case mul: ret = EV_NEXT * EV_NEXT; break;
         case div: ret = EV_NEXT; ret /= EV_NEXT; break;
-        case mod: ret = EV_NEXT; ret *= EV_NEXT; break;
+        case mod: ret = EV_NEXT; std::fmod(ret, EV_NEXT); break;
         case power: ret = EV_NEXT; ret = pow(ret, EV_NEXT); break;
         case logbase: ret = EV_NEXT; ret = log(ret) / log(EV_NEXT); break;
 
