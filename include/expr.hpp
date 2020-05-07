@@ -40,9 +40,6 @@ enum _OpCode {
     sinb, cosb, tanb, asinb, acosb, atanb, sinhb, coshb, tanhb,
     gammab, factb,
 
-    // printing
-    printc = 65534, print,
-
     // diagnostics
     dead = 57005,
 };

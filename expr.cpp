@@ -199,18 +199,6 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case tanhb: EV_WRAP(tanh);
         case gammab:  EV_WRAP(tgamma);
         case factb: ret = tgamma(EV_NEXT + 1); break;
-        case printc: std::cout << static_cast<char>(
-                            static_cast<int>(EV_NEXT)); RET_NONE; break;
-        case print: 
-                    {
-                        double val = EV_NEXT;
-                        int digs = static_cast<int>(EV_NEXT);
-                        std::streamsize ss = std::cout.precision();
-                        std::cout << std::fixed << std::setprecision(digs) << val << "\n";
-                        RET_NONE;
-                        std::cout << std::defaultfloat << std::setprecision(ss);
-                    }
-                break;
         default: RET_NONE; break;
     }
     return ret;

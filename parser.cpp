@@ -131,7 +131,7 @@ private:
                         return _parse(left, i - off, pri) &&
                                _parse(i + 1, right, pri + 1);
                     }
-                    else if (~tok_link[i]) {
+                    else if (~tok_link[i] && tok_link[i] < i) {
                         i = tok_link[i];
                     }
                 }
@@ -145,7 +145,7 @@ private:
                                 OpCode::sub);
                         return _parse(left, i, pri) && _parse(i + 1, right, pri + 1);
                     }
-                    else if (~tok_link[i]) {
+                    else if (~tok_link[i] && tok_link[i] < i) {
                         i = tok_link[i];
                     }
                 }
@@ -158,7 +158,7 @@ private:
                                     c == '/' ? OpCode::div : OpCode::mod));
                         return _parse(left, i, pri) && _parse(i + 1, right, pri + 1);
                     }
-                    else if (~tok_link[i]) {
+                    else if (~tok_link[i] && tok_link[i] < i) {
                         i = tok_link[i];
                     }
                 }
@@ -170,7 +170,7 @@ private:
                         result.ast.push_back(c == '+' ? OpCode::nop : OpCode::uminusb);
                         return _parse(i + 1, right, pri);
                     }
-                    else if (~tok_link[i]) {
+                    else if (tok_link[i] > i) {
                         i = tok_link[i];
                     }
                 }
@@ -182,7 +182,7 @@ private:
                         result.ast.push_back(OpCode::power);
                         return _parse(left, i, pri + 1) && _parse(i + 1, right, pri);
                     }
-                    else if (~tok_link[i]) {
+                    else if (tok_link[i] > i) {
                         i = tok_link[i];
                     }
                 }
@@ -195,6 +195,11 @@ private:
                 if ((c == '(' && cr == ')') ||
                     (c == '[' && cr == ']')) {
                     // Parentheses
+                    if (tok_link[left] != right - 1) {
+                        PARSE_ERR("Syntax error '" <<
+                                expr.substr(left, right - left) <<
+                                "'\n");;
+                    }
                     return _parse(left + 1, right - 1, _PRI_LOWEST);
                 }
                 if (c == '{' && cr == '}') {
@@ -404,9 +409,6 @@ Parser::Parser(){
         func_opcodes["fact"] = OpCode::factb;
         func_opcodes["choose"] = OpCode::choose;
         func_opcodes["fafact"] = OpCode::fafact;
-
-        func_opcodes["print"] = OpCode::print;
-        func_opcodes["printchar"] = OpCode::printc;
     }
 }
 
