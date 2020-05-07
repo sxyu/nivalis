@@ -7,11 +7,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
-// #include <fstream>
-// #include <map>
-// #include "opencv2/core.hpp"
-// #include "opencv2/imgproc.hpp"
-// #include "opencv2/highgui.hpp"
+#include <cctype>
 
 namespace {
 const char * WIND_NAME = "Nivalis";
@@ -33,24 +29,7 @@ std::vector<std::string> get_args(std::string& line) {
     return args;
 }
 
-int parse_value(const std::string& cmd, size_t data_size) {
-    int idx;
-    if (cmd[0] == 'T' || cmd[0] == 'F') {
-        idx = 0;
-        for (size_t i = 0; i < cmd.size(); ++i) {
-            idx <<= 1;
-            if (cmd[i] == 'T') idx |= 1;
-        }
-    } else if (cmd[0] >= '0' && cmd[0] <= '9') {
-        idx = std::atoi(cmd.c_str());
-        if (idx < 0) idx = data_size + idx - 1;
-    } else {
-        std::cout << "Error: Invalid command or value " << cmd << "\n";
-        return -1;
-    }
-    return idx;
-}
-}
+}  // namespace
 
 int main(int argc, char ** argv) {
     using namespace nivalis;
@@ -58,7 +37,6 @@ int main(int argc, char ** argv) {
 
     std::string orig_line, line, var;
     int assn_opcode = OpCode::bsel;
-    int N;
     Environment env;
     Parser parse;
 

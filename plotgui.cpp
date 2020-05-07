@@ -62,7 +62,7 @@ struct PlotGUI::impl {
         textbox tb(fm, rectangle{20, 40, 230, 40});
         tb.caption(init_expr);
 
-        int edit_expr_idx = 0;
+        size_t edit_expr_idx = 0;
         auto reparse_expr = [&]() {
             size_t idx = edit_expr_idx;
             auto& expr = exprs[idx];
@@ -104,7 +104,7 @@ struct PlotGUI::impl {
         auto seek_func = [&](int delta){
             edit_expr_idx += delta;
             std::string suffix;
-            if (edit_expr_idx < 0) {
+            if (edit_expr_idx == -1) {
                 edit_expr_idx = 0;
                 return;
             }
@@ -323,7 +323,7 @@ struct PlotGUI::impl {
             // Draw axes
             if (ymin <= 0 && ymax >= 0) {
                 double y0 = ymax / (ymax - ymin);
-                sy0 = shigh * y0;
+                sy0 = static_cast<int>(shigh * y0);
                 graph.line(point(0, sy0), point(swid, sy0), colors::dark_gray);
                 graph.line(point(0, sy0+1), point(swid, sy0+1), colors::dark_gray);
                 ++cnt_visible_axis;
@@ -333,7 +333,7 @@ struct PlotGUI::impl {
             }
             if (xmin <= 0 && xmax >= 0) {
                 double x0 = - xmin / (xmax - xmin);
-                sx0 = swid * x0;
+                sx0 = static_cast<int>(swid * x0);
                 graph.line(point(sx0,0), point(sx0, shigh), colors::dark_gray);
                 graph.line(point(sx0+1,0), point(sx0+1, swid), colors::dark_gray);
                 ++cnt_visible_axis;
@@ -377,14 +377,14 @@ struct PlotGUI::impl {
             double yb = ybi, xl = xli;
             int idx = 0;
             while (xl <= xr) {
-                int sxi = swid * (xl - xmin) / (xmax - xmin);
+                int sxi = static_cast<int>(swid * (xl - xmin) / (xmax - xmin));
                 graph.line(point(sxi,0), point(sxi, shigh), colors::light_gray);
                 xl = xstep * idx + xli;
                 ++idx;
             }
             idx = 0;
             while (yb <= yt) {
-                int syi = shigh * (ymax - yb) / (ymax - ymin);
+                int syi = static_cast<int>(shigh * (ymax - yb) / (ymax - ymin));
                 graph.line(point(0, syi), point(swid, syi), colors::light_gray);
                 yb = ystep * idx + ybi;
                 ++idx;
@@ -397,7 +397,7 @@ struct PlotGUI::impl {
             double ymb = ymbi, xml = xmli;
             idx = 0;
             while (xml <= xmr) {
-                int sxi = swid * (xml - xmin) / (xmax - xmin);
+                int sxi = static_cast<int>(swid * (xml - xmin) / (xmax - xmin));
                 graph.line(point(sxi,0), point(sxi, shigh), colors::gray);
 
                 if (xml != 0) {
@@ -410,7 +410,7 @@ struct PlotGUI::impl {
             }
             idx = 0;
             while (ymb <= ymt) {
-                int syi = shigh * (ymax - ymb) / (ymax - ymin);
+                int syi = static_cast<int>(shigh * (ymax - ymb) / (ymax - ymin));
                 graph.line(point(0, syi), point(swid, syi), colors::gray);
 
                 std::stringstream sstm;
@@ -489,7 +489,7 @@ struct PlotGUI::impl {
                                 if (y>0) y = ymax+(ymax-ymin)*1000;
                                 else y = ymin-(ymax-ymin)*1000;
                             }
-                            int sy = (ymax - y) / ydiff * shigh;
+                            int sy = static_cast<int>((ymax - y) / ydiff * shigh);
                             int sx = static_cast<int>(sxd);
                             if (reinit) {
                                 if (!(y > ymax || y < ymin)) {

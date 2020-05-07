@@ -3,6 +3,7 @@
 #include <iostream>
 namespace nivalis {
 Environment::Environment() {
+    // Predefined values
     set("e", M_E);
     set("pi", M_PI);
 }

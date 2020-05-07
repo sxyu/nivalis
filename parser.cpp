@@ -5,6 +5,7 @@
 #include<map>
 #include<string>
 #include<cmath>
+#include<cctype>
 #include "util.hpp"
 namespace nivalis {
 
@@ -48,6 +49,7 @@ struct ParseSession {
     }
 
 private:
+    // Make token link table
     bool _mk_tok_link() {
         std::vector<int64_t> starts[3];
         int64_t lit_start = -1;
@@ -91,6 +93,7 @@ private:
         return true;
     }
 
+    // Recursive parse procedure
     bool _parse(int64_t left, int64_t right, int pri) {
         while (std::isspace(expr[right-1])) --right;
         while (std::isspace(expr[left])) ++left;

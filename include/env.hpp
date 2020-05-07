@@ -21,7 +21,7 @@ struct Environment {
 
     // Return address of variable (advanced)
     // explicit = false: if not var defined, then allocates space for it
-    // explicit = tru:   if not var defined, then returns -1
+    // explicit = true:   if not var defined, then returns -1
     uint32_t addr_of(const std::string& var_name, bool mode_explicit = true);
 
     // Values of variables (by addressed)

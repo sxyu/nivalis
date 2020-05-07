@@ -4,6 +4,7 @@
 #include<memory>
 #include "env.hpp"
 namespace nivalis {
+// Plotter GUI, made with Nana
 struct PlotGUI {
     explicit PlotGUI(Environment& env, const std::string& init_expr = "");
     ~PlotGUI();

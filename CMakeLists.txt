@@ -32,17 +32,18 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 # set( Boost_USE_STATIC ON )
 
 # find_package(Boost REQUIRED COMPONENTS system program_options filesystem )
+
 find_package(Threads REQUIRED)
-find_package(X11 REQUIRED)
-# find_package(Freetype REQUIRED)
-find_package(Fontconfig REQUIRED)
-find_package(JPEG REQUIRED)
+IF (NOT WIN32)
+    find_package(X11 REQUIRED)
+    find_package(Fontconfig REQUIRED)
+    find_package(JPEG REQUIRED)
+endif()
 find_package(Nana REQUIRED)
 include_directories(
     ${INCLUDE_DIR}
     # ${Boost_INCLUDE_DIRS}
     ${X11_INCLUDE_DIR}
-    # ${FREETYPE_INCLUDE_DIRS}
     ${Fontconfig_INCLUDE_DIRS}
     ${NANA_INCLUDE_DIR}
 )
@@ -74,6 +75,7 @@ set (NANA_LINK_LIBS
     ${Fontconfig_LIBRARIES}
     ${JPEG_LIBRARIES}
 )
+add_definitions( -D_USE_MATH_DEFINES ) 
 
 add_executable( ${PROJ_NAME} ${HEADERS} ${SOURCES} )
 set_target_properties( ${PROJ_NAME} PROPERTIES OUTPUT_NAME ${OUTPUT_NAME} )
@@ -81,7 +83,9 @@ target_link_libraries( ${PROJ_NAME}  #${Boost_LIBRARIES}
      ${NANA_LIBRARIES} ${NANA_LINK_LIBS} )
 
 if ( MSVC )
-    set_property(TARGET ${PROJ_NAME} APPEND PROPERTY LINK_FLAGS /DEBUG)
+    set_property(TARGET ${PROJ_NAME} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GL")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 endif ( MSVC )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_link_libraries( ${PROJ_NAME} stdc++fs )

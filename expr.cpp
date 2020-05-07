@@ -144,14 +144,13 @@ double eval_ast(Environment& env, const uint32_t** ast) {
     return ret;
 }
 
-// Walk through AST and detect if variables present,
-// Detect if each subtee has constants only
+// Walk through AST and detect if each subtree has constants only
 bool eval_ast_detect_constexpr(const uint32_t** ast,
         const uint32_t* begin,
         std::vector<bool>& is_constexpr) {
     using namespace nivalis::OpCode;
     uint32_t opcode = **ast;
-    uint32_t nodepos = *ast - begin;
+    auto nodepos = *ast - begin;
     ++*ast;
     bool nontrivial = false;
     switch(opcode) {
@@ -171,7 +170,7 @@ bool eval_ast_detect_constexpr(const uint32_t** ast,
     is_constexpr[nodepos] = !nontrivial;
     return nontrivial;
 }
-// Detect if each subtee has constants only
+// Replace constant subtrees with one precomputed value
 void eval_ast_optim_constexpr(
         Environment & env,
         const uint32_t** ast,
@@ -180,7 +179,7 @@ void eval_ast_optim_constexpr(
         std::vector<uint32_t>& ast_out) {
     using namespace nivalis::OpCode;
     uint32_t opcode = **ast;
-    uint32_t nodepos = *ast - begin;
+    auto nodepos = *ast - begin;
     bool skip_node = false;
     if (is_constexpr[nodepos] && opcode != OpCode::val) {
         skip_node = true;

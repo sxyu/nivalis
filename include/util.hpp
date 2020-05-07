@@ -9,7 +9,7 @@ namespace util {
 // atof for part of string (C++ committee fail)
 double atof(const char* p, const char* end);
 
-// true if is literal char (a-zA-Z0-9_$')
+// true if is literal char (a-zA-Z0-9_$'#)
 constexpr bool is_literal(char c) {
     return
         (c >= 'a' && c <= 'z') ||
@@ -19,7 +19,7 @@ constexpr bool is_literal(char c) {
         c == '\'' || c == '.' || c == '#';
 }
 
-// true if can be variable name first char
+// true if can be first char of a variable name
 constexpr bool is_varname_first(char c) {
     return
         (c >= 'a' && c <= 'z') ||

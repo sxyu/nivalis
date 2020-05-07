@@ -59,10 +59,10 @@ struct Expr {
     Expr combine(uint32_t opcode, const Expr& other) const;
     // Unary minus wrapping
     Expr operator-() const;
-    // Wrap in unary operator with opcode
+    // Apply unary operator with given opcode
     Expr wrap(uint32_t opcode) const;
 
-    // Checks if expression refers to given variable
+    // Checks if expression contains given variable
     bool has_var(uint32_t addr) const;
 
     // Null expr

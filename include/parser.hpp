@@ -13,7 +13,9 @@ namespace nivalis {
 struct Parser {
     Parser();
 
-    // Parse
+    // Parse 'expr' in environment 'env'
+    // If mode_explicit is true, errors when undefined variable used (normal)
+    // If mode_explicit is false, defined the variable implicitly
     Expr operator()(const std::string& expr, Environment& env,
                     bool mode_explicit = true) const;
 private:
