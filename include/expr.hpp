@@ -26,22 +26,29 @@ enum _OpCode {
     power = 64, logbase,
     max = 80, min,
     land, lor, lxor,
-    choose, // n choose k
-    fafact, // falling factorial
 
     // binary comparison operators
     lt = 96, le, eq, ne, ge, gt,
+
+    // binary math operators
+    // integer
+    gcd = 16384, lcm,
+    choose, // n choose k
+    fafact, // falling factorial
+    rifact, // rising factorial
+
+    // float
+    beta, // beta function
+    polygamma, // polygamma function
 
     // unary operators
     nop = 32768, // idenitity
     uminusb, notb,
     absb, sqrtb, sgnb, floorb, ceilb, roundb,
-    expb, exp2b, logb, log10b, log2b,
+    expb, exp2b, logb, log10b, log2b, factb,
     sinb, cosb, tanb, asinb, acosb, atanb, sinhb, coshb, tanhb,
-    gammab, factb,
-
-    // diagnostics
-    dead = 57005,
+    gammab, lgammab, digammab, trigammab,
+    erfb, zetab,
 };
 }  // namespace OpCode
 

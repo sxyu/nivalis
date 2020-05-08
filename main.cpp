@@ -86,8 +86,7 @@ int main(int argc, char ** argv) {
 
             auto expr = parse(line, env);
             double output;
-            if (expr.ast[0] != OpCode::dead &&
-                !std::isnan(output = expr(env))) {
+            if (!std::isnan(output = expr(env))) {
                 expr.optimize();
                 if (var.size()) {
                     double var_val;

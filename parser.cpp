@@ -7,6 +7,7 @@
 #include<sstream>
 #include<cmath>
 #include<cctype>
+#include<boost/math/constants/constants.hpp>
 #include "util.hpp"
 namespace nivalis {
 
@@ -14,6 +15,7 @@ namespace {
     // Constants, lookup tables
     char lb[] = "([{", rb[] = ")]}";
     std::map<std::string, uint32_t> func_opcodes;
+    std::map<std::string, double> constant_values;
 
 #define RETURN_IF_FALSE(todo) if(!todo) return false;
 #define PARSE_ERR(toprint) do { \
@@ -51,7 +53,7 @@ struct ParseSession {
         if (!_mk_tok_link() ||
             !_parse(0, static_cast<int64_t>(expr.size()), _PRI_LOWEST)) {
             result.ast.clear();
-            result.ast.resize(1, OpCode::dead);
+            result.ast.resize(1, OpCode::null);
         }
         return result;
     }
@@ -293,7 +295,16 @@ private:
                     const std::string func_name = expr.substr(left, funname_end - left);
                     auto it = func_opcodes.find(func_name);
                     if (it != func_opcodes.end()) {
-                        result.ast.push_back(it->second);
+                        if (it->second == -1) {
+                            // Special handling (pseudo command)
+                            // if (func_name == "fact") {
+                                result.ast.push_back(OpCode::gammab);
+                                result.ast.push_back(OpCode::add);
+                                util::push_dbl(result.ast, 1.0);
+                            // }
+                        } else {
+                            result.ast.push_back(it->second);
+                        }
                         int64_t stkh = 0, last_begin = funname_end + 1;
                         for (int64_t i = funname_end + 1; i < right - 1; ++i) {
                             const char cc = expr[i];
@@ -332,6 +343,13 @@ private:
                         expr.substr(left, right - left);
                     if ((result.ast.back()
                                 = env.addr_of(varname, mode_explicit)) == -1) {
+                        auto it = constant_values.find(varname);
+                        result.ast.pop_back(); result.ast.pop_back();
+                        if (it != constant_values.end()) {
+                            // Fixed constant value (e.g. pi)
+                            util::push_dbl(result.ast, it->second);
+                            return true;
+                        }
                         PARSE_ERR("Undefined variable \"" << varname + "\"\n");
                     }
                     return true;
@@ -406,10 +424,51 @@ Parser::Parser(){
         func_opcodes["tanh"] = OpCode::tanhb;
 
         func_opcodes["gamma"] = OpCode::gammab;
-        func_opcodes["fact"] = OpCode::factb;
+        func_opcodes["fact"] = -1;
+        func_opcodes["lgamma"] = OpCode::lgammab;
+        func_opcodes["digamma"] = OpCode::digammab;
+        func_opcodes["trigamma"] = OpCode::trigammab;
+        func_opcodes["polygamma"] = OpCode::polygamma;
+        func_opcodes["erf"] = OpCode::erfb;
+        func_opcodes["zeta"] = OpCode::zetab;
+        func_opcodes["beta"] = OpCode::beta;
+        func_opcodes["gcd"] = OpCode::gcd;
+        func_opcodes["lcm"] = OpCode::lcm;
         func_opcodes["choose"] = OpCode::choose;
         func_opcodes["fafact"] = OpCode::fafact;
-    }
+        func_opcodes["rifact"] = OpCode::rifact;
+
+        using namespace boost::math;
+        constant_values["pi"] = double_constants::pi;
+        constant_values["half_pi"] = double_constants::half_pi;
+        constant_values["third_pi"] = double_constants::third_pi;
+        constant_values["sixth_pi"] = double_constants::sixth_pi;
+        constant_values["two_pi"] = double_constants::two_pi;
+        constant_values["two_thirds_pi"] = double_constants::two_thirds_pi;
+        constant_values["four_thirds_pi"] = double_constants::four_thirds_pi;
+#ifdef M_1_PI
+        constant_values["one_div_pi"] = M_1_PI;
+#endif
+        constant_values["two_div_pi"] = double_constants::two_div_pi;
+        constant_values["pi_sqr"] = double_constants::pi_sqr;
+        constant_values["pi_sqr_div_six"] = double_constants::pi_sqr_div_six;
+        constant_values["sqrtpi"] = double_constants::root_pi;
+        constant_values["e"] = double_constants::e;
+        constant_values["one_div_e"] = double_constants::one_div_euler;
+        constant_values["log10_e"] = double_constants::log10_e;
+        constant_values["exp_minus_half"] = double_constants::exp_minus_half;
+        constant_values["e_pow_pi"] = double_constants::e_pow_pi;
+        constant_values["sqrte"] = double_constants::root_e;
+
+        constant_values["sqrt2"] = double_constants::root_two;
+        constant_values["sqrt3"] = double_constants::root_three;
+        constant_values["ln2"] = double_constants::ln_two;
+        constant_values["ln10"] = double_constants::ln_ten;
+        constant_values["lnln2"] = double_constants::ln_ln_two;
+        constant_values["one_div_sqrt2"] = double_constants::one_div_root_two;
+        constant_values["phi"] = double_constants::phi;
+        constant_values["euler"] = double_constants::euler;
+     }
 }
 
 Expr Parser::operator()(const std::string& expr, Environment& env,

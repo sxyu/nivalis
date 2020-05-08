@@ -5,20 +5,20 @@
 #include <chrono>
 #include <queue>
 #include <utility>
-#include <nana/gui.hpp>
-#include <nana/gui/widgets/form.hpp>
-#include <nana/gui/widgets/textbox.hpp>
-#include <nana/gui/widgets/widget.hpp>
-#include <nana/gui/drawing.hpp>
-#include <nana/gui/widgets/label.hpp>
-#include <nana/gui/widgets/button.hpp>
-#include <nana/gui/dragger.hpp>
-#include <nana/paint/graphics.hpp>
-// #include <nana/threads/pool.hpp>
 
 #include "expr.hpp"
 #include "parser.hpp"
 #include "util.hpp"
+
+#include "nana/gui/widgets/form.hpp"
+#include "nana/gui/widgets/label.hpp"
+#include "nana/gui/widgets/textbox.hpp"
+#include "nana/paint/graphics.hpp"
+#include "nana/gui/drawing.hpp"
+#include "nana/gui.hpp"
+#include "nana/gui/widgets/button.hpp"
+// #include <nana/gui/dragger.hpp>
+// #include <nana/threads/pool.hpp>
 
 namespace nivalis {
 using namespace nana;

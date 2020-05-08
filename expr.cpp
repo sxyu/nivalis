@@ -4,6 +4,14 @@
 #include <iomanip>
 #include <cmath>
 #include <algorithm>
+#include <boost/math/special_functions/beta.hpp>
+#include <boost/math/special_functions/digamma.hpp>
+#include <boost/math/special_functions/trigamma.hpp>
+#include <boost/math/special_functions/polygamma.hpp>
+#include <boost/math/special_functions/zeta.hpp>
+#include <boost/math/special_functions/binomial.hpp>
+#include <boost/math/special_functions/factorials.hpp>
+#include <boost/integer/common_factor.hpp>
 #include "util.hpp"
 namespace nivalis {
 
@@ -43,7 +51,9 @@ void eval_ast_skip(const uint32_t** ast) {
         // Binary
         case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
-        case land: case lor: case lxor: case choose: case fafact:
+        case land: case lor: case lxor:
+        case gcd: case lcm:
+        case choose: case fafact: case rifact: case beta: case polygamma:
         case lt: case le: case eq: case ne: case ge: case gt:
             EV_NEXT_SKIP; EV_NEXT_SKIP; break;
         case null: break;
@@ -70,7 +80,9 @@ bool eval_ast_find_var(const uint32_t** ast, uint32_t var_id) {
         // Binary
         case bsel: case add: case sub: case mul: case div: case mod:
         case power: case logbase: case max: case min:
-        case land: case lor: case lxor: case choose: case fafact:
+        case land: case lor: case lxor:
+        case gcd: case lcm:
+        case choose: case fafact: case rifact: case beta: case polygamma:
         case lt: case le: case eq: case ne: case ge: case gt:
             EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
         case null: break;
@@ -82,6 +94,7 @@ bool eval_ast_find_var(const uint32_t** ast, uint32_t var_id) {
 
 // Evaluate AST from node
 double eval_ast(Environment& env, const uint32_t** ast) {
+    using namespace boost;
     using namespace nivalis::OpCode;
     uint32_t opcode = **ast;
     ++*ast;
@@ -149,29 +162,49 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case land: ret = EV_NEXT && EV_NEXT; break;
         case lor: ret = EV_NEXT || EV_NEXT; break;
         case lxor: ret = static_cast<bool>(EV_NEXT) ^ static_cast<bool>(EV_NEXT); break;
+        case gcd:
+                   {
+                       int64_t a = static_cast<int64_t>(std::max(EV_NEXT,0.)),
+                               b = static_cast<int64_t>(std::max(EV_NEXT,0.));
+                       ret = integer::gcd(a, b);
+                   }
+                   break;
+        case lcm:
+                   {
+                       int64_t a = static_cast<int64_t>(std::max(EV_NEXT,0.)),
+                               b = static_cast<int64_t>(std::max(EV_NEXT,0.));
+                       ret = integer::lcm(a, b);
+                   }
+                   break;
         case choose: 
                    {
-                       double ad = std::round(EV_NEXT);
-                       double bd = std::round(EV_NEXT);
-                       if (ad < 0 || bd < 0) {
-                           ret = std::numeric_limits<double>::quiet_NaN(); break;
-                       }
-                       size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
-                       b = std::min(b, a-b);
-                       ret = fa_fact(a, a-b) / fa_fact(b);
+                       unsigned a = static_cast<unsigned>(std::max(EV_NEXT,0.)),
+                                b = static_cast<unsigned>(std::max(EV_NEXT,0.));
+                       ret = math::binomial_coefficient<double>(a, b);
                    }
                    break;
-        case fafact:
+        case fafact: 
                    {
-                       double ad = std::round(EV_NEXT);
-                       double bd = std::round(EV_NEXT);
-                       if (ad < 0 || bd < 0) {
-                           ret = std::numeric_limits<double>::quiet_NaN(); break;
-                       }
-                       size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
-                       ret = fa_fact(a, a-b);
+                       unsigned a = static_cast<unsigned>(std::max(EV_NEXT,0.)),
+                                b = static_cast<unsigned>(std::max(EV_NEXT,0.));
+                       ret = math::falling_factorial<double>(a, b);
                    }
                    break;
+        case rifact: 
+                   {
+                       unsigned a = static_cast<unsigned>(std::max(EV_NEXT,0.)),
+                                b = static_cast<unsigned>(std::max(EV_NEXT,0.));
+                       ret = math::rising_factorial<double>(a, b);
+                   }
+                   break;
+        case beta:
+                ret = EV_NEXT;
+                ret = math::beta<double>(ret, EV_NEXT);
+                break;
+        case polygamma:
+                ret = EV_NEXT;
+                ret = math::polygamma<double>(static_cast<int>(ret), EV_NEXT);
+                break;
         case lt: ret = EV_NEXT; ret = ret < EV_NEXT; break;
         case le: ret = EV_NEXT; ret = ret <= EV_NEXT; break;
         case eq: ret = EV_NEXT == EV_NEXT; break;
@@ -191,6 +224,9 @@ double eval_ast(Environment& env, const uint32_t** ast) {
 
         case expb:  EV_WRAP(exp);   case exp2b:  EV_WRAP(exp2); 
         case logb:  EV_WRAP(log);
+        case factb:  ret = math::factorial<double>(static_cast<unsigned>(
+                                                     std::max(eval_ast(env, ast), 0.)
+                                                  )); break;
         case log2b: EV_WRAP(log2);  case log10b: EV_WRAP(log10);
         case sinb:  EV_WRAP(sin);   case cosb:   EV_WRAP(cos);
         case tanb:  EV_WRAP(tan);   case asinb:  EV_WRAP(asin);
@@ -198,7 +234,11 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case sinhb: EV_WRAP(sinh);  case coshb:  EV_WRAP(cosh);
         case tanhb: EV_WRAP(tanh);
         case gammab:  EV_WRAP(tgamma);
-        case factb: ret = tgamma(EV_NEXT + 1); break;
+        case digammab:  EV_WRAP(math::digamma<double>);
+        case trigammab:  EV_WRAP(math::trigamma<double>);
+        case lgammab:  EV_WRAP(lgamma); // log gamma
+        case erfb:  EV_WRAP(erf);
+        case zetab:  EV_WRAP(math::zeta<double>);
         default: RET_NONE; break;
     }
     return ret;
@@ -224,7 +264,8 @@ bool eval_ast_detect_constexpr(const uint32_t** ast,
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case lt: case le: case eq: case ne: case ge: case gt:
-        case choose: case fafact:
+        case gcd: case lcm:
+        case choose: case fafact: case rifact: case beta: case polygamma:
             EV_NEXT_DC; EV_NEXT_DC; break;
         case null: break;
         // Unary
@@ -270,7 +311,8 @@ void eval_ast_optim_constexpr(
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case lt: case le: case eq: case ne: case ge: case gt:
-        case choose: case fafact:
+        case gcd: case lcm:
+        case choose: case fafact: case rifact: case beta: case polygamma:
             EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
         case null: break;
         // Unary

@@ -28,10 +28,10 @@ if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -O3 -g" )
 endif ( CMAKE_COMPILER_IS_GNUCXX )
 
-# set( Boost_USE_STATIC_LIBS ON )
-# set( Boost_USE_STATIC ON )
+set( Boost_USE_STATIC_LIBS ON )
+set( Boost_USE_STATIC ON )
 
-# find_package(Boost REQUIRED COMPONENTS system program_options filesystem )
+find_package(Boost REQUIRED COMPONENTS system program_options filesystem )
 
 find_package(Threads REQUIRED)
 IF (NOT WIN32)
@@ -42,7 +42,7 @@ endif()
 find_package(Nana REQUIRED)
 include_directories(
     ${INCLUDE_DIR}
-    # ${Boost_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS}
     ${X11_INCLUDE_DIR}
     ${Fontconfig_INCLUDE_DIRS}
     ${NANA_INCLUDE_DIR}
@@ -68,21 +68,24 @@ set(
   util.cpp
 )
 
-set (NANA_LINK_LIBS
+set (NANA_DEPENDENCIES
     ${X11_X11_LIB}
     ${X11_Xft_LIB}
     ${CMAKE_THREAD_LIBS_INIT}
     ${Fontconfig_LIBRARIES}
     ${JPEG_LIBRARIES}
 )
-add_definitions( -D_USE_MATH_DEFINES ) 
+# Ensure M_PI, M_E defined; ensure boost doesn't throw exception when evaluating out of domain
+add_definitions( -D_USE_MATH_DEFINES -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
+    -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
+    -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error ) 
 
 add_executable( ${PROJ_NAME} ${HEADERS} ${SOURCES} )
 set_target_properties( ${PROJ_NAME} PROPERTIES OUTPUT_NAME ${OUTPUT_NAME} )
-target_link_libraries( ${PROJ_NAME}  #${Boost_LIBRARIES}
-     ${NANA_LIBRARIES} ${NANA_LINK_LIBS} )
+target_link_libraries( ${PROJ_NAME}  ${Boost_LIBRARIES} ${NANA_LIBRARIES} ${NANA_DEPENDENCIES} )
 
 if ( MSVC )
+    # Extra flags for MSVC to stop it from complaining about LTCG, MT etc.
     set_property(TARGET ${PROJ_NAME} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GL")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
