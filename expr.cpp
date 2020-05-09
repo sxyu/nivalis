@@ -105,7 +105,10 @@ double Expr::newton(uint32_t var_addr, double x0, Environment& env,
         double fx = (*this)(env);
         if(std::isnan(fx)) 
             return std::numeric_limits<double>::quiet_NaN(); // Fail
-        double delta = fx / (*deriv)(env);
+        double dfx = (*deriv)(env);
+        if(std::isnan(dfx) || dfx == 0.) 
+            return std::numeric_limits<double>::quiet_NaN(); // Fail
+        double delta = fx / dfx;
         x0 -= delta;
         // std::cerr << x0 << " " << std::fabs(delta) << " "<<std::fabs(fx)<<"\n";
         if (std::fabs(delta) < eps_step && std::fabs(fx) < eps_abs) return x0;

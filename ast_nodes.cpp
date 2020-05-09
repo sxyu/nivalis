@@ -93,6 +93,7 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
             if (std::isnan(u.val)) v.null_flag = true;
         }
     }
+    if (i == 0) return;
     if (v.null_flag) {
         // Set null
         v.opcode = OpCode::null;

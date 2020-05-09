@@ -20,7 +20,7 @@
 #include "nana/gui.hpp"
 #include "nana/gui/widgets/button.hpp"
 // #include <nana/gui/dragger.hpp>
-// #include <nana/threads/pool.hpp>
+#include <nana/threads/pool.hpp>
 
 namespace nivalis {
 using namespace nana;
@@ -40,6 +40,9 @@ const color& color_from_int(size_t color_index)
     };
     return palette[color_index % (sizeof palette / sizeof palette[0])];
 }
+
+// Squared distance
+int sqr_dist(int ax, int ay, int bx, int by) { return (ax-bx)*(ax-bx) + (ay-by)*(ay-by); }
 }  // namespace
 
 struct Function {
@@ -56,9 +59,32 @@ struct Function {
 };
 
 struct PointMarker {
-    double x, y;
-    std::string label;
-    size_t rel_func;
+    double x, y; // position
+    int sx, sy;  // location on screen (if applicable)
+    enum {
+        LABEL_NONE,
+        LABEL_X_INT,
+        LABEL_Y_INT,
+        LABEL_LOCAL_MIN,
+        LABEL_LOCAL_MAX,
+        LABEL_INTERSECTION,
+        LABEL_INFLECTION_PT,
+    } label;
+    size_t rel_func; // associated function, -1 if N/A
+    // passive: show title,position on click
+    // else: show on hover
+    bool passive;
+    static constexpr const char* label_repr(int lab) {
+        switch(lab) {
+            case LABEL_X_INT: return "x-intercept\n";
+            case LABEL_Y_INT: return "y-intercept\n";
+            case LABEL_LOCAL_MIN: return "local minimum\n";
+            case LABEL_LOCAL_MAX: return "local maximum\n";
+            case LABEL_INTERSECTION: return "intersection\n";
+            case LABEL_INFLECTION_PT: return "inflection point\n";
+            default: return "";
+        }
+    }
 };
 
 struct PlotGUI::impl {
@@ -91,9 +117,9 @@ struct PlotGUI::impl {
         textbox tb(fm, rectangle{20, 40, 250, 40});
         tb.caption(init_expr);
 
-        size_t edit_expr_idx = 0;
+        size_t curr_func = 0;
         auto reparse_expr = [&]() {
-            size_t idx = edit_expr_idx;
+            size_t idx = curr_func;
             auto& func = funcs[idx];
             auto& expr = func.expr;
             auto& expr_str = func.expr_str;
@@ -140,13 +166,13 @@ struct PlotGUI::impl {
             }
         });
         auto seek_func = [&](int delta){
-            edit_expr_idx += delta;
+            curr_func += delta;
             std::string suffix;
-            if (edit_expr_idx == -1) {
-                edit_expr_idx = 0;
+            if (curr_func == -1) {
+                curr_func = 0;
                 return;
             }
-            else if (edit_expr_idx >= funcs.size()) {
+            else if (curr_func >= funcs.size()) {
                 std::string tmp = funcs.back().expr_str;
                 util::trim(tmp);
                 if (!tmp.empty()) {
@@ -162,21 +188,21 @@ struct PlotGUI::impl {
                 } else {
                     // If last function is empty,
                     // then stay on it and do not create a new function
-                    edit_expr_idx = funcs.size()-1;
+                    curr_func = funcs.size()-1;
                     return;
                 }
             }
             label_func.caption("Function " +
-                    std::to_string(edit_expr_idx) + suffix);
-            tb.caption(funcs[edit_expr_idx].expr_str);
+                    std::to_string(curr_func) + suffix);
+            tb.caption(funcs[curr_func].expr_str);
             update(true);
         };
         auto delete_func = [&]() {
             if (funcs.size() > 1) {
-                reuse_colors.push(funcs[edit_expr_idx].line_color);
-                funcs.erase(funcs.begin() + edit_expr_idx);
-                if (edit_expr_idx >= funcs.size()) {
-                    edit_expr_idx--;
+                reuse_colors.push(funcs[curr_func].line_color);
+                funcs.erase(funcs.begin() + curr_func);
+                if (curr_func >= funcs.size()) {
+                    curr_func--;
                 }
             } else {
                 funcs[0].expr_str = "";
@@ -279,15 +305,34 @@ struct PlotGUI::impl {
 
         // Dragging + scrolling
         point dragpt, lastpt;
-        bool dragdown = false;
+        bool dragdown = false, draglabel = false;
         double xmaxi, xmini, ymaxi, ymini;
+        auto move_label = [&](const PointMarker& ptm, int px, int py) {
+            label_point_marker.show();
+            label_point_marker.move(px, py+20);
+            label_point_marker.caption(
+                PointMarker::label_repr(ptm.label) +
+                std::to_string(ptm.x) + ", " + std::to_string(ptm.y));
+        };
         auto down_handle = fm.events().mouse_down([&](const nana::arg_mouse&arg)
         {
             if (!dragdown) {
-                lastpt = dragpt = arg.pos;
-                dragdown = true;
-                xmaxi = xmax; xmini = xmin;
-                ymaxi = ymax; ymini = ymin;
+                int px = arg.pos.x, py = arg.pos.y;
+                if (px >= 0 && py >= 0 && py < grid.size() && px < grid[0].size() && ~grid[py][px]) {
+                    auto& ptm = pt_markers[grid[py][px]];
+                    move_label(ptm, px, py);
+                    draglabel = true;
+                    if (~ptm.rel_func && ptm.rel_func != curr_func) {
+                        // Switch to function
+                        seek_func(ptm.rel_func - curr_func);
+                        update(true);
+                    }
+                } else {
+                    lastpt = dragpt = arg.pos;
+                    dragdown = true;
+                    xmaxi = xmax; xmini = xmin;
+                    ymaxi = ymax; ymini = ymin;
+                }
             }
         });
 
@@ -306,20 +351,26 @@ struct PlotGUI::impl {
                     double fy = (ymax - ymin) / shigh * dy;
                     xmax = xmaxi - fx; xmin = xmini - fx;
                     ymax = ymaxi + fy; ymin = ymini + fy;
-                    update();
+                    pool.push([this]() { update(); });
                 } else if (px >= 0 && py >= 0 && py < grid.size() && px < grid[0].size() && ~grid[py][px]) {
-                    label_point_marker.show();
                     auto& ptm = pt_markers[grid[py][px]];
-                    label_point_marker.move(px, py+20);
-                    label_point_marker.caption(
-                            ptm.label + std::to_string(ptm.x) + ", " + std::to_string(ptm.y));
+                    if (ptm.passive && !draglabel) return;
+                    move_label(ptm, px, py);
                 } else {
                     label_point_marker.hide();
                 }
             });
 
-        auto up_handle = fm.events().mouse_up([&dragdown](const nana::arg_mouse&arg) { dragdown = false; });
-        auto leave_handle = fm.events().mouse_leave([&dragdown](const nana::arg_mouse&arg) { dragdown = false; });
+        auto up_handle = fm.events().mouse_up([&](const nana::arg_mouse&arg) {
+                dragdown = false;
+                label_point_marker.hide();
+                draglabel = false;
+        });
+        auto leave_handle = fm.events().mouse_leave([&](const nana::arg_mouse&arg) {
+                dragdown = false;
+                label_point_marker.hide();
+                draglabel = false;
+        });
         int win_wid = 1000, win_hi = 600;
         auto resize_handle = fm.events().resized([this, &win_wid, &win_hi](const nana::arg_resized&arg) {
             double wf = (xmax - xmin) * (1.*arg.width / win_wid - 1.) / 2;
@@ -365,7 +416,7 @@ struct PlotGUI::impl {
         funcs.back().is_implicit = false;
         reparse_expr();
         // *** Main drawing code ***
-        dw.draw([this, &edit_expr_idx](paint::graphics& graph) {
+        dw.draw([this, &curr_func](paint::graphics& graph) {
             graph.rectangle(true, colors::white);
             int swid = fm.size().width, shigh = fm.size().height;
             double xdiff = xmax - xmin, ydiff = ymax - ymin;
@@ -482,9 +533,8 @@ struct PlotGUI::impl {
             }
 
             // Draw functions
-            std::vector<PointMarker> new_pt_markers;
-            std::vector<std::vector<size_t> > new_grid;
-            new_grid.resize(shigh, std::vector<size_t>(swid, -1));
+            pt_markers.clear(); pt_markers.reserve(500);
+            grid.clear(); grid.resize(shigh, std::vector<size_t>(swid, -1));
             for (size_t exprid = 0; exprid < funcs.size(); ++exprid) {
                 bool reinit = true;
                 int psx = -1, psy = -1;
@@ -513,7 +563,7 @@ struct PlotGUI::impl {
                                     graph.set_pixel(sx-1, sy-1, func_color);
                                     graph.set_pixel(sx, sy-1, func_color);
                                     graph.set_pixel(sx+1, sy-1, func_color);
-                                    if (edit_expr_idx == exprid) {
+                                    if (curr_func == exprid) {
                                         // current function, thicken
                                         graph.set_pixel(sx-1, sy-2, func_color);
                                         graph.set_pixel(sx, sy-2, func_color);
@@ -527,7 +577,7 @@ struct PlotGUI::impl {
                                     graph.set_pixel(sx-2, sy-1, func_color);
                                     graph.set_pixel(sx-2, sy, func_color);
                                     graph.set_pixel(sx-2, sy+1, func_color);
-                                    if (edit_expr_idx == exprid) {
+                                    if (curr_func == exprid) {
                                         // current function, thicken
                                         graph.set_pixel(sx-1, sy-1, func_color);
                                         graph.set_pixel(sx-1, sy, func_color);
@@ -560,11 +610,50 @@ struct PlotGUI::impl {
                             if (cdist >= MIN_DIST_BETWEEN_ROOTS) st.insert(value);
                         }
                     };
-                    auto draw_line = [&](double psx, double psy, double sx, double sy) {
+                    static const int rect_rad = 3, click_rect_rad = 4;
+                    // Draw a line and construct markers along the line
+                    // to allow clicking
+                    auto draw_line = [&](double psx, double psy, double sx, double sy, double x, double y) {
                         graph.line(point(psx, psy), point(sx,sy), func_color);
                         graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
                         graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
-                        if (edit_expr_idx == exprid) {
+                        int miny, maxy, minx, maxx;
+                        if (sy < psy) {
+                            miny = sy; maxy = psy; minx = sx; maxx = psx;
+                        } else {
+                            miny = psy; maxy = sy; minx = psx; maxx = sx;
+                        }
+
+                        // Construct a (passive) point marker for this point,
+                        // so that the user can click to see the position
+                        size_t new_marker_idx = pt_markers.size();
+                        pt_markers.emplace_back();
+                        auto& new_marker = pt_markers.back();
+                        new_marker.x = x; new_marker.y = y;
+                        new_marker.rel_func = exprid;
+                        new_marker.label = PointMarker::LABEL_NONE;
+                        new_marker.sx = (sx + psx) / 2; new_marker.sy = (sy + psy) / 2;
+                        new_marker.passive = true;
+
+                        int dfx = maxx-minx, dfy = maxy-miny;
+                        for (int syp = std::max(miny, 0); syp <= std::min(maxy, shigh-1); syp += 4) {
+                            // Assign to grid
+                            for (int r = std::max(syp - click_rect_rad, 0); r <= std::min(syp + click_rect_rad, shigh-1); ++r) {
+                                for (int c = std::max<int>(sx - click_rect_rad, 0); c <= std::min<int>(sx + click_rect_rad, swid-1); ++c) {
+                                    int existing_marker_idx = grid[r][c];
+                                    if (~existing_marker_idx) {
+                                        auto& existing_marker = pt_markers[existing_marker_idx];
+                                        if (sqr_dist(existing_marker.sx, existing_marker.sy, c, r) <=
+                                            sqr_dist(new_marker.sx, new_marker.sy, c, r)) {
+                                            // If existing marker is closer, do not overwrite it
+                                            continue;
+                                        }
+                                    }
+                                    grid[r][c] = new_marker_idx;
+                                }
+                            }
+                        }
+                        if (curr_func == exprid) {
                             // current function, thicken
                             graph.line(point(psx-1, psy), point(sx-1,sy), func_color);
                             graph.line(point(psx, psy-1), point(sx,sy-1), func_color);
@@ -573,11 +662,13 @@ struct PlotGUI::impl {
                     // Find roots, asymptotes, extrema
                     const double SIDE_ALLOW = xdiff/20;
 #define NEWTON_ARGS x_var, x, env, EPS_STEP, EPS_ABS, MAX_ITER, xmin - SIDE_ALLOW, xmax + SIDE_ALLOW
-                    for (int sxd = 0; sxd < swid; sxd += 5) {
-                        const double x = sxd*1. * xdiff / swid + xmin;
-                        double root = expr.newton(NEWTON_ARGS, &func.diff); push_if_valid(root, roots_and_extrema);
-                        double asymp = func.recip.newton(NEWTON_ARGS, &func.drecip); push_if_valid(asymp, asymps);
-                        double extr = func.diff.newton(NEWTON_ARGS, &func.ddiff); push_if_valid(extr, roots_and_extrema);
+                    if (func.diff.ast[0] != OpCode::null) {
+                        for (int sxd = 0; sxd < swid; sxd += 5) {
+                            const double x = sxd*1. * xdiff / swid + xmin;
+                            double root = expr.newton(NEWTON_ARGS, &func.diff); push_if_valid(root, roots_and_extrema);
+                            double asymp = func.recip.newton(NEWTON_ARGS, &func.drecip); push_if_valid(asymp, asymps);
+                            double extr = func.diff.newton(NEWTON_ARGS, &func.ddiff); push_if_valid(extr, roots_and_extrema);
+                        }
                     }
                     // Copy into function
                     std::vector<double> tmp; tmp.resize(roots_and_extrema.size());
@@ -624,7 +715,7 @@ struct PlotGUI::impl {
                                         }
                                     }
                                     if (!reinit && ~psx) {
-                                        draw_line(psx, psy, sx, sy);
+                                        draw_line(psx, psy, sx, sy, x, y);
                                         if (y > ymax || y < ymin) {
                                             reinit = true;
                                             psx = -1;
@@ -665,7 +756,7 @@ struct PlotGUI::impl {
                                     if (psy >= shigh) sx = -1;
                                 }
                                 if (~sx) {
-                                    draw_line(psx, psy, sx, sy);
+                                    draw_line(psx, psy, sx, sy, as - 1e-6, yp);
                                 }
                             }
                         }
@@ -683,63 +774,68 @@ struct PlotGUI::impl {
 
                         int sy = static_cast<int>((ymax - y) / ydiff * shigh);
                         int sx = static_cast<int>((x - xmin) / xdiff * swid);
-                        static const int rect_rad = 3, click_rect_rad = 5;
                         graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad+1, 2*rect_rad+1), true, colors::light_gray);
                         graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad+1, 2*rect_rad+1), false, func.line_color);
-                        size_t idx = new_pt_markers.size();
-                        new_pt_markers.emplace_back();
-                        auto& ptm = new_pt_markers.back();
-                        ptm.label = 
-                                    x == 0. ? "y-intercept\n" :
-                                    std::fabs(dy) > 1e-6 ? "x-intercept\n" :
-                                    ddy > 1e-6 ? "local minimum\n" :
-                                    ddy < -1e-6 ? "local maximum\n":
-                                    "";
-                        ptm.x = x; ptm.y = y;
+                        size_t idx = pt_markers.size();
+                        pt_markers.emplace_back();
+                        auto& ptm = pt_markers.back();
+                        ptm.sx = sx; ptm.sy = sy;
+                        ptm.label =
+                                    x == 0. ? PointMarker::LABEL_Y_INT :
+                                    std::fabs(dy) > 1e-6 ? PointMarker::LABEL_X_INT :
+                                    ddy > 1e-6 ? PointMarker::LABEL_LOCAL_MIN :
+                                    ddy < -1e-6 ? PointMarker::LABEL_LOCAL_MAX:
+                                    PointMarker::LABEL_INFLECTION_PT;
+                        ptm.passive = false;
+                        ptm.rel_func = exprid;
                         for (int r = std::max(sy - click_rect_rad, 0); r <= std::min(sy + click_rect_rad, shigh-1); ++r) {
                             for (int c = std::max(sx - click_rect_rad, 0); c <= std::min(sx + click_rect_rad, swid-1); ++c) {
-                                new_grid[r][c] = idx;
+                                grid[r][c] = idx;
                             }
                         }
                     }
 
                     // Function intersection
-                    for (size_t exprid2 = 0; exprid2 < exprid; ++exprid2) {
-                        auto& func2 = funcs[exprid2];
-                        if (func2.is_implicit) continue; // not supported right now
-                        Expr sub_expr = expr - func2.expr;
-                        Expr diff_sub_expr = sub_expr.diff(x_var, env);
-                        std::set<double> st;
-                        for (int sxd = 0; sxd < swid; sxd += 5) {
-                            const double x = sxd*1. * xdiff / swid + xmin;
-                            double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
-                            push_if_valid(root, st);
-                        }
-                        for (double x : st) {
-                            env.vars[x_var] = x;
-                            double y = expr(env);
-                            int sy = static_cast<int>((ymax - y) / ydiff * shigh);
-                            int sx = static_cast<int>((x - xmin) / xdiff * swid);
-                            static const int rect_rad = 3, click_rect_rad = 5;
-                            graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad, 2*rect_rad), true, colors::light_gray);
-                            graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad+1, 2*rect_rad+1), false, func.line_color);
-                            graph.rectangle(rectangle(sx-rect_rad+1, sy-rect_rad+1, 2*rect_rad, 2*rect_rad), false, func2.line_color);
-                            size_t idx = new_pt_markers.size();
-                            new_pt_markers.emplace_back();
-                            auto& ptm = new_pt_markers.back();
-                            ptm.label = "intersection\n";
-                            ptm.x = x; ptm.y = y;
-                            for (int r = std::max(sy - click_rect_rad, 0); r <= std::min(sy + click_rect_rad, shigh-1); ++r) {
-                                for (int c = std::max(sx - click_rect_rad, 0); c <= std::min(sx + click_rect_rad, swid-1); ++c) {
-                                    new_grid[r][c] = idx;
+                    if (func.diff.ast[0] != OpCode::null) {
+                        for (size_t exprid2 = 0; exprid2 < exprid; ++exprid2) {
+                            auto& func2 = funcs[exprid2];
+                            if (func2.diff.ast[0] == OpCode::null) continue;
+                            if (func2.is_implicit) continue; // not supported right now
+                            Expr sub_expr = expr - func2.expr;
+                            Expr diff_sub_expr = sub_expr.diff(x_var, env);
+                            if (diff_sub_expr.ast[0] == OpCode::null) continue;
+                            std::set<double> st;
+                            for (int sxd = 0; sxd < swid; sxd += 5) {
+                                const double x = sxd*1. * xdiff / swid + xmin;
+                                double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
+                                push_if_valid(root, st);
+                            }
+                            for (double x : st) {
+                                env.vars[x_var] = x;
+                                double y = expr(env);
+                                int sy = static_cast<int>((ymax - y) / ydiff * shigh);
+                                int sx = static_cast<int>((x - xmin) / xdiff * swid);
+                                static const int rect_rad = 3, click_rect_rad = 5;
+                                graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad, 2*rect_rad), true, colors::light_gray);
+                                graph.rectangle(rectangle(sx-rect_rad-1, sy-rect_rad-1, 2*rect_rad+1, 2*rect_rad+1), false, func.line_color);
+                                graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad+1, 2*rect_rad+1), false, func2.line_color);
+                                size_t idx = pt_markers.size();
+                                pt_markers.emplace_back();
+                                auto& ptm = pt_markers.back();
+                                ptm.label = PointMarker::LABEL_INTERSECTION;
+                                ptm.x = x; ptm.y = y;
+                                ptm.passive = false;
+                                ptm.rel_func = -1;
+                                for (int r = std::max(sy - click_rect_rad, 0); r <= std::min(sy + click_rect_rad, shigh-1); ++r) {
+                                    for (int c = std::max(sx - click_rect_rad, 0); c <= std::min(sx + click_rect_rad, swid-1); ++c) {
+                                        grid[r][c] = idx;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            new_grid.swap(grid);
-            new_pt_markers.swap(pt_markers);
         });
         update(true);
 
@@ -763,7 +859,7 @@ private:
     size_t last_expr_color = 0;
     uint32_t x_var, y_var;
 
-    // nana::threads::pool pool;
+    nana::threads::pool pool;
 };
 
 PlotGUI::PlotGUI(Environment& env, const std::string& init_expr)

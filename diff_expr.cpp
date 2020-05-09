@@ -57,10 +57,11 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                 if (**ast != val) return false; // Index must be constant for derivative
                 ++*ast;
                 int64_t a = static_cast<int64_t>(util::as_double(*ast)); *ast += 2;
-                if (**ast != val) return false; // Index must be constant for derivative
+                if (**ast != val) {
+                    return false; // Index must be constant for derivative
+                }
                 ++*ast;
-                int64_t b = static_cast<int64_t>(util::as_double(*ast));
-                *ast += 2;
+                int64_t b = static_cast<int64_t>(util::as_double(*ast)); *ast += 2;
                 int64_t step = (a <= b) ? 1 : -1; b += step;
                 for (int64_t i = a; i != b; i += step) {
                     const uint32_t* tmp = *ast;
