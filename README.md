@@ -5,6 +5,7 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 
 ## Dependencies
 - C++ 17
+- Boost 1.58+ (only really need Boost math, although currently dependency not cleaned up)
 - Nana (GUI library)
 
 ## Installation
