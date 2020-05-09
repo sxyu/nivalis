@@ -23,8 +23,10 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 - `./nivalis`
 - Enter expressions to evaluate them
     - Exponentiation is `^`, other operators are standard
-    - Some functions available: `exp ln log10 log2 sin cos tan asin acos atan abs fact gamma`
-    - Piecewise: `{x<0 : x, x>=0 : x^2}`
+    - Some functions available: `sqrt exp ln log10 log2 sin cos tan asin acos atan abs fact gamma digamma polygamma beta`
+    - Piecewise function: `{x<0 : x, x>=0 : x^2}` or `{x<0 : x, x^2}` (last case is else by default)
+    - Sum/prod special forms: `sum(x:1:10)[<expr>]` and `prod(x:1:10)[<expr>]` (inclusive indexing, upper index can be < lower)
+    - Derivative special form: `diff(x)[<expr>]`
 ### GUI
 - Enter `plot` to show plotter GUI, or `plot <function_expr>` to plot a function expression
     - After launch, `E` to edit function expression (or click the textbox)
@@ -38,5 +40,6 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - Drag mouse (or arrow keys) to move, scroll (or `=`/`-`)  to zoom
     - `Ctrl`/`Alt` and `=`/`-` to zoom asymmetrically
     - Ctrl+H or click the reset view button to reset to home view (around origin)
+    - Mouse over a marked point (minimum/maximum/intersection etc) to see label+coordinates
 ![Screenshot](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
-![Screenshot: implicit functions](https://github.com/sxyu/nivalis/blob/master/readme_img/implicit.png?raw=true)
+![Screenshot: implicit functions (older version)](https://github.com/sxyu/nivalis/blob/master/readme_img/implicit.png?raw=true)

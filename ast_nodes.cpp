@@ -87,7 +87,9 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
         // Detect nonconst
         v.nonconst_flag |= u.nonconst_flag;
         // Detect nan
-        if (u.opcode == OpCode::val) {
+        if (u.opcode == OpCode::val &&
+             v.opcode != OpCode::bnz // bnz can short-circuit
+             ) {
             if (std::isnan(u.val)) v.null_flag = true;
         }
     }
