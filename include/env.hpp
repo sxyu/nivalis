@@ -15,17 +15,22 @@ struct Environment {
     // Set variable to value
     void set(const std::string& var_name, double val = 0.0);
     // Get variable value
-    double get(const std::string& var_name);
+    double get(const std::string& var_name) const;
     // Free variable
     bool del(const std::string& var_name);
 
     // Return address of variable (advanced)
     // explicit = false: if not var defined, then allocates space for it
-    // explicit = true:   if not var defined, then returns -1
+    // explicit = true:  if not var defined, then returns -1
     uint32_t addr_of(const std::string& var_name, bool mode_explicit = true);
+    // Const version ignores explicit (always true)
+    uint32_t addr_of(const std::string& var_name, bool mode_explicit = true) const;
 
-    // Values of variables (by addressed)
+    // Values of variables (by address)
     std::vector<double> vars;
+
+    // Names of variables (by address)
+    std::vector<std::string> varname;
 
 private:
     // Free addresses on vars vector

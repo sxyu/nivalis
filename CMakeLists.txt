@@ -54,7 +54,11 @@ set(
   plotgui.hpp
   env.hpp
   expr.hpp
+  ast_nodes.hpp
   util.hpp
+  eval_expr.hpp
+  opcodes.hpp
+  diff_expr.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
@@ -65,7 +69,11 @@ set(
   plotgui.cpp
   env.cpp
   expr.cpp
+  ast_nodes.cpp
   util.cpp
+  eval_expr.cpp
+  opcodes.cpp
+  diff_expr.cpp
 )
 
 set (NANA_DEPENDENCIES

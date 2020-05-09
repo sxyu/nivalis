@@ -3,8 +3,10 @@
 #include <iomanip>
 #include <cmath>
 #include <chrono>
-#include <queue>
+#include <set>
 #include <utility>
+#include <queue>
+#include <algorithm>
 
 #include "expr.hpp"
 #include "parser.hpp"
@@ -40,6 +42,25 @@ const color& color_from_int(size_t color_index)
 }
 }  // namespace
 
+struct Function {
+    bool is_implicit;
+    Expr expr;
+    // Derivative, 2nd derivative
+    Expr diff, ddiff;
+    // Reciprocal, derivative of reciprocal
+    Expr recip, drecip;
+    color line_color;
+    std::string expr_str;
+    // Store x-positions of currently visible roots and extrema
+    std::vector<double> roots_and_extrema;
+};
+
+struct PointMarker {
+    double x, y;
+    std::string label;
+    size_t rel_func;
+};
+
 struct PlotGUI::impl {
     std::chrono::high_resolution_clock::time_point lazy_start;
     void update(bool force = false) {
@@ -50,6 +71,7 @@ struct PlotGUI::impl {
             lazy_start = std::chrono::high_resolution_clock::now();
         }
     }
+
     impl(Environment expr_env, std::string init_expr)
         : fm(API::make_center(1000, 600)), dw(fm),
              env(expr_env) {
@@ -57,11 +79,14 @@ struct PlotGUI::impl {
         // Func label
         label label_func(fm, rectangle{20, 20, 250, 30});
         label_func.caption("Function 0");
-        label_func.transparent(true);
+        label_func.bgcolor(colors::white);
         // Error label
         label label_err(fm, rectangle{20, 115, 250, 30});
-        label_err.caption();
         label_err.transparent(true);
+        // Point marker label
+        label label_point_marker(fm, rectangle{20, 20, 250, 30});
+        label_point_marker.bgcolor(colors::white);
+        label_point_marker.hide();
         // Textbook for editing functions
         textbox tb(fm, rectangle{20, 40, 250, 40});
         tb.caption(init_expr);
@@ -69,11 +94,12 @@ struct PlotGUI::impl {
         size_t edit_expr_idx = 0;
         auto reparse_expr = [&]() {
             size_t idx = edit_expr_idx;
-            auto& expr = exprs[idx];
-            auto& expr_str = expr_strs[idx];
+            auto& func = funcs[idx];
+            auto& expr = func.expr;
+            auto& expr_str = func.expr_str;
             expr_str = tb.caption();
             size_t eqpos = util::find_equality(expr_str);
-            if ((is_implicit[idx] = ~eqpos)) {
+            if ((func.is_implicit = ~eqpos)) {
                 auto lhs = expr_str.substr(0, eqpos),
                      rhs = expr_str.substr(eqpos+1);
                 util::trim(lhs); util::trim(rhs);
@@ -84,16 +110,20 @@ struct PlotGUI::impl {
                            );
                     if (!expr.has_var(y_var)) {
                         // if one side is y and other side has no y,
-                        // treat as explicit function 
-                        is_implicit[idx] = false;
+                        // treat as explicit function
+                        func.is_implicit = false;
                     }
                 }
-                if (is_implicit[idx]) {
+                if (func.is_implicit) {
                     expr = parser(lhs, env, true, true) - parser(rhs, env, true, true);
                 }
             } else {
                 expr = parser(expr_str, env, true, true);
             }
+            func.diff = expr.diff(x_var, env);
+            func.ddiff = func.diff.diff(x_var, env);
+            func.recip = Expr::constant(1.) / func.expr;
+            func.drecip = func.recip.diff(x_var, env);
             label_err.caption(parser.error_msg);
             expr.optimize();
             update();
@@ -116,45 +146,44 @@ struct PlotGUI::impl {
                 edit_expr_idx = 0;
                 return;
             }
-            else if (edit_expr_idx >= exprs.size()) {
-                std::string tmp = expr_strs.back();
+            else if (edit_expr_idx >= funcs.size()) {
+                std::string tmp = funcs.back().expr_str;
                 util::trim(tmp);
                 if (!tmp.empty()) {
-                    exprs.emplace_back();
-                    expr_strs.emplace_back();
-                    is_implicit.push_back(false);
+                    funcs.emplace_back();
+                    funcs.back().is_implicit = false;
                     if (reuse_colors.empty()) {
-                        expr_colors.push_back(color_from_int(last_expr_color++));
+                        funcs.back().line_color = color_from_int(last_expr_color++);
                     } else {
-                        expr_colors.push_back(reuse_colors.front());
+                        funcs.back().line_color = reuse_colors.front();
                         reuse_colors.pop();
                     }
                     suffix = " [new]";
                 } else {
-                    edit_expr_idx = exprs.size()-1;
+                    // If last function is empty,
+                    // then stay on it and do not create a new function
+                    edit_expr_idx = funcs.size()-1;
                     return;
                 }
             }
             label_func.caption("Function " +
                     std::to_string(edit_expr_idx) + suffix);
-            tb.caption(expr_strs[edit_expr_idx]);
+            tb.caption(funcs[edit_expr_idx].expr_str);
             update(true);
         };
         auto delete_func = [&]() {
-            if (exprs.size() > 1) {
-                exprs.erase(exprs.begin() + edit_expr_idx);
-                expr_strs.erase(expr_strs.begin() + edit_expr_idx);
-                reuse_colors.push(expr_colors[edit_expr_idx]);
-                expr_colors.erase(expr_colors.begin() + edit_expr_idx);
-                is_implicit.erase(is_implicit.begin() + edit_expr_idx);
-                if (edit_expr_idx >= exprs.size()) {
+            if (funcs.size() > 1) {
+                reuse_colors.push(funcs[edit_expr_idx].line_color);
+                funcs.erase(funcs.begin() + edit_expr_idx);
+                if (edit_expr_idx >= funcs.size()) {
                     edit_expr_idx--;
                 }
             } else {
-                expr_strs[0] = "";
+                funcs[0].expr_str = "";
             }
-            reparse_expr();
             seek_func(0);
+            reparse_expr();
+            update(true);
         };
         tb.events().key_release([&](const nana::arg_keyboard& arg) {
             reparse_expr();
@@ -169,10 +198,10 @@ struct PlotGUI::impl {
 
         // Home button
         button btn_home(fm, rectangle{20, 80, 130, 30});
-        btn_home.transparent(true);
+        btn_home.bgcolor(colors::white);
         btn_home.edge_effects(false);
         btn_home.caption(L"Reset View");
-        btn_home.events().click([&](){ 
+        btn_home.events().click([&](){
             xmax = 10.0; xmin = -10.0;
             ymax = 6.0; ymin = -6.0;
             update();
@@ -181,17 +210,17 @@ struct PlotGUI::impl {
 
         // Prev/next/del-func button
         button btn_prev(fm, rectangle{150, 80, 40, 30});
-        btn_prev.transparent(true);
+        btn_prev.bgcolor(colors::white);
         btn_prev.edge_effects(false);
         btn_prev.caption(L"<");
         btn_prev.events().click([&](){ seek_func(-1); fm.focus(); });
         button btn_next(fm, rectangle{190, 80, 40, 30});
-        btn_next.transparent(true);
+        btn_next.bgcolor(colors::white);
         btn_next.edge_effects(false);
         btn_next.caption(L">");
         btn_next.events().click([&](){ seek_func(1); fm.focus(); });
         button btn_del(fm, rectangle{230, 80, 40, 30});
-        btn_del.transparent(true);
+        btn_del.bgcolor(colors::white);
         btn_del.edge_effects(false);
         btn_del.caption(L"x");
         btn_del.events().click([&](){ delete_func(); fm.focus(); });
@@ -265,17 +294,27 @@ struct PlotGUI::impl {
         auto move_handle =
             fm.events().mouse_move(
                     [&](const nana::arg_mouse&arg) {
+                    int px = arg.pos.x, py = arg.pos.y;
                 if (dragdown) {
-                        lastpt = arg.pos;
-                        double swid = fm.size().width;
-                        double shigh = fm.size().height;
-                        int dx = arg.pos.x - dragpt.x;
-                        int dy = arg.pos.y - dragpt.y;
-                        double fx = (xmax - xmin) / swid * dx;
-                        double fy = (ymax - ymin) / shigh * dy;
-                        xmax = xmaxi - fx; xmin = xmini - fx;
-                        ymax = ymaxi + fy; ymin = ymini + fy;
-                        update();
+                    label_point_marker.hide();
+                    lastpt = arg.pos;
+                    double swid = fm.size().width;
+                    double shigh = fm.size().height;
+                    int dx = px - dragpt.x;
+                    int dy = py - dragpt.y;
+                    double fx = (xmax - xmin) / swid * dx;
+                    double fy = (ymax - ymin) / shigh * dy;
+                    xmax = xmaxi - fx; xmin = xmini - fx;
+                    ymax = ymaxi + fy; ymin = ymini + fy;
+                    update();
+                } else if (px >= 0 && py >= 0 && py < grid.size() && px < grid[0].size() && ~grid[py][px]) {
+                    label_point_marker.show();
+                    auto& ptm = pt_markers[grid[py][px]];
+                    label_point_marker.move(px, py+20);
+                    label_point_marker.caption(
+                            ptm.label + std::to_string(ptm.x) + ", " + std::to_string(ptm.y));
+                } else {
+                    label_point_marker.hide();
                 }
             });
 
@@ -316,18 +355,18 @@ struct PlotGUI::impl {
             ymin -= ydiff * (1-focy);
             update();
         });
-        dw.draw([this](paint::graphics& graph){ graph.rectangle(true, colors::white); });
 
         x_var = env.addr_of("x", false);
         y_var = env.addr_of("y", false);
 
-        exprs.push_back(parser(init_expr, env));
-        expr_strs.push_back(init_expr);
-        expr_colors.push_back(color_from_int(last_expr_color++));
-        is_implicit.push_back(false);
+        funcs.emplace_back();
+        funcs.back().expr_str = init_expr;
+        funcs.back().line_color = color_from_int(last_expr_color++);
+        funcs.back().is_implicit = false;
         reparse_expr();
         // *** Main drawing code ***
         dw.draw([this, &edit_expr_idx](paint::graphics& graph) {
+            graph.rectangle(true, colors::white);
             int swid = fm.size().width, shigh = fm.size().height;
             double xdiff = xmax - xmin, ydiff = ymax - ymin;
 
@@ -443,12 +482,16 @@ struct PlotGUI::impl {
             }
 
             // Draw functions
-            for (size_t exprid = 0; exprid < exprs.size(); ++exprid) {
+            std::vector<PointMarker> new_pt_markers;
+            std::vector<std::vector<size_t> > new_grid;
+            new_grid.resize(shigh, std::vector<size_t>(swid, -1));
+            for (size_t exprid = 0; exprid < funcs.size(); ++exprid) {
                 bool reinit = true;
                 int psx = -1, psy = -1;
-                auto& expr = exprs[exprid];
-                const color& func_color = expr_colors[exprid];
-                if (is_implicit[exprid]) {
+                auto& func = funcs[exprid];
+                auto& expr = func.expr;
+                const color& func_color = func.line_color;
+                if (func.is_implicit) {
                     // implicit function
                     const int interval = 3;
                     std::vector<double> line(swid / interval + 2);
@@ -498,47 +541,208 @@ struct PlotGUI::impl {
                 } else {
                     // explicit function
                     env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
-                    for (double sxd = 0; sxd < swid; sxd += 0.2) {
-                        const double x = sxd / swid * xdiff + xmin;
+                    std::set<double> roots_and_extrema, asymps;
+                    size_t idx = 0;
+                    static const double EPS_STEP  = 1e-8;
+                    static const double EPS_ABS   = 1e-6;
+                    static const double MIN_DIST_BETWEEN_ROOTS  = 1e-4;
+                    static const int MAX_ITER     = 20;
+                    auto push_if_valid = [this](double value, std::set<double>& st) {
+                        if (!std::isnan(value) && !std::isinf(value) &&
+                            value >= xmin && value <= xmax) {
+                            auto it = st.lower_bound(value);
+                            double cdist = 1.;
+                            if (it != st.end()) cdist = *it - value;
+                            if (it != st.begin()) {
+                                auto itp = it; --itp;
+                                cdist = std::min(cdist, value - *itp);
+                            }
+                            if (cdist >= MIN_DIST_BETWEEN_ROOTS) st.insert(value);
+                        }
+                    };
+                    auto draw_line = [&](double psx, double psy, double sx, double sy) {
+                        graph.line(point(psx, psy), point(sx,sy), func_color);
+                        graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
+                        graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
+                        if (edit_expr_idx == exprid) {
+                            // current function, thicken
+                            graph.line(point(psx-1, psy), point(sx-1,sy), func_color);
+                            graph.line(point(psx, psy-1), point(sx,sy-1), func_color);
+                        }
+                    };
+                    // Find roots, asymptotes, extrema
+                    const double SIDE_ALLOW = xdiff/20;
+#define NEWTON_ARGS x_var, x, env, EPS_STEP, EPS_ABS, MAX_ITER, xmin - SIDE_ALLOW, xmax + SIDE_ALLOW
+                    for (int sxd = 0; sxd < swid; sxd += 5) {
+                        const double x = sxd*1. * xdiff / swid + xmin;
+                        double root = expr.newton(NEWTON_ARGS, &func.diff); push_if_valid(root, roots_and_extrema);
+                        double asymp = func.recip.newton(NEWTON_ARGS, &func.drecip); push_if_valid(asymp, asymps);
+                        double extr = func.diff.newton(NEWTON_ARGS, &func.ddiff); push_if_valid(extr, roots_and_extrema);
+                    }
+                    // Copy into function
+                    std::vector<double> tmp; tmp.resize(roots_and_extrema.size());
+                    std::copy(roots_and_extrema.begin(), roots_and_extrema.end(), tmp.begin());
+                    tmp.swap(func.roots_and_extrema);
+
+                    asymps.insert(xmin); asymps.insert(xmax);
+                    double prev_as = xmin, prev_asd, asd;
+                    size_t as_idx = 0;
+                    // Draw function from asymptote to asymptote
+                    for (double as : asymps) {
+                        asd = (as - xmin) / xdiff * swid;
+                        if (as_idx > 0) {
+                            bool connector = as_idx > 1;
+                            // Draw func between asymptotes
+                            for (double sxd = prev_asd + 1e-7; sxd < asd;) {
+                                const double x = sxd / swid * xdiff + xmin;
+                                env.vars[x_var] = x;
+                                double y = expr(env);
+
+                                if (!std::isnan(y)) {
+                                    if (y> ymax + ydiff) y = ymax + ydiff;
+                                    else if (y < ymin - ydiff) y = ymin - ydiff;
+                                    int sy = static_cast<int>((ymax - y) / ydiff * shigh);
+                                    int sx = static_cast<int>(sxd);
+                                    if (reinit) {
+                                        if (!(y > ymax || y < ymin)) {
+                                            reinit = false;
+                                        }
+                                    }
+                                    if (connector) {
+                                        connector = false;
+                                        env.vars[x_var] = prev_as + 1e-6;
+                                        double yp = expr(env);
+                                        if (yp > ymax && sy > 0) {
+                                            psx = prev_asd;
+                                            psy = 0;
+                                            reinit = false;
+                                        }
+                                        if (yp < ymin && sy < shigh) {
+                                            psx = prev_asd;
+                                            psy = shigh;
+                                            reinit = false;
+                                        }
+                                    }
+                                    if (!reinit && ~psx) {
+                                        draw_line(psx, psy, sx, sy);
+                                        if (y > ymax || y < ymin) {
+                                            reinit = true;
+                                            psx = -1;
+                                        }
+                                    }
+                                    psx = sx;
+                                    psy = sy;
+                                } else {
+                                    reinit = true;
+                                }
+                                if (asymps.size() > 2 && asymps.size() < 100) {
+                                    if ((as_idx > 1 && sxd - prev_asd < 1.) ||
+                                        (as_idx < asymps.size() - 1 && asd - sxd < 1.)) {
+                                        sxd += 0.1;
+                                    } else if ((as_idx > 1 && sxd - prev_asd < 5.) ||
+                                        (as_idx < asymps.size() - 1 && asd - sxd < 5.)) {
+                                        sxd += 0.2;
+                                    } else {
+                                        sxd += 1.0;
+                                    }
+                                } else {
+                                    sxd += 1.0;
+                                }
+                            }
+                            // Connect next asymptote
+                            if (as_idx != asymps.size() - 1) {
+                                env.vars[x_var] = as - 1e-6;
+                                double yp = expr(env);
+                                int sx = -1, sy;
+                                if (yp > ymax) {
+                                    sx = asd;
+                                    sy = 0;
+                                    if (psy <= 0) sx = -1;
+                                }
+                                if (yp < ymin) {
+                                    sx = asd;
+                                    sy = shigh;
+                                    if (psy >= shigh) sx = -1;
+                                }
+                                if (~sx) {
+                                    draw_line(psx, psy, sx, sy);
+                                }
+                            }
+                        }
+                        ++as_idx;
+                        prev_as = as;
+                        prev_asd = asd;
+                    }
+                    // Draw roots/extrema/y-int
+                    push_if_valid(0., roots_and_extrema); // y-int
+                    for (double x : roots_and_extrema) {
                         env.vars[x_var] = x;
                         double y = expr(env);
-                        if (!std::isnan(y)) {
-                            if (std::isinf(y)) {
-                                if (y>0) y = ymax+(ymax-ymin)*1000;
-                                else y = ymin-(ymax-ymin)*1000;
+                        double dy = func.diff(env);
+                        double ddy = func.ddiff(env);
+
+                        int sy = static_cast<int>((ymax - y) / ydiff * shigh);
+                        int sx = static_cast<int>((x - xmin) / xdiff * swid);
+                        static const int rect_rad = 3, click_rect_rad = 5;
+                        graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad+1, 2*rect_rad+1), true, colors::light_gray);
+                        graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad+1, 2*rect_rad+1), false, func.line_color);
+                        size_t idx = new_pt_markers.size();
+                        new_pt_markers.emplace_back();
+                        auto& ptm = new_pt_markers.back();
+                        ptm.label = 
+                                    x == 0. ? "y-intercept\n" :
+                                    std::fabs(dy) > 1e-6 ? "x-intercept\n" :
+                                    ddy > 1e-6 ? "local minimum\n" :
+                                    ddy < -1e-6 ? "local maximum\n":
+                                    "";
+                        ptm.x = x; ptm.y = y;
+                        for (int r = std::max(sy - click_rect_rad, 0); r <= std::min(sy + click_rect_rad, shigh-1); ++r) {
+                            for (int c = std::max(sx - click_rect_rad, 0); c <= std::min(sx + click_rect_rad, swid-1); ++c) {
+                                new_grid[r][c] = idx;
                             }
+                        }
+                    }
+
+                    // Function intersection
+                    for (size_t exprid2 = 0; exprid2 < exprid; ++exprid2) {
+                        auto& func2 = funcs[exprid2];
+                        if (func2.is_implicit) continue; // not supported right now
+                        Expr sub_expr = expr - func2.expr;
+                        Expr diff_sub_expr = sub_expr.diff(x_var, env);
+                        std::set<double> st;
+                        for (int sxd = 0; sxd < swid; sxd += 5) {
+                            const double x = sxd*1. * xdiff / swid + xmin;
+                            double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
+                            push_if_valid(root, st);
+                        }
+                        for (double x : st) {
+                            env.vars[x_var] = x;
+                            double y = expr(env);
                             int sy = static_cast<int>((ymax - y) / ydiff * shigh);
-                            int sx = static_cast<int>(sxd);
-                            if (reinit) {
-                                if (!(y > ymax || y < ymin)) {
-                                    reinit = false;
+                            int sx = static_cast<int>((x - xmin) / xdiff * swid);
+                            static const int rect_rad = 3, click_rect_rad = 5;
+                            graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad, 2*rect_rad), true, colors::light_gray);
+                            graph.rectangle(rectangle(sx-rect_rad, sy-rect_rad, 2*rect_rad+1, 2*rect_rad+1), false, func.line_color);
+                            graph.rectangle(rectangle(sx-rect_rad+1, sy-rect_rad+1, 2*rect_rad, 2*rect_rad), false, func2.line_color);
+                            size_t idx = new_pt_markers.size();
+                            new_pt_markers.emplace_back();
+                            auto& ptm = new_pt_markers.back();
+                            ptm.label = "intersection\n";
+                            ptm.x = x; ptm.y = y;
+                            for (int r = std::max(sy - click_rect_rad, 0); r <= std::min(sy + click_rect_rad, shigh-1); ++r) {
+                                for (int c = std::max(sx - click_rect_rad, 0); c <= std::min(sx + click_rect_rad, swid-1); ++c) {
+                                    new_grid[r][c] = idx;
                                 }
                             }
-                            if (!reinit && ~psx) {
-                                graph.line(point(psx, psy), point(sx,sy), func_color);
-                                if (edit_expr_idx == exprid) {
-                                    // current function, thicken
-                                    graph.line(point(psx+1, psy), point(sx+1,sy), func_color);
-                                    graph.line(point(psx, psy+1), point(sx,sy+1), func_color);
-                                    graph.line(point(psx-1, psy), point(sx-1,sy), func_color);
-                                    graph.line(point(psx, psy-1), point(sx,sy-1), func_color);
-                                }
-                                if (y > ymax || y < ymin) {
-                                    reinit = true;
-                                    psx = -1;
-                                }
-                            }
-                            psx = sx;
-                            psy = sy;
-                        } else {
-                            reinit = true;
                         }
                     }
                 }
             }
+            new_grid.swap(grid);
+            new_pt_markers.swap(pt_markers);
         });
         update(true);
-    
+
         fm.show();
         exec();
     }
@@ -552,12 +756,11 @@ private:
 
     Environment env;
     Parser parser;
-    std::vector<bool> is_implicit;
-    std::vector<Expr> exprs;
-    std::vector<std::string> expr_strs;
+    std::vector<Function> funcs;
+    std::vector<PointMarker> pt_markers;
+    std::vector<std::vector<size_t> > grid;
     std::queue<color> reuse_colors;
     size_t last_expr_color = 0;
-    std::vector<color> expr_colors;
     uint32_t x_var, y_var;
 
     // nana::threads::pool pool;

@@ -5,52 +5,8 @@
 #include <vector>
 
 #include "env.hpp"
+#include "opcodes.hpp"
 namespace nivalis {
-
-namespace OpCode {
-// nivalis bytecode
-enum _OpCode {
-    null = 0, // returns NaN
-    val,      // stores value in 8 bytes after
-    ref,      // stores address of var in env in 4 bytes after
-    bsel = 8, // evaluate first and ignore; evaluate and return second
-
-    // control and special forms
-    bnz = 16, // if first is not zero, second, else third (short-circuiting)
-    sums,
-    prods,
-
-    // binary arithmetic operators
-    add = 32, sub,
-    mul = 48, div, mod,
-    power = 64, logbase,
-    max = 80, min,
-    land, lor, lxor,
-
-    // binary comparison operators
-    lt = 96, le, eq, ne, ge, gt,
-
-    // binary math operators
-    // integer
-    gcd = 16384, lcm,
-    choose, // n choose k
-    fafact, // falling factorial
-    rifact, // rising factorial
-
-    // float
-    beta, // beta function
-    polygamma, // polygamma function
-
-    // unary operators
-    nop = 32768, // idenitity
-    uminusb, notb,
-    absb, sqrtb, sgnb, floorb, ceilb, roundb,
-    expb, exp2b, logb, log10b, log2b, factb,
-    sinb, cosb, tanb, asinb, acosb, atanb, sinhb, coshb, tanhb,
-    gammab, lgammab, digammab, trigammab,
-    erfb, zetab,
-};
-}  // namespace OpCode
 
 // Nivalis expression
 struct Expr {
@@ -60,11 +16,9 @@ struct Expr {
     double operator()(Environment& env) const;
 
     // Combine expressions with basic operator
-    Expr operator+(const Expr& other) const;
-    Expr operator-(const Expr& other) const;
-    Expr operator*(const Expr& other) const;
-    Expr operator/(const Expr& other) const;
-    Expr operator^(const Expr& other) const;
+    Expr operator+(const Expr& other) const; Expr operator-(const Expr& other) const;
+    Expr operator*(const Expr& other) const; Expr operator%(const Expr& other) const;
+    Expr operator/(const Expr& other) const; Expr operator^(const Expr& other) const;
     // Combine with other using binary operator
     Expr combine(uint32_t opcode, const Expr& other) const;
     // Unary minus wrapping
@@ -82,16 +36,30 @@ struct Expr {
     // Const expr
     static Expr constant(double val);
 
-    // Get opcode of binary operator from char e.g. '+' -> 32
-    // If not a valid operator, returns bsel
-    static uint32_t opcode_from_opchar(char c);
-
-    // Optimize expression
+    // Optimize expression in-place
     void optimize();
+
+    // String representation of expression (can be evaluated again)
+    std::string repr(const Environment& env) const;
+
+    // Take the derivative wrt var with address 'var_addr' in the given environment
+    Expr diff(uint32_t var_addr, Environment& env) const;
+
+    // Use Newton(-Raphson) method to compute root for variable with addr var_addr
+    // optionally, supply computed derivative
+    // eps_step: stopping condition, |f(x)/df(x)|
+    // eps_abs: stopping condition, |f(x)|
+    // max_iter: stopping condition, steps
+    double newton(uint32_t var_addr, double x0, Environment& env,
+                  double eps_step, double eps_abs, int max_iter = 20,
+                  double xmin = -std::numeric_limits<double>::max(),
+                  double xmax = std::numeric_limits<double>::max(),
+                  const Expr* deriv = nullptr) const;
 
     // Abstract syntax tree
     std::vector<uint32_t> ast;
 };
+
 // Display as string
 std::ostream& operator<<(std::ostream& os, const Expr& expr);
 

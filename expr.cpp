@@ -2,324 +2,17 @@
 #include <numeric>
 #include <iostream>
 #include <iomanip>
+#include <sstream>
 #include <cmath>
 #include <algorithm>
-#include <boost/math/special_functions/beta.hpp>
-#include <boost/math/special_functions/digamma.hpp>
-#include <boost/math/special_functions/trigamma.hpp>
-#include <boost/math/special_functions/polygamma.hpp>
-#include <boost/math/special_functions/zeta.hpp>
-#include <boost/math/special_functions/binomial.hpp>
-#include <boost/math/special_functions/factorials.hpp>
-#include <boost/integer/common_factor.hpp>
 #include "util.hpp"
+#include "eval_expr.hpp"
+#include "diff_expr.hpp"
+#include "ast_nodes.hpp"
 namespace nivalis {
 
 namespace {
-#define EV_NEXT eval_ast(env, ast)
-#define EV_NEXT_SKIP eval_ast_skip(ast)
-#define EV_NEXT_FIND_VAR if (eval_ast_find_var(ast, var_id)) { return true; }
-#define EV_NEXT_DC nontrivial |= eval_ast_detect_constexpr(ast, begin, is_constexpr)
-#define EV_NEXT_OPTIM do{\
-    if(skip_node) eval_ast_skip(ast); \
-    else eval_ast_optim_constexpr(env, ast, begin, is_constexpr, ast_out); \
-} while(0)
-#define EV_WRAP(func) ret = func(eval_ast(env, ast)); break;
-#define RET_NONE ret=std::numeric_limits<double>::quiet_NaN()
-
-// Falling factorial
-double fa_fact (size_t x, size_t to_exc = 1) {
-    if (x-to_exc >= 175) // too expensive
-        return std::numeric_limits<double>::quiet_NaN();
-    double result = 1.;
-    while (x > to_exc) result *= x--;
-    return result;
-}
-
-
-// Walk through AST from node with minimum computations
-void eval_ast_skip(const uint32_t** ast) {
-    using namespace nivalis::OpCode;
-    uint32_t opcode = **ast;
-    ++*ast;
-    switch(opcode) {
-        case val: *ast += 2; break;
-        case ref: ++*ast; break;
-        case bnz: EV_NEXT_SKIP; EV_NEXT_SKIP; EV_NEXT_SKIP; break;
-        case sums: case prods:
-              ++*ast; EV_NEXT_SKIP; EV_NEXT_SKIP; EV_NEXT_SKIP; break;
-        // Binary
-        case bsel: case add: case sub: case mul: case div: case mod:
-        case power: case logbase: case max: case min:
-        case land: case lor: case lxor:
-        case gcd: case lcm:
-        case choose: case fafact: case rifact: case beta: case polygamma:
-        case lt: case le: case eq: case ne: case ge: case gt:
-            EV_NEXT_SKIP; EV_NEXT_SKIP; break;
-        case null: break;
-        // Unary
-        default: EV_NEXT_SKIP;
-    }
-}
-
-// Walk through AST to check if variable is present
-bool eval_ast_find_var(const uint32_t** ast, uint32_t var_id) {
-    using namespace nivalis::OpCode;
-    uint32_t opcode = **ast;
-    ++*ast;
-    switch(opcode) {
-        case val: *ast += 2; break;
-        case ref:
-          if (**ast == var_id) return true;
-          ++*ast;
-          break;
-        case bnz: EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
-        case sums: case prods:
-              if (**ast == var_id) return true;
-              ++*ast; EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
-        // Binary
-        case bsel: case add: case sub: case mul: case div: case mod:
-        case power: case logbase: case max: case min:
-        case land: case lor: case lxor:
-        case gcd: case lcm:
-        case choose: case fafact: case rifact: case beta: case polygamma:
-        case lt: case le: case eq: case ne: case ge: case gt:
-            EV_NEXT_FIND_VAR; EV_NEXT_FIND_VAR; break;
-        case null: break;
-        // Unary
-        default: EV_NEXT_FIND_VAR;
-    }
-    return false;
-}
-
-// Evaluate AST from node
-double eval_ast(Environment& env, const uint32_t** ast) {
-    using namespace boost;
-    using namespace nivalis::OpCode;
-    uint32_t opcode = **ast;
-    ++*ast;
-    double ret;
-    switch(opcode) {
-        case null: ret = std::numeric_limits<double>::quiet_NaN(); break;
-        case val: ret = util::as_double(*ast); *ast += 2; break;
-        case ref: ret = env.vars[**ast]; ++*ast; break;
-        case bnz:
-            {
-                double pred = EV_NEXT;
-                if (pred != 0.0) {
-                    ret = EV_NEXT; EV_NEXT_SKIP;
-                } else {
-                    EV_NEXT_SKIP; ret = EV_NEXT;
-                }
-            }
-            break;
-        case sums:
-            {
-                uint32_t var_id = **ast;
-                ++*ast;
-                auto istart = static_cast<int64_t>(EV_NEXT);
-                auto iend = static_cast<int64_t>(EV_NEXT);
-                int64_t step = (istart <= iend) ? 1 : -1;
-                iend += step;
-                ret = 0.0;
-                for (int64_t i = istart; i != iend; i += step) {
-                    const uint32_t* tmp = *ast;
-                    env.vars[var_id] = i;
-                    ret += eval_ast(env, &tmp);
-                }
-                EV_NEXT_SKIP;
-            }
-            break;
-        case prods:
-            {
-                uint32_t var_id = **ast;
-                ++*ast;
-                auto istart = static_cast<int64_t>(EV_NEXT);
-                auto iend = static_cast<int64_t>(EV_NEXT);
-                int64_t step = (istart <= iend) ? 1 : -1;
-                iend += step;
-                ret = 1.0;
-                for (int64_t i = istart; i != iend; i += step) {
-                    const uint32_t* tmp = *ast;
-                    env.vars[var_id] = i;
-                    ret *= eval_ast(env, &tmp);
-                }
-                EV_NEXT_SKIP;
-            }
-            break;
-
-        case bsel: EV_NEXT; ret = EV_NEXT; break;
-        case add: ret = EV_NEXT + EV_NEXT; break;
-        case sub: ret = EV_NEXT; ret -= EV_NEXT; break;
-        case mul: ret = EV_NEXT * EV_NEXT; break;
-        case div: ret = EV_NEXT; ret /= EV_NEXT; break;
-        case mod: ret = EV_NEXT; ret = std::fmod(ret, EV_NEXT); break;
-        case power: ret = EV_NEXT; ret = pow(ret, EV_NEXT); break;
-        case logbase: ret = EV_NEXT; ret = log(ret) / log(EV_NEXT); break;
-
-        case max: ret = std::max(EV_NEXT, EV_NEXT); break;
-        case min: ret = std::min(EV_NEXT, EV_NEXT); break;
-        case land: ret = EV_NEXT && EV_NEXT; break;
-        case lor: ret = EV_NEXT || EV_NEXT; break;
-        case lxor: ret = static_cast<bool>(EV_NEXT) ^ static_cast<bool>(EV_NEXT); break;
-        case gcd:
-                   {
-                       int64_t a = static_cast<int64_t>(std::max(EV_NEXT,0.)),
-                               b = static_cast<int64_t>(std::max(EV_NEXT,0.));
-                       ret = integer::gcd(a, b);
-                   }
-                   break;
-        case lcm:
-                   {
-                       int64_t a = static_cast<int64_t>(std::max(EV_NEXT,0.)),
-                               b = static_cast<int64_t>(std::max(EV_NEXT,0.));
-                       ret = integer::lcm(a, b);
-                   }
-                   break;
-        case choose: 
-                   {
-                       unsigned a = static_cast<unsigned>(std::max(EV_NEXT,0.)),
-                                b = static_cast<unsigned>(std::max(EV_NEXT,0.));
-                       ret = math::binomial_coefficient<double>(a, b);
-                   }
-                   break;
-        case fafact: 
-                   {
-                       unsigned a = static_cast<unsigned>(std::max(EV_NEXT,0.)),
-                                b = static_cast<unsigned>(std::max(EV_NEXT,0.));
-                       ret = math::falling_factorial<double>(a, b);
-                   }
-                   break;
-        case rifact: 
-                   {
-                       unsigned a = static_cast<unsigned>(std::max(EV_NEXT,0.)),
-                                b = static_cast<unsigned>(std::max(EV_NEXT,0.));
-                       ret = math::rising_factorial<double>(a, b);
-                   }
-                   break;
-        case beta:
-                ret = EV_NEXT;
-                ret = math::beta<double>(ret, EV_NEXT);
-                break;
-        case polygamma:
-                ret = EV_NEXT;
-                ret = math::polygamma<double>(static_cast<int>(ret), EV_NEXT);
-                break;
-        case lt: ret = EV_NEXT; ret = ret < EV_NEXT; break;
-        case le: ret = EV_NEXT; ret = ret <= EV_NEXT; break;
-        case eq: ret = EV_NEXT == EV_NEXT; break;
-        case ne: ret = EV_NEXT != EV_NEXT; break;
-        case ge: ret = EV_NEXT; ret = ret >= EV_NEXT; break;
-        case gt: ret = EV_NEXT; ret = ret > EV_NEXT; break;
-            
-        case nop: ret = EV_NEXT; break;
-        case uminusb: ret = -EV_NEXT; break;
-        case notb: ret = !EV_NEXT; break;
-        case absb: EV_WRAP(fabs);
-        case sqrtb: EV_WRAP(sqrt);
-        case sgnb: ret = EV_NEXT;
-                   ret = ret > 0 ? 1 : (ret == 0 ? 0 : -1); break;
-        case floorb: EV_WRAP(floor); case ceilb: EV_WRAP(ceil);
-        case roundb: EV_WRAP(round);
-
-        case expb:  EV_WRAP(exp);   case exp2b:  EV_WRAP(exp2); 
-        case logb:  EV_WRAP(log);
-        case factb:  ret = math::factorial<double>(static_cast<unsigned>(
-                                                     std::max(eval_ast(env, ast), 0.)
-                                                  )); break;
-        case log2b: EV_WRAP(log2);  case log10b: EV_WRAP(log10);
-        case sinb:  EV_WRAP(sin);   case cosb:   EV_WRAP(cos);
-        case tanb:  EV_WRAP(tan);   case asinb:  EV_WRAP(asin);
-        case acosb: EV_WRAP(acos);  case atanb:  EV_WRAP(atan);
-        case sinhb: EV_WRAP(sinh);  case coshb:  EV_WRAP(cosh);
-        case tanhb: EV_WRAP(tanh);
-        case gammab:  EV_WRAP(tgamma);
-        case digammab:  EV_WRAP(math::digamma<double>);
-        case trigammab:  EV_WRAP(math::trigamma<double>);
-        case lgammab:  EV_WRAP(lgamma); // log gamma
-        case erfb:  EV_WRAP(erf);
-        case zetab:  EV_WRAP(math::zeta<double>);
-        default: RET_NONE; break;
-    }
-    return ret;
-}
-
-// Walk through AST and detect if each subtree has constants only
-bool eval_ast_detect_constexpr(const uint32_t** ast,
-        const uint32_t* begin,
-        std::vector<bool>& is_constexpr) {
-    using namespace nivalis::OpCode;
-    uint32_t opcode = **ast;
-    auto nodepos = *ast - begin;
-    ++*ast;
-    bool nontrivial = false;
-    switch(opcode) {
-        case val: *ast += 2; break;
-        case ref: ++*ast; nontrivial = true; break;
-        case bnz: EV_NEXT_DC; EV_NEXT_DC; EV_NEXT_DC; break;
-        case sums: case prods:
-          ++*ast; nontrivial = true; EV_NEXT_DC; EV_NEXT_DC; EV_NEXT_DC; break;
-        // Binary
-        case bsel: case add: case sub: case mul: case div: case mod:
-        case power: case logbase: case max: case min:
-        case land: case lor: case lxor:
-        case lt: case le: case eq: case ne: case ge: case gt:
-        case gcd: case lcm:
-        case choose: case fafact: case rifact: case beta: case polygamma:
-            EV_NEXT_DC; EV_NEXT_DC; break;
-        case null: break;
-        // Unary
-        default: EV_NEXT_DC;
-    }
-    is_constexpr[nodepos] = !nontrivial;
-    return nontrivial;
-}
-// Replace constant subtrees with one precomputed value
-void eval_ast_optim_constexpr(
-        Environment & env,
-        const uint32_t** ast,
-        const uint32_t* begin,
-        const std::vector<bool>& is_constexpr,
-        std::vector<uint32_t>& ast_out) {
-    using namespace nivalis::OpCode;
-    uint32_t opcode = **ast;
-    auto nodepos = *ast - begin;
-    bool skip_node = false;
-    if (is_constexpr[nodepos] && opcode != OpCode::val) {
-        skip_node = true;
-        const uint32_t* ast_ptr_copy = *ast;
-        util::push_dbl(ast_out, eval_ast(env, &ast_ptr_copy));
-    }
-    else {
-        ast_out.push_back(**ast);
-    }
-    ++*ast;
-    switch(opcode) {
-        case val: 
-            ast_out.push_back(**ast); ++ *ast;
-            ast_out.push_back(**ast); ++ *ast;
-        break;
-        case ref:
-            ast_out.push_back(**ast); ++*ast;
-            break;
-        case bnz: EV_NEXT_OPTIM; EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
-        case sums: case prods:
-                  ast_out.push_back(**ast); ++*ast;
-            EV_NEXT_OPTIM; EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
-        // Binary
-        case bsel: case add: case sub: case mul: case div: case mod:
-        case power: case logbase: case max: case min:
-        case land: case lor: case lxor:
-        case lt: case le: case eq: case ne: case ge: case gt:
-        case gcd: case lcm:
-        case choose: case fafact: case rifact: case beta: case polygamma:
-            EV_NEXT_OPTIM; EV_NEXT_OPTIM; break;
-        case null: break;
-        // Unary
-        default: EV_NEXT_OPTIM;
-    }
-}
-
+// Combine/wrap utils
 Expr combine_expr(uint32_t opcode, const Expr& a, const Expr& b) {
     Expr new_expr;
     new_expr.ast.clear();
@@ -329,6 +22,7 @@ Expr combine_expr(uint32_t opcode, const Expr& a, const Expr& b) {
     std::copy(b.ast.begin(), b.ast.end(), std::back_inserter(new_expr.ast));
     return new_expr;
 }
+#define COMBINE_EXPR(op) return combine_expr(op, *this, other)
 Expr wrap_expr(uint32_t opcode, const Expr& a) {
     Expr new_expr;
     new_expr.ast.clear();
@@ -337,92 +31,95 @@ Expr wrap_expr(uint32_t opcode, const Expr& a) {
     std::copy(a.ast.begin(), a.ast.end(), std::back_inserter(new_expr.ast));
     return new_expr;
 }
-
 }  // namespace
 
-Expr::Expr() {
-    ast.resize(8);
-}
+Expr::Expr() { ast.resize(8); }
 double Expr::operator()(Environment& env) const {
     const uint32_t* astptr = &ast[0];
-    return eval_ast(env, &astptr);
+    return detail::eval_ast(env, &astptr);
 }
 
-Expr Expr::operator+(const Expr& other) const {
-    return combine_expr(OpCode::add, *this, other);
-}
-Expr Expr::operator-(const Expr& other) const {
-    return combine_expr(OpCode::sub, *this, other);
-}
-Expr Expr::operator*(const Expr& other) const {
-    return combine_expr(OpCode::mul, *this, other);
-}
-Expr Expr::operator/(const Expr& other) const {
-    return combine_expr(OpCode::div, *this, other);
-}
-Expr Expr::operator^(const Expr& other) const {
-    return combine_expr(OpCode::power, *this, other);
-}
-Expr Expr::combine(uint32_t opcode, const Expr& other) const {
-    return combine_expr(opcode, *this, other);
-}
-Expr Expr::operator-() const {
-    return wrap_expr(OpCode::uminusb, *this);
-}
-Expr Expr::wrap(uint32_t opcode) const {
-    return wrap_expr(opcode, *this);
-}
+Expr Expr::operator+(const Expr& other) const { COMBINE_EXPR(OpCode::add); }
+Expr Expr::operator-(const Expr& other) const { COMBINE_EXPR(OpCode::sub); }
+Expr Expr::operator*(const Expr& other) const { COMBINE_EXPR(OpCode::mul); }
+Expr Expr::operator/(const Expr& other) const { COMBINE_EXPR(OpCode::div); }
+Expr Expr::operator%(const Expr& other) const { COMBINE_EXPR(OpCode::mod); }
+Expr Expr::operator^(const Expr& other) const { COMBINE_EXPR(OpCode::power); }
+Expr Expr::combine(uint32_t opcode, const Expr& other) const { COMBINE_EXPR(opcode); }
+Expr Expr::operator-() const { return wrap_expr(OpCode::uminusb, *this); }
+Expr Expr::wrap(uint32_t opcode) const { return wrap_expr(opcode, *this); }
 
 bool Expr::has_var(uint32_t addr) const {
     const uint32_t* astptr = &ast[0];
-    return eval_ast_find_var(&astptr, addr);
+    return detail::eval_ast_find_var(&astptr, addr);
 }
 
-Expr Expr::null() {
-    return Expr();
-}
-Expr Expr::zero() {
-    return constant(0);
-}
+Expr Expr::null() { return Expr(); }
+Expr Expr::zero() { return constant(0); }
 Expr Expr::constant(double val) {
-    Expr z;
-    z.ast.clear();
+    Expr z; z.ast.clear();
     util::push_dbl(z.ast, val);
     return z;
 }
-uint32_t Expr::opcode_from_opchar(char c) {
-    switch (c) {
-        case '+': return OpCode::add;
-        case '-': return OpCode::sub;
-        case '*': return OpCode::mul;
-        case '/': return OpCode::div;
-        case '%': return OpCode::mod;
-        case '^': return OpCode::power;
-        case '<': return OpCode::lt;
-        case '>': return OpCode::gt;
-        case '=': return OpCode::eq;
-        default: return OpCode::bsel;
-    };
-}
 
 void Expr::optimize() {
-    if (ast.empty()) return;
-    std::vector<bool> is_constexpr(ast.size());
     const uint32_t* astptr = &ast[0];
-    eval_ast_detect_constexpr(&astptr, astptr, is_constexpr);
+    std::vector<detail::ASTNode> nodes;
+    detail::ast_to_nodes(&astptr, nodes);
 
-    astptr = &ast[0];
     Environment dummy_env;
-    std::vector<uint32_t> ast_out;
-    eval_ast_optim_constexpr(dummy_env, &astptr, astptr, is_constexpr, ast_out);
-    ast.swap(ast_out);
+    detail::optim_nodes(dummy_env, nodes);
+
+    ast.clear();
+    detail::ast_from_nodes(nodes, ast);
+}
+
+std::string Expr::repr(const Environment& env) const {
+    std::stringstream ss;
+    const uint32_t* astptr = &ast[0];
+    detail::print_ast(ss, &astptr, &env);
+    auto s = ss.str();
+    if (s.size() >= 2 && 
+        s[0] == '(' && s.back() == ')') s = s.substr(1, s.size()-2);
+    return s;
+}
+
+Expr Expr::diff(uint32_t var_addr, Environment& env) const {
+    Expr dexpr;
+    dexpr.ast = detail::diff_ast(ast, var_addr, env);
+    dexpr.optimize();
+    return dexpr;
+}
+
+double Expr::newton(uint32_t var_addr, double x0, Environment& env,
+        double eps_step, double eps_abs, int max_iter,
+        double xmin, double xmax, const Expr* deriv) const {
+    if (deriv == nullptr) {
+        Expr deriv_expr = diff(var_addr, env);
+        return newton(var_addr, x0, env, eps_step,
+                eps_abs, max_iter, xmin, xmax, &deriv_expr);
+    }
+    // std::cerr << ">>" << x0 << "\n";
+    for (int i = 0; i < max_iter; ++i) {
+        env.vars[var_addr] = x0;
+        double fx = (*this)(env);
+        if(std::isnan(fx)) 
+            return std::numeric_limits<double>::quiet_NaN(); // Fail
+        double delta = fx / (*deriv)(env);
+        x0 -= delta;
+        // std::cerr << x0 << " " << std::fabs(delta) << " "<<std::fabs(fx)<<"\n";
+        if (std::fabs(delta) < eps_step && std::fabs(fx) < eps_abs) return x0;
+        if (x0 < xmin || x0 > xmax) {
+            return std::numeric_limits<double>::quiet_NaN(); // Fail
+        }
+    }
+    return std::numeric_limits<double>::quiet_NaN(); // Fail
 }
 
 std::ostream& operator<<(std::ostream& os, const Expr& expr) {
-    os << "Expr[";
-    for (uint32_t i : expr.ast) {
-        os << i << " ";
-    }
+    os << "nivalis::Expr[";
+    const uint32_t* astptr = &expr.ast[0];
+    detail::print_ast(os, &astptr);
     os << "]";
     return os;
 }

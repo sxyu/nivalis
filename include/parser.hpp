@@ -10,8 +10,6 @@ namespace nivalis {
 
 // Nivalis parser
 struct Parser {
-    Parser();
-
     // Parse 'expr' in environment 'env'
     // If mode_explicit is true, errors when undefined variable used (normal)
     // If mode_explicit is false, defined the variable implicitly

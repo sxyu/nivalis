@@ -33,7 +33,7 @@ std::vector<std::string> get_args(std::string& line) {
 
 int main(int argc, char ** argv) {
     using namespace nivalis;
-    std::cout << "Nivalis 0.0.1 (c) Alex Yu 2020\n";
+    std::cout << "Nivalis 0.0.2 alpha (c) Alex Yu 2020\n";
 
     std::string orig_line, line, var;
     int assn_opcode = OpCode::bsel;
@@ -51,21 +51,34 @@ int main(int argc, char ** argv) {
         }
 
         std::string cmd = get_word(orig_line);
+        util::trim(orig_line);
         if (cmd == "exit") break;
         else if (cmd == "plot") {
             // Plot function
-            util::trim(orig_line);
             PlotGUI gui(env, orig_line);
         }
         else if (cmd == "del") {
             // Delete variable
-            util::trim(orig_line);
             if (env.del(orig_line)) {
                 std::cout << "del " << orig_line << std::endl;
             } else {
                 std::cout << "Undefined variable " << orig_line << "\n";
             }
         } else {
+            bool do_optim = cmd == "opt";
+            bool do_diff = cmd == "diff";
+            if (do_optim) line = orig_line;
+            uint32_t diff_var_addr;
+            if (do_diff) {
+                std::string diff_var = get_word(orig_line);
+                util::trim(diff_var); util::trim(orig_line);
+                if (!util::is_varname(diff_var)) {
+                    std::cout << diff_var << " is not a valid variable name\n";
+                    continue;
+                }
+                diff_var_addr = env.addr_of(diff_var, false);
+                line = orig_line;
+            }
             // Evaluate
             var.clear();
             assn_opcode = OpCode::bsel;
@@ -74,7 +87,7 @@ int main(int argc, char ** argv) {
                 if (~pos) {
                     var = line.substr(0, pos);
                     if (util::is_arith_operator(var.back())) {
-                        assn_opcode = Expr::opcode_from_opchar(var.back());
+                        assn_opcode = OpCode::from_char(var.back());
                         var.pop_back();
                     }
                     if (util::is_varname(var)) {
@@ -84,29 +97,34 @@ int main(int argc, char ** argv) {
                 }
             }
 
-            auto expr = parse(line, env);
-            double output;
-            if (!std::isnan(output = expr(env))) {
-                expr.optimize();
-                if (var.size()) {
-                    double var_val;
-                    if (assn_opcode != OpCode::bsel) {
-                        auto addr = env.addr_of(var, true);
-                        if (addr == -1) {
-                            std::cout << "Undefined variable \"" << var
-                                << "\" (operator assignment)\n";
-                            continue;
+            auto expr = parse(line, env, !do_diff);
+            expr.optimize();
+            if (do_diff) {
+                Expr diff = expr.diff(diff_var_addr, env);
+                std::cout << diff.repr(env) << "\n";
+            } else {
+                double output;
+                if (!std::isnan(output = expr(env))) {
+                    if (var.size()) {
+                        double var_val;
+                        if (assn_opcode != OpCode::bsel) {
+                            auto addr = env.addr_of(var, true);
+                            if (addr == -1) {
+                                std::cout << "Undefined variable \"" << var
+                                    << "\" (operator assignment)\n";
+                                continue;
+                            }
+                            var_val = Expr::constant(env.vars[addr])
+                                .combine(assn_opcode,
+                                        Expr::constant(output))(env);
+                        } else {
+                            var_val = output;
                         }
-                        var_val = Expr::constant(env.vars[addr])
-                            .combine(assn_opcode,
-                                    Expr::constant(output))(env);
+                        env.set(var, var_val);
+                        std::cout << var << " = " << var_val << std::endl;
                     } else {
-                        var_val = output;
+                        std::cout << output << std::endl;
                     }
-                    env.set(var, var_val);
-                    std::cout << var << " = " << var_val << std::endl;
-                } else {
-                    std::cout << output << std::endl;
                 }
             }
         }

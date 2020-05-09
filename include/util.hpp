@@ -6,14 +6,14 @@
 namespace nivalis {
 namespace util {
 
-// true if is literal char (a-zA-Z0-9_$'#)
+// true if is literal char (a-zA-Z0-9_$'#&)
 constexpr bool is_literal(char c) {
     return
         (c >= 'a' && c <= 'z') ||
         (c >= 'A' && c <= 'Z') ||
         (c >= '0' && c <= '9') ||
         c == '_' || c == '$' ||
-        c == '\'' || c == '.' || c == '#';
+        c == '\'' || c == '.' || c == '#' || c == '&';
 }
 
 // true if can be first char of a variable name

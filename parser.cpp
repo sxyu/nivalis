@@ -7,15 +7,12 @@
 #include<sstream>
 #include<cmath>
 #include<cctype>
-#include<boost/math/constants/constants.hpp>
 #include "util.hpp"
 namespace nivalis {
 
 namespace {
     // Constants, lookup tables
     char lb[] = "([{", rb[] = ")]}";
-    std::map<std::string, uint32_t> func_opcodes;
-    std::map<std::string, double> constant_values;
 
 #define RETURN_IF_FALSE(todo) if(!todo) return false;
 #define PARSE_ERR(toprint) do { \
@@ -169,7 +166,7 @@ private:
                 for (int64_t i = left; i < right; ++i) {
                     const char c = expr[i];
                     if (c == '+' || c == '-') {
-                        result.ast.push_back(c == '+' ? OpCode::nop : OpCode::uminusb);
+                        if (c == '-') result.ast.push_back(OpCode::uminusb);
                         return _parse(i + 1, right, pri);
                     }
                     else if (tok_link[i] > i) {
@@ -267,6 +264,7 @@ private:
                         else if (~var_end && expr[k] == ',') comma_pos = k;
                     }
                     if (func_name == "sum" || func_name == "prod") {
+                        // Sum/prod special forms
                         if (!~var_end || !~comma_pos) {
                             PARSE_ERR(func_name << " expected argument syntax "
                                        "(<var>:<begin>,<end>)\n");
@@ -282,6 +280,23 @@ private:
                         RETURN_IF_FALSE(
                                 _parse(comma_pos+1, arg_end-1, _PRI_LOWEST));
                         return _parse(arg_end + 1, right - 1, _PRI_LOWEST);
+                    } else if (func_name == "diff") {
+                        // Derivative special form
+                        std::string varname =
+                            expr.substr(funname_end + 1, arg_end - funname_end-2);
+                        if (varname.empty() || !util::is_varname(varname)) {
+                            PARSE_ERR(func_name << " expected argument syntax "
+                                       "(<var>)\n");
+                        }
+                        auto addr = env.addr_of(varname, false);
+                        std::vector<uint32_t> tmp;
+                        tmp.swap(result.ast);
+                        RETURN_IF_FALSE(_parse(arg_end + 1, right - 1, _PRI_LOWEST));
+                        Expr diff = result.diff(addr, env);
+                        diff.optimize();
+                        tmp.swap(result.ast);
+                        std::copy(diff.ast.begin(), diff.ast.end(), std::back_inserter(result.ast));
+                        return true;
                     } else {
                         PARSE_ERR("Unrecognized special form '" << func_name << "'\n");
                     }
@@ -293,6 +308,7 @@ private:
                         PARSE_ERR("Invalid function call syntax\n");
                     }
                     const std::string func_name = expr.substr(left, funname_end - left);
+                    const auto& func_opcodes = OpCode::funcname_to_opcode_map();
                     auto it = func_opcodes.find(func_name);
                     if (it != func_opcodes.end()) {
                         if (it->second == -1) {
@@ -335,7 +351,8 @@ private:
                                   << tmp << "'\n");
                     }
                     return true;
-                } else if (util::is_varname_first(c) && 
+                } else if ((util::is_varname_first(c) ||
+                            (c=='&' && left < right - 1)) && 
                            util::is_literal(cr)) {
                     // Variable name
                     result.ast.resize(result.ast.size() + 2, OpCode::ref);
@@ -343,6 +360,7 @@ private:
                         expr.substr(left, right - left);
                     if ((result.ast.back()
                                 = env.addr_of(varname, mode_explicit)) == -1) {
+                        const auto& constant_values = OpCode::constant_value_map();
                         auto it = constant_values.find(varname);
                         result.ast.pop_back(); result.ast.pop_back();
                         if (it != constant_values.end()) {
@@ -387,89 +405,6 @@ private:
     // -1 else
     std::vector<int64_t> tok_link;
 };
-
-Parser::Parser(){
-    if (func_opcodes.empty()){
-        // Set lookup tables
-        func_opcodes["pow"] = OpCode::power;
-        func_opcodes["log"] = OpCode::logbase;
-        func_opcodes["max"] = OpCode::max;
-        func_opcodes["min"] = OpCode::min;
-        func_opcodes["and"] = OpCode::land;
-        func_opcodes["or"] = OpCode::lor;
-        func_opcodes["xor"] = OpCode::lxor;
-
-        func_opcodes["abs"] = OpCode::absb;
-        func_opcodes["sqrt"] = OpCode::sqrtb;
-        func_opcodes["sgn"] = OpCode::sgnb;
-        func_opcodes["floor"] = OpCode::floorb;
-        func_opcodes["ceil"] = OpCode::ceilb;
-        func_opcodes["round"] = OpCode::roundb;
-
-        func_opcodes["exp"] = OpCode::expb;
-        func_opcodes["exp2"] = OpCode::exp2b;
-        func_opcodes["ln"] = OpCode::logb;
-        func_opcodes["log10"] = OpCode::log10b;
-        func_opcodes["log2"] = OpCode::log2b;
-
-        func_opcodes["sin"] = OpCode::sinb;
-        func_opcodes["cos"] = OpCode::cosb;
-        func_opcodes["tan"] = OpCode::tanb;
-        func_opcodes["asin"] = OpCode::asinb;
-        func_opcodes["acos"] = OpCode::acosb;
-        func_opcodes["atan"] = OpCode::atanb;
-
-        func_opcodes["sinh"] = OpCode::sinhb;
-        func_opcodes["cosh"] = OpCode::coshb;
-        func_opcodes["tanh"] = OpCode::tanhb;
-
-        func_opcodes["gamma"] = OpCode::gammab;
-        func_opcodes["fact"] = -1;
-        func_opcodes["lgamma"] = OpCode::lgammab;
-        func_opcodes["digamma"] = OpCode::digammab;
-        func_opcodes["trigamma"] = OpCode::trigammab;
-        func_opcodes["polygamma"] = OpCode::polygamma;
-        func_opcodes["erf"] = OpCode::erfb;
-        func_opcodes["zeta"] = OpCode::zetab;
-        func_opcodes["beta"] = OpCode::beta;
-        func_opcodes["gcd"] = OpCode::gcd;
-        func_opcodes["lcm"] = OpCode::lcm;
-        func_opcodes["choose"] = OpCode::choose;
-        func_opcodes["fafact"] = OpCode::fafact;
-        func_opcodes["rifact"] = OpCode::rifact;
-
-        using namespace boost::math;
-        constant_values["pi"] = double_constants::pi;
-        constant_values["half_pi"] = double_constants::half_pi;
-        constant_values["third_pi"] = double_constants::third_pi;
-        constant_values["sixth_pi"] = double_constants::sixth_pi;
-        constant_values["two_pi"] = double_constants::two_pi;
-        constant_values["two_thirds_pi"] = double_constants::two_thirds_pi;
-        constant_values["four_thirds_pi"] = double_constants::four_thirds_pi;
-#ifdef M_1_PI
-        constant_values["one_div_pi"] = M_1_PI;
-#endif
-        constant_values["two_div_pi"] = double_constants::two_div_pi;
-        constant_values["pi_sqr"] = double_constants::pi_sqr;
-        constant_values["pi_sqr_div_six"] = double_constants::pi_sqr_div_six;
-        constant_values["sqrtpi"] = double_constants::root_pi;
-        constant_values["e"] = double_constants::e;
-        constant_values["one_div_e"] = double_constants::one_div_euler;
-        constant_values["log10_e"] = double_constants::log10_e;
-        constant_values["exp_minus_half"] = double_constants::exp_minus_half;
-        constant_values["e_pow_pi"] = double_constants::e_pow_pi;
-        constant_values["sqrte"] = double_constants::root_e;
-
-        constant_values["sqrt2"] = double_constants::root_two;
-        constant_values["sqrt3"] = double_constants::root_three;
-        constant_values["ln2"] = double_constants::ln_two;
-        constant_values["ln10"] = double_constants::ln_ten;
-        constant_values["lnln2"] = double_constants::ln_ln_two;
-        constant_values["one_div_sqrt2"] = double_constants::one_div_root_two;
-        constant_values["phi"] = double_constants::phi;
-        constant_values["euler"] = double_constants::euler;
-     }
-}
 
 Expr Parser::operator()(const std::string& expr, Environment& env,
                         bool mode_explicit, bool quiet) const {
