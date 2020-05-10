@@ -392,18 +392,26 @@ public:
                 // Find roots, asymptotes, extrema
                 const double SIDE_ALLOW = xdiff/20;
 #define NEWTON_ARGS x_var, x, env, EPS_STEP, EPS_ABS, MAX_ITER, xmin - SIDE_ALLOW, xmax + SIDE_ALLOW
-                if (func.diff.ast[0] != OpCode::null) {
+                if (!func.diff.is_null()) {
                     for (int sxd = 0; sxd < swid; sxd += 5) {
                         const double x = sxd*1. * xdiff / swid + xmin;
-                        double root = expr.newton(NEWTON_ARGS, &func.diff); push_if_valid(root, roots_and_extrema);
-                        double asymp = func.recip.newton(NEWTON_ARGS, &func.drecip); push_if_valid(asymp, asymps);
-                        double extr = func.diff.newton(NEWTON_ARGS, &func.ddiff); push_if_valid(extr, roots_and_extrema);
+                        double root = expr.newton(NEWTON_ARGS, &func.diff);
+                        push_if_valid(root, roots_and_extrema);
+                        double asymp = func.recip.newton(NEWTON_ARGS,
+                                &func.drecip);
+                        push_if_valid(asymp, asymps);
+                        if (!func.ddiff.is_null()) {
+                            double extr = func.diff.newton(NEWTON_ARGS,
+                                    &func.ddiff);
+                            push_if_valid(extr, roots_and_extrema);
+                        }
                     }
                 }
                 // Copy into function
-                std::vector<double> tmp; tmp.resize(roots_and_extrema.size());
-                std::copy(roots_and_extrema.begin(), roots_and_extrema.end(), tmp.begin());
-                tmp.swap(func.roots_and_extrema);
+                func.roots_and_extrema.resize(roots_and_extrema.size());
+                std::copy(roots_and_extrema.begin(),
+                        roots_and_extrema.end(),
+                        func.roots_and_extrema.begin());
 
                 asymps.insert(xmin); asymps.insert(xmax);
                 double prev_as = xmin, prev_asd, asd;
@@ -495,7 +503,7 @@ public:
                     prev_asd = asd;
                 }
                 // Draw roots/extrema/y-int
-                if (func.expr.ast[0] != OpCode::null) {
+                if (!func.expr.is_null() && !func.diff.is_null()) {
                     env.vars[x_var] = 0;
                     double y = expr(env);
                     if (!std::isnan(y) && !std::isinf(y)) 
@@ -514,6 +522,7 @@ public:
                     size_t idx = pt_markers.size();
                     pt_markers.emplace_back();
                     auto& ptm = pt_markers.back();
+                    ptm.y = y; ptm.x = x;
                     ptm.sx = sx; ptm.sy = sy;
                     ptm.label =
                         x == 0. ? PointMarker::LABEL_Y_INT :
@@ -531,10 +540,10 @@ public:
                 }
 
                 // Function intersection
-                if (func.diff.ast[0] != OpCode::null) {
+                if (!func.diff.is_null()) {
                     for (size_t exprid2 = 0; exprid2 < exprid; ++exprid2) {
                         auto& func2 = funcs[exprid2];
-                        if (func2.diff.ast[0] == OpCode::null) continue;
+                        if (!func2.diff.is_null()) continue;
                         if (func2.is_implicit) continue; // not supported right now
                         Expr sub_expr = expr - func2.expr;
                         Expr diff_sub_expr = sub_expr.diff(x_var, env);
@@ -601,10 +610,14 @@ public:
         } else {
             expr = parser(expr_str, env, true, true);
         }
-        func.diff = expr.diff(x_var, env);
-        func.ddiff = func.diff.diff(x_var, env);
-        func.recip = Expr::constant(1.) / func.expr;
-        func.drecip = func.recip.diff(x_var, env);
+        if (!expr.is_null()) {
+            func.diff = expr.diff(x_var, env);
+            if (!func.diff.is_null())
+                func.ddiff = func.diff.diff(x_var, env);
+            else func.ddiff.ast[0] = OpCode::null;
+            func.recip = Expr::constant(1.) / func.expr;
+            func.drecip = func.recip.diff(x_var, env);
+        } else func.diff.ast[0] = OpCode::null;
         be.show_error(parser.error_msg);
         expr.optimize();
         be.update();

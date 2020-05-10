@@ -5,10 +5,8 @@
 namespace nivalis {
 namespace OpCode {
 
-namespace {
-
 // Add the operator here if it is binary
-constexpr bool is_binary(uint32_t opcode) {
+bool is_binary(uint32_t opcode) {
     using namespace nivalis::OpCode;
     switch(opcode) {
         case bsel: case add: case sub: case mul: case div: case mod:
@@ -21,8 +19,6 @@ constexpr bool is_binary(uint32_t opcode) {
     }
     return false;
 }
-
-}  // namespace
 
 // Design format of operator expression here
 const char* repr(uint32_t opcode) {
@@ -164,7 +160,6 @@ const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
         func_opcodes["tanh"] = OpCode::tanhb;
 
         func_opcodes["gamma"] = OpCode::tgammab;
-        func_opcodes["fact"] = -1; // pseudo
         func_opcodes["ifact"] = OpCode::factb;
         func_opcodes["lgamma"] = OpCode::lgammab;
         func_opcodes["digamma"] = OpCode::digammab;
@@ -180,6 +175,10 @@ const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
         func_opcodes["rifact"] = OpCode::rifact;
 
         func_opcodes["bsel"] = OpCode::bsel;
+
+        // "pseudo-instructions"
+        func_opcodes["fact"] = -1;
+        func_opcodes["N"] = -1; // standard normal
     }
     return func_opcodes;
 }

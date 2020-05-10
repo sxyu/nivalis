@@ -307,21 +307,31 @@ private:
                     if (expr[funname_end] != '(') {
                         PARSE_ERR("Invalid function call syntax\n");
                     }
-                    const std::string func_name = expr.substr(left, funname_end - left);
+                    const std::string func_name =
+                        expr.substr(left, funname_end - left);
                     const auto& func_opcodes = OpCode::funcname_to_opcode_map();
                     auto it = func_opcodes.find(func_name);
                     if (it != func_opcodes.end()) {
-                        if (it->second == -1) {
-                            // Special handling (pseudo command)
-                            // if (func_name == "fact") {
+                        const auto func_opcode = it->second;
+                        if (func_opcode == -1) {
+                            // Special handling (pseudo instruction)
+                            if (func_name[0] == 'f') {
                                 result.ast.push_back(OpCode::tgammab);
                                 result.ast.push_back(OpCode::add);
                                 util::push_dbl(result.ast, 1.0);
-                            // }
+                            } else if (func_name[0] == 'N') {
+                                result.ast.push_back(OpCode::mul);
+                                util::push_dbl(result.ast, 1 / sqrt(2* M_PI));
+                                result.ast.push_back(OpCode::expb);
+                                result.ast.push_back(OpCode::mul);
+                                util::push_dbl(result.ast, -0.5);
+                                result.ast.push_back(OpCode::sqrb);
+                            }
                         } else {
-                            result.ast.push_back(it->second);
+                            result.ast.push_back(func_opcode);
                         }
                         int64_t stkh = 0, last_begin = funname_end + 1;
+                        size_t argcount = 1;
                         for (int64_t i = funname_end + 1; i < right - 1; ++i) {
                             const char cc = expr[i];
                             if (cc == '(') {
@@ -330,14 +340,31 @@ private:
                                 --stkh;
                             } else if (cc == ',') {
                                 if (stkh == 0) {
-                                    RETURN_IF_FALSE(_parse(last_begin, i, _PRI_LOWEST));
+                                    RETURN_IF_FALSE(
+                                            _parse(last_begin, i, _PRI_LOWEST));
                                     last_begin = i+1;
+                                    ++argcount;
                                 }
                             }
                         }
-                        return _parse(last_begin, right-1, _PRI_LOWEST);
+                        RETURN_IF_FALSE(
+                                _parse(last_begin, right-1, _PRI_LOWEST));
+                        int expect_argcount =
+                            OpCode::is_binary(func_opcode) ? 2 : 1;
+                        if (argcount != expect_argcount) {
+                            if (func_opcode == OpCode::logbase) {
+                                // log: use ln (HACK)
+                                util::push_dbl(result.ast, M_E);
+                            } else {
+                                PARSE_ERR(func_name << ": wrong number of "
+                                        "arguments (expecting " <<
+                                        expect_argcount << ")\n");
+                                return false;
+                            }
+                        }
+                        return true;
                     } else {
-                        PARSE_ERR("Unrecognized function '" << func_name << "'\n");
+                        PARSE_ERR("Unknown function '" << func_name << "'\n");
                     }
                 }
                 else if ((c >= '0' && c <= '9') || c == '.') {
@@ -369,6 +396,13 @@ private:
                             return true;
                         }
                         PARSE_ERR("Undefined variable \"" << varname + "\"\n");
+                    }
+                    if (result.ast.back() >= env.vars.size()) {
+                        PARSE_ERR("Variable address of bounds \"" <<
+                                result.ast.back() <<
+                                "\"\n");
+                        result.ast.pop_back();
+                        result.ast.back() = OpCode::null;
                     }
                     return true;
                 } else if (c == '#' &&

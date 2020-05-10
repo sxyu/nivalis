@@ -77,7 +77,7 @@ struct OpenGLPlotBackend {
     // Screen size
     static const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
     // Max buffer size
-    static const int EDITOR_BUF_SZ = 1024;
+    static const int EDITOR_BUF_SZ = 2048;
     // Maximum functions supported
     static const int EDITOR_MAX_FUNCS = 128;
 
@@ -212,7 +212,8 @@ struct OpenGLPlotBackend {
 
             while (!glfwWindowShouldClose(window))
             {
-                bool open_color_picker = false;
+                bool open_color_picker = false,
+                     open_reference = false;
                 glfwPollEvents();
                 // Clear
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -242,6 +243,7 @@ struct OpenGLPlotBackend {
                 // Render GUI
                 if (init) {
                     ImGui::SetNextWindowPos(ImVec2(20, 30));
+                    ImGui::SetNextWindowSize(ImVec2(400, 130));
                 }
                 ImGui::Begin("Functions", NULL);
                 ImGui::PushFont(font_md);
@@ -253,7 +255,7 @@ struct OpenGLPlotBackend {
                         ImGui::SetKeyboardFocusHere(0);
                     }
                     const std::string fid = std::to_string(func_idx);
-                    ImGui::PushItemWidth(200.);
+                    ImGui::PushItemWidth(300.);
                     if (ImGui::InputText(("f" + fid).c_str(),
                             editor_strs[func_idx], EDITOR_BUF_SZ,
                             ImGuiInputTextFlags_CallbackHistory,
@@ -292,16 +294,23 @@ struct OpenGLPlotBackend {
                     }
                 }
                 if (plot.funcs.size() <= EDITOR_MAX_FUNCS) {
-                    if (ImGui::Button("+ New function")) {
-                        plot.set_curr_func(plot.funcs.size());
-                        auto* col = edit_colors[plot.funcs.size()-1];
-                        auto& fcol = plot.funcs.back().line_color;
-                        col[0] = fcol.r / 255.;
-                        col[1] = fcol.g / 255.;
-                        col[2] = fcol.b / 255.;
-                        col[3] = 1.;
-                        focus_idx = plot.funcs.size() - 1;
+                    std::string tmp = plot.funcs.back().expr_str;
+                    util::trim(tmp);
+                    if (tmp.size()) {
+                        if (ImGui::Button("+ New function")) {
+                            plot.set_curr_func(plot.funcs.size());
+                            auto* col = edit_colors[plot.funcs.size()-1];
+                            auto& fcol = plot.funcs.back().line_color;
+                            col[0] = fcol.r / 255.;
+                            col[1] = fcol.g / 255.;
+                            col[2] = fcol.b / 255.;
+                            col[3] = 1.;
+                            focus_idx = plot.funcs.size() - 1;
+                        }
                     }
+                }
+                if (ImGui::Button("? Help")) {
+                    open_reference = true;
                 }
                 ImGui::PushFont(font_sm);
                 ImGui::TextColored(ImColor(255, 50, 50), "%s", error_text.c_str());
@@ -310,7 +319,7 @@ struct OpenGLPlotBackend {
 
                 if (init) {
                     ImGui::SetNextWindowPos(ImVec2(20, 700));
-                    ImGui::SetNextWindowSize(ImVec2(340, 200));
+                    ImGui::SetNextWindowSize(ImVec2(290, 200));
                 }
                 ImGui::Begin("Sliders", NULL);
 
@@ -385,24 +394,26 @@ struct OpenGLPlotBackend {
                     plot.env.vars[sl.var_addr] = sl.lo;
                     sliders_vars.insert(var_name);
                 }
+                ImGui::PushFont(font_sm);
                 ImGui::TextColored(ImColor(255, 50, 50), "%s",
                         slider_error.c_str());
+                ImGui::PushFont(font_md);
 
                 ImGui::End(); // Sliders
 
                 if (init) {
-                    ImGui::SetNextWindowPos(ImVec2(700, 30));
-                    ImGui::SetNextWindowSize(ImVec2(290, 105));
+                    ImGui::SetNextWindowPos(ImVec2(760, 30));
+                    ImGui::SetNextWindowSize(ImVec2(250, 105));
                 }
 
                 ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
-                ImGui::PushItemWidth(90.);
+                ImGui::PushItemWidth(80.);
                 ImGui::InputDouble("xmin", &plot.xmin); ImGui::SameLine();
-                ImGui::PushItemWidth(90.);
+                ImGui::PushItemWidth(80.);
                 ImGui::InputDouble("xmax", &plot.xmax);
-                ImGui::PushItemWidth(90.);
+                ImGui::PushItemWidth(80.);
                 ImGui::InputDouble("ymin", &plot.ymin); ImGui::SameLine();
-                ImGui::PushItemWidth(90.);
+                ImGui::PushItemWidth(80.);
                 ImGui::InputDouble("ymax", &plot.ymax);
                 if (ImGui::Button("Reset view")) plot.reset_view();
                 ImGui::End(); // View
@@ -415,20 +426,73 @@ struct OpenGLPlotBackend {
                     ImGui::TextUnformatted(marker_text.c_str());
                     ImGui::End();
                 }
-                if(open_color_picker) {
-                    ImGui::OpenPopup("Color picker");
-                }
+                if(open_color_picker) ImGui::OpenPopup("Color picker");
+                if(open_reference) ImGui::OpenPopup("Reference");
                 if (ImGui::BeginPopupModal("Color picker", NULL,
                             ImGuiWindowFlags_AlwaysAutoResize)) {
                     auto* sel_col = edit_colors[curr_edit_color_idx];
                     ImGui::ColorPicker3("color", sel_col);
-                    if (ImGui::Button("Ok", ImVec2(100.f, 0.0f))) {
+                    if (ImGui::Button("Ok##cpickok", ImVec2(100.f, 0.0f))) {
                         auto& fcol = plot.funcs[curr_edit_color_idx].line_color;
                         fcol.r = static_cast<uint8_t>(sel_col[0] * 255.);
                         fcol.g = static_cast<uint8_t>(sel_col[1] * 255.);
                         fcol.b = static_cast<uint8_t>(sel_col[2] * 255.);
                         ImGui::CloseCurrentPopup();
                     }
+                    ImGui::EndPopup();
+                }
+                ImGui::SetNextWindowSize(ImVec2(600, 400));
+                if (ImGui::BeginPopupModal("Reference", NULL,
+                            ImGuiWindowFlags_NoResize)) {
+                    if (ImGui::Button("Close##refclose", ImVec2(100.f, 0.0f))) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::TextUnformatted("Operators");
+                    ImGui::Indent();
+                    ImGui::BulletText("%s", "+- */% ^\nWhere ^ is exponentiation (right-assoc)");
+                    ImGui::BulletText("%s", "Parentheses: () and [] are equivalent (but match separately)");
+                    ImGui::BulletText("%s", "Comparison: < > <= >= == output 0,1\n(= equivalent to == except in assignment/equality statement)");
+                    ImGui::Unindent();
+
+                    ImGui::TextUnformatted("Special Forms");
+                    ImGui::Indent();
+                    ImGui::BulletText("%s", "Conditional special form (piecewise function):\n"
+                            "{<predicate>: <expr>[, <elif-pred>: "
+                            "<expr>[, ... [, <else-expr>]]]}\n"
+                            "ex. {x<0: x, x>=0 : x^2}  ex. {x<2: exp(x)}");
+                    ImGui::BulletText("%s", "Sum special form:\n"
+                                "sum(<var>: <begin>, <end>)[<expr>]\n"
+                                "ex. sum(x: 0, 100)[x]");
+                    ImGui::BulletText("%s", "Prod special form:\n"
+                                "prod(<var>: <begin>, <end>)[<expr>]\n"
+                                "ex. prdo(x: 0, 100)[1/x]");
+                    ImGui::BulletText("%s", "Diff (derivative) special form:\n"
+                                "prod(<var>: <begin>, <end>)[<expr>]\n"
+                                "ex. prdo(x: 0, 100)[1/x]");
+                    ImGui::Unindent();
+
+                    ImGui::TextUnformatted("Functions");
+                    ImGui::Indent();
+                    ImGui::BulletText("%s", "<func_name>(<args>) to call a function");
+                    ImGui::BulletText("%s", "Most function names are self-explanatory; some hints:\n"
+                            "N(x) is standard normal pdf\n"
+                            "Functions take a fixed number of arguments, except\n"
+                            "log(x,b) (log x base b) is special: can take 1 or 2 args, where log(x) = ln(x)");
+                    ImGui::BulletText("%s", "List of functions available:");
+                    ImGui::Indent();
+                    const auto& mp = OpCode::funcname_to_opcode_map();
+                    for (const auto& pr : mp) {
+                        std::string fnmane = pr.first;
+                        if (pr.second == -1 ||
+                                ! OpCode::is_binary(pr.second)) {
+                            ImGui::BulletText("%s(_)", fnmane.c_str());
+                        } else {
+                            ImGui::BulletText("%s(_, _)", fnmane.c_str());
+                        }
+                    }
+
+                    ImGui::Unindent();
+                    ImGui::Unindent();
                     ImGui::EndPopup();
                 }
 

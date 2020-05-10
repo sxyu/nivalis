@@ -116,6 +116,15 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
                     v = *l;
                     v.val = -v.val;
                 }
+                if (l->opcode == mul) {
+                    auto lli = l->c[0];
+                    auto* ll = &nodes[lli];
+                    if (ll->opcode == val) {
+                        ll->val = -ll->val;
+                    }
+                    v = *l;
+                    break;
+                }
                 break;
             case add: case sub:
                 while (r->opcode == unaryminus) {
@@ -355,7 +364,14 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
                 }
                 if (v.opcode == power &&
                     r->opcode == val) {
-                    if (r->val == 0.5) {
+                    if (r->val == 1.) {
+                        v = *l; break;
+                    } else if (r->val == 0.) {
+                        v.opcode = OpCode::val;
+                        v.val = 1.;
+                        v.nonconst_flag = false;
+                        break;
+                    } else if (r->val == 0.5) {
                         v.opcode = OpCode::sqrtb;
                         v.c[1] = -1; break;
                     } else if (r->val == 2) {

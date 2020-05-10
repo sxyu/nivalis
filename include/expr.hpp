@@ -45,6 +45,9 @@ struct Expr {
     // Take the derivative wrt var with address 'var_addr' in the given environment
     Expr diff(uint32_t var_addr, Environment& env) const;
 
+    // Checks if this is a null expression
+    bool is_null() const;
+
     // Use Newton(-Raphson) method to compute root for variable with addr var_addr
     // optionally, supply computed derivative
     // eps_step: stopping condition, |f(x)/df(x)|

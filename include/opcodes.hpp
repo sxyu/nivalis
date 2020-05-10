@@ -54,6 +54,9 @@ enum _OpCode {
     erfb, zetab,
 };
 
+// Check if the operator is binary
+bool is_binary(uint32_t opcode);
+
 // Representations of expressions for printing purposes
 // @: replace with subexpression
 // &: replace with ref in next 4 bytes

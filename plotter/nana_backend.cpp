@@ -171,7 +171,7 @@ struct NanaPlotBackend {
     // Get contents of editor (tb)
     // Assumes func_id is curr_func !
     std::string read_editor(int func_id) {
-        if (func_id != plot.curr_func) return;
+        if (func_id != plot.curr_func) return "";
         return tb.caption();
     }
 

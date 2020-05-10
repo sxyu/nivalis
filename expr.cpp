@@ -33,7 +33,7 @@ Expr wrap_expr(uint32_t opcode, const Expr& a) {
 }
 }  // namespace
 
-Expr::Expr() { ast.resize(8); }
+Expr::Expr() { ast.resize(2); }
 double Expr::operator()(Environment& env) const {
     const uint32_t* astptr = &ast[0];
     return detail::eval_ast(env, &astptr);
@@ -89,6 +89,11 @@ Expr Expr::diff(uint32_t var_addr, Environment& env) const {
     dexpr.ast = detail::diff_ast(ast, var_addr, env);
     dexpr.optimize();
     return dexpr;
+}
+
+bool Expr::is_null() const {
+    return ast.empty() || ast[0] == OpCode::null ||
+           (ast[0] == OpCode::val && std::isnan(util::as_double(&ast[1])));
 }
 
 double Expr::newton(uint32_t var_addr, double x0, Environment& env,
