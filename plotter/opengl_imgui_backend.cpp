@@ -14,40 +14,32 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include "util.hpp"
+
 namespace nivalis {
 namespace {
 
 struct OpenGLGraphicsAdaptor {
     void line(int ax, int ay, int bx, int by, color::color c) {
-        glBegin(GL_LINES);
-        glColor3ub(c.r, c.g, c.b);
-        glVertex2f(ax, ay);
-        glVertex2f(bx, by);
-        glEnd();
+        draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
+                ImColor(c.r, c.g, c.b));
     }
     void rectangle(int x, int y, int w, int h, bool fill, color::color c) {
         if (fill) {
-            glColor3ub(c.r, c.g, c.b);
-            glRecti(x, y, x+w, y+h);
+            draw_list->AddRectFilled(ImVec2(x,y), ImVec2(x+w, y+h),
+                    ImColor(c.r, c.g, c.b));
         }
         else {
-            glBegin(GL_LINE_LOOP);
-            glColor3ub(c.r, c.g, c.b);
-            glVertex2f(x, y);
-            glVertex2f(x, y + h);
-            glVertex2f(x + w, y + h);
-            glVertex2f(x + w, y);
-            glEnd();
+            draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
+                    ImColor(c.r, c.g, c.b));
         }
     }
     void rectangle(bool fill, color::color c) {
         glClearColor(c.r/255., c.g/255., c.b/255., 1.0f);
     }
     void set_pixel(int x, int y, color::color c) {
-        glBegin(GL_POINTS);
-        glColor3ub(c.r, c.g, c.b);
-        glVertex2i(x, y);
-        glEnd();
+        draw_list->AddRect(ImVec2(x,y), ImVec2(x, y),
+                ImColor(c.r, c.g, c.b));
     }
     void string(int x, int y, const std::string& s, color::color c) {
         // String using ImGui API
@@ -69,6 +61,15 @@ ImFont* AddDefaultFont(float pixel_size) {
     ImFont *font = io.Fonts->AddFontDefault(&config);
     return font;
 }
+
+// Data for each slider
+struct SliderData {
+    static const int VAR_NAME_MAX = 256;
+    char var_name_buf[VAR_NAME_MAX];
+    std::string var_name;
+    float var_val, lo = 0.0, hi = 1.0;
+    uint32_t var_addr;
+};
 
 struct OpenGLPlotBackend {
     using GLPlotter = Plotter<OpenGLPlotBackend, OpenGLGraphicsAdaptor>;
@@ -104,9 +105,8 @@ struct OpenGLPlotBackend {
                 return;
             }
 
-            // Set up initial variable name, function color
+            // Set up initial function color
             {
-                var_addr = plot.env.addr_of(var_name_buf, false);
                 auto* col = edit_colors[0];
                 auto& fcol = plot.funcs[0].line_color;
                 col[0] = fcol.r / 255.;
@@ -228,11 +228,18 @@ struct OpenGLPlotBackend {
                 ImGui_ImplGlfw_NewFrame();
                 ImGui::NewFrame();
 
+                // Handle resize
+                int wwidth, wheight;
+                glfwGetWindowSize(window, &wwidth, &wheight);
+                if (wwidth != plot.swid || wheight != plot.shigh) {
+                    plot.resize(wwidth, wheight);
+                }
+
                 ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
                 OpenGLGraphicsAdaptor adaptor(window, draw_list);
                 plot.draw(adaptor);
 
-                // render GUI
+                // Render GUI
                 if (init) {
                     ImGui::SetNextWindowPos(ImVec2(20, 30));
                 }
@@ -247,7 +254,7 @@ struct OpenGLPlotBackend {
                     }
                     const std::string fid = std::to_string(func_idx);
                     ImGui::PushItemWidth(200.);
-                    if (ImGui::InputText(fid.c_str(),
+                    if (ImGui::InputText(("f" + fid).c_str(),
                             editor_strs[func_idx], EDITOR_BUF_SZ,
                             ImGuiInputTextFlags_CallbackHistory,
                             [](ImGuiTextEditCallbackData* data) -> int {
@@ -274,14 +281,14 @@ struct OpenGLPlotBackend {
                         curr_edit_color_idx = func_idx;
                     }
                     ImGui::SameLine();
-                    ImGui::PushID(("del" + fid).c_str());
-                    if (ImGui::Button("x")) {
+                    if (ImGui::Button(("x##delfun-" + fid).c_str())) {
                         for (int i = func_idx; i < plot.funcs.size()-1; ++i) {
                             strcpy(editor_strs[i], editor_strs[i+1]);
                             memcpy(edit_colors[i], edit_colors[i+1],
                                     4*sizeof(float));
                         }
                         plot.delete_func(func_idx);
+                        --func_idx;
                     }
                 }
                 if (plot.funcs.size() <= EDITOR_MAX_FUNCS) {
@@ -302,24 +309,84 @@ struct OpenGLPlotBackend {
                 ImGui::End(); //  Functions
 
                 if (init) {
-                    ImGui::SetNextWindowPos(ImVec2(20, 500));
-                    ImGui::SetNextWindowSize(ImVec2(350, 105));
+                    ImGui::SetNextWindowPos(ImVec2(20, 700));
+                    ImGui::SetNextWindowSize(ImVec2(340, 200));
                 }
                 ImGui::Begin("Sliders", NULL);
 
-                ImGui::PushItemWidth(50.);
-                if (ImGui::InputText("variable", var_name_buf, 256)) {
-                    var_addr = plot.env.addr_of(var_name_buf, false);
-                }
-                ImGui::SameLine(0., 10.0);
-                ImGui::InputFloat("min", &lo);
-                ImGui::SameLine();
-                ImGui::InputFloat("max", &hi);
+                for (size_t i = 0; i < sliders.size(); ++i) {
+                    ImGui::PushItemWidth(50.);
+                    auto& sl = sliders[i];
+                    std::string slid = std::to_string(i);
+                    if (ImGui::InputText(("var##vsl-" + slid).c_str(),
+                                sl.var_name_buf,
+                                SliderData::VAR_NAME_MAX)) {
+                        std::string var_name = sl.var_name_buf;
+                        util::trim(var_name);
+                        if (sl.var_name != var_name) {
+                            sliders_vars.erase(sl.var_name);
+                            if (var_name == "") {
+                                sl.var_addr = -1;
+                                sl.var_name.clear();
+                            } else if (sliders_vars.count(var_name)) {
+                                // Already has slider
+                                slider_error = "Duplicate slider for " +
+                                    var_name  + "\n"; 
+                                sl.var_addr = -1;
+                                sl.var_name.clear();
+                            } else if (var_name == "x" || var_name == "y") {
+                                // Not allowed to set in slider (reserved)
+                                slider_error = var_name  + " is reserved\n"; 
+                                sl.var_addr = -1;
+                                sl.var_name.clear();
+                            } else {
+                                sl.var_addr = plot.env.addr_of(var_name, false);
+                                plot.env.vars[sl.var_addr] = sl.var_val;
+                                sliders_vars.insert(var_name);
+                                sl.var_name = var_name;
+                                slider_error.clear();
+                            }
+                        }
+                    }
+                    ImGui::SameLine(0., 10.0);
+                    ImGui::InputFloat(("min##vsl-"+slid).c_str(), &sl.lo);
+                    ImGui::SameLine();
+                    ImGui::InputFloat(("max##vsl-"+slid).c_str(), &sl.hi);
 
-                ImGui::PushItemWidth(300.);
-                if (ImGui::SliderFloat("##sli", &varval, lo, hi)) {
-                    plot.env.vars[var_addr] = varval;
+                    ImGui::SameLine();
+                    if (ImGui::Button(("x##delvsl-" + slid).c_str())) {
+                        sliders_vars.erase(sl.var_name);
+                        sliders.erase(sliders.begin() + i);
+                        --i;
+                        continue;
+                    }
+
+                    ImGui::PushItemWidth(275.);
+                    if (ImGui::SliderFloat(("##vslslider" + slid).c_str(),
+                                &sl.var_val, sl.lo, sl.hi)) {
+                        if (~sl.var_addr) {
+                            plot.env.vars[sl.var_addr] = sl.var_val;
+                        }
+                    }
                 }
+
+                if (ImGui::Button("+ New slider")) {
+                    sliders.emplace_back();
+                    auto& sl = sliders.back();
+                    std::string var_name = "a";
+                    while (var_name[0] < 'z' &&
+                           sliders_vars.count(var_name)) {
+                        // Try to find next unused var name
+                        ++var_name[0];
+                    }
+                    sl.var_name = var_name;
+                    strcpy(sl.var_name_buf, var_name.c_str());
+                    sl.var_addr = plot.env.addr_of(sl.var_name_buf, false);
+                    plot.env.vars[sl.var_addr] = sl.lo;
+                    sliders_vars.insert(var_name);
+                }
+                ImGui::TextColored(ImColor(255, 50, 50), "%s",
+                        slider_error.c_str());
 
                 ImGui::End(); // Sliders
 
@@ -410,10 +477,8 @@ struct OpenGLPlotBackend {
         error_text = txt;
     }
 
-    // Set func name label
-    void set_func_name(const std::string& txt) {
-        func_name = txt;
-    }
+    // Set func name label (not used)
+    void set_func_name(const std::string& txt) { }
 
     // Show marker at position
     void show_marker_at(const PointMarker& ptm, int px, int py) {
@@ -428,12 +493,9 @@ struct OpenGLPlotBackend {
     }
 
     char editor_strs[EDITOR_MAX_FUNCS][EDITOR_BUF_SZ];
-    std::string func_name, error_text, marker_text;
-    int marker_posx, marker_posy;
     size_t focus_idx = 0;
 
 private:
-    // Templated plotter instance, contains plotter logic
     GLFWwindow* window;
 
     GLFWkeyfun imgui_key_callback;
@@ -442,14 +504,21 @@ private:
 
     ImGuiIO* imgui_io;
 
-    GLPlotter plot;
+    // Error text, marker data
+    std::string error_text, marker_text;
+    int marker_posx, marker_posy;
 
+    // Color picker data
     float edit_colors[EDITOR_MAX_FUNCS][4];
     size_t curr_edit_color_idx;
 
-    char var_name_buf[256] = "a";
-    float varval, lo = 0.0, hi = 1.0;
-    uint32_t var_addr;
+    // Slider data
+    std::string slider_error;
+    std::vector<SliderData> sliders;
+    std::set<std::string> sliders_vars;
+
+    // Templated plotter instance, contains plotter logic
+    GLPlotter plot;
 };
 }  // namespace
 
