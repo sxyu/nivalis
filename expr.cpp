@@ -46,7 +46,7 @@ Expr Expr::operator/(const Expr& other) const { COMBINE_EXPR(OpCode::div); }
 Expr Expr::operator%(const Expr& other) const { COMBINE_EXPR(OpCode::mod); }
 Expr Expr::operator^(const Expr& other) const { COMBINE_EXPR(OpCode::power); }
 Expr Expr::combine(uint32_t opcode, const Expr& other) const { COMBINE_EXPR(opcode); }
-Expr Expr::operator-() const { return wrap_expr(OpCode::uminusb, *this); }
+Expr Expr::operator-() const { return wrap_expr(OpCode::unaryminus, *this); }
 Expr Expr::wrap(uint32_t opcode) const { return wrap_expr(opcode, *this); }
 
 bool Expr::has_var(uint32_t addr) const {

@@ -166,7 +166,7 @@ private:
                 for (int64_t i = left; i < right; ++i) {
                     const char c = expr[i];
                     if (c == '+' || c == '-') {
-                        if (c == '-') result.ast.push_back(OpCode::uminusb);
+                        if (c == '-') result.ast.push_back(OpCode::unaryminus);
                         return _parse(i + 1, right, pri);
                     }
                     else if (tok_link[i] > i) {
@@ -314,7 +314,7 @@ private:
                         if (it->second == -1) {
                             // Special handling (pseudo command)
                             // if (func_name == "fact") {
-                                result.ast.push_back(OpCode::gammab);
+                                result.ast.push_back(OpCode::tgammab);
                                 result.ast.push_back(OpCode::add);
                                 util::push_dbl(result.ast, 1.0);
                             // }

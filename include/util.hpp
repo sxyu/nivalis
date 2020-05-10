@@ -72,6 +72,9 @@ void push_dbl(std::vector<uint32_t>& v, double value);
 // Read 2 uint32_t as a double
 double as_double(const uint32_t* ast);
 
+// Squared distance
+int sqr_dist(int ax, int ay, int bx, int by);
+
 }  // namespace util
 }  // namespace nivalis
 #endif // ifndef _UTIL_H_4EB09B11_F909_45C4_AD5D_8AA7A6644106

@@ -185,7 +185,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case land: case lor: case lxor: case gcd: case lcm: case choose: case fafact: case rifact:
         case lt: case le: case eq: case ne: case ge: case gt:
                   PUSH_CONST(0.0); skip_ast(ast); skip_ast(ast); // Integer functions: 0 derivative
-        case beta:
+        case betab:
                   {
                       const uint32_t* tmp = *ast, *x_pos = *ast;
                       skip_ast(&tmp);
@@ -193,7 +193,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                       PUSH_OP(add);
                           PUSH_OP(mul);
                               PUSH_OP(mul);
-                                  PUSH_OP(beta);
+                                  PUSH_OP(betab);
                                       copy_to_derivative(x_pos,out); copy_to_derivative(y_pos,out);
                                   PUSH_OP(sub);
                                       PUSH_OP(digammab); copy_to_derivative(x_pos,out);
@@ -201,7 +201,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                           DIFF_NEXT;
                           PUSH_OP(mul);
                               PUSH_OP(mul);
-                                  PUSH_OP(beta);
+                                  PUSH_OP(betab);
                                       copy_to_derivative(x_pos,out); copy_to_derivative(y_pos,out);
                                   PUSH_OP(sub);
                                       PUSH_OP(digammab); copy_to_derivative(y_pos,out);
@@ -209,25 +209,25 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                           DIFF_NEXT;
                   }
                   break;
-        case polygamma:
+        case polygammab:
                   {
                       const uint32_t* tmp1 = *ast;
                       bool idx_nonconst = eval_ast_find_var(&tmp1, var_addr);
                       if (idx_nonconst) return false; // Can't differentiate wrt polygamma index
                       tmp1 = *ast;
                       skip_ast(ast);
-                      CHAIN_RULE(PUSH_OP(polygamma); 
+                      CHAIN_RULE(PUSH_OP(polygammab); 
                               PUSH_OP(add);
                               copy_to_derivative(tmp1, out);
                               PUSH_CONST(1),);
                   }
                 break;
-        case uminusb: PUSH_OP(uminusb); DIFF_NEXT; break;
+        case unaryminus: PUSH_OP(unaryminus); DIFF_NEXT; break;
         case absb: {
                        const uint32_t* tmp = *ast;
                        double value = eval_ast(env, &tmp);
                        if (value >= 0.) { DIFF_NEXT; }
-                       else { PUSH_OP(uminusb); DIFF_NEXT; }
+                       else { PUSH_OP(unaryminus); DIFF_NEXT; }
                    }
         case sqrtb: CHAIN_RULE(
                             PUSH_OP(mul);
@@ -235,7 +235,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                             PUSH_OP(power), // g(x) goes here
                             PUSH_CONST(-0.5)); break;
         case sqrb: CHAIN_RULE(PUSH_OP(mul); PUSH_CONST(2.),); break;
-        case lnotb: case sgnb: case floorb: case ceilb: case roundb: case factb:
+        case lnot: case sgn: case floorb: case ceilb: case roundb: case factb:
                    PUSH_CONST(0.0); skip_ast(ast); break; // Integer functions; 0 derivative
         case expb: CHAIN_RULE(PUSH_OP(expb),); break;
         case exp2b: CHAIN_RULE( PUSH_OP(mul); PUSH_CONST(log(2)); PUSH_OP(exp2b),); break;
@@ -243,27 +243,27 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case log2b:  CHAIN_RULE(PUSH_OP(div);PUSH_CONST(1.0);PUSH_OP(mul);PUSH_CONST(log(2));,); break;
         case log10b: CHAIN_RULE(PUSH_OP(div);PUSH_CONST(1.0);PUSH_OP(mul);PUSH_CONST(log(10));,); break;
         case sinb:  CHAIN_RULE(PUSH_OP(cosb),); break;
-        case cosb:  CHAIN_RULE(PUSH_OP(uminusb); PUSH_OP(sinb),); break;
+        case cosb:  CHAIN_RULE(PUSH_OP(unaryminus); PUSH_OP(sinb),); break;
         case tanb:  CHAIN_RULE(PUSH_OP(div); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(cosb),); break;
         case asinb: case acosb: 
-            CHAIN_RULE(if (opcode == acosb) PUSH_OP(uminusb);
+            CHAIN_RULE(if (opcode == acosb) PUSH_OP(unaryminus);
                     PUSH_OP(div); PUSH_CONST(1);
                      PUSH_OP(sqrtb); PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb),); break;
         case atanb:  CHAIN_RULE(PUSH_OP(div); PUSH_CONST(1); PUSH_OP(add); PUSH_CONST(1); PUSH_OP(sqrb),); break;
         case sinhb: CHAIN_RULE(PUSH_OP(coshb),); break;
         case coshb: CHAIN_RULE(PUSH_OP(sinhb),); break;
         case tanhb: CHAIN_RULE(PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(tanhb),);
-        case gammab:  CHAIN_RULE(
-                              PUSH_OP(mul); PUSH_OP(gammab);
+        case tgammab:  CHAIN_RULE(
+                              PUSH_OP(mul); PUSH_OP(tgammab);
                               copy_to_derivative(tmp, out);
                               PUSH_OP(digammab),);
                       break;
         case digammab: CHAIN_RULE(PUSH_OP(trigammab),); break;
-        case trigammab: CHAIN_RULE(PUSH_OP(polygamma); PUSH_CONST(2),); break;
+        case trigammab: CHAIN_RULE(PUSH_OP(polygammab); PUSH_CONST(2),); break;
         case lgammab: CHAIN_RULE(PUSH_OP(digammab),); break;
         case erfb:   CHAIN_RULE(
                               PUSH_OP(mul); PUSH_CONST(2.0 / sqrt(M_PI));
-                              PUSH_OP(expb); PUSH_OP(uminusb); PUSH_OP(sqrb),);
+                              PUSH_OP(expb); PUSH_OP(unaryminus); PUSH_OP(sqrb),);
                      break;
 
         case zetab:  return false; // Derivative not available

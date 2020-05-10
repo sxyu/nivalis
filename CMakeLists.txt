@@ -20,8 +20,8 @@ if( NOT CMAKE_BUILD_TYPE )
   set( CMAKE_BUILD_TYPE Release )
 endif()
 
-set( PROJ_NAME "nivalis" )
-set( OUTPUT_NAME "nivalis" )
+set( SHELL_PROJ_NAME "nivalis" )
+set( PLOT_GUI_PROJ_NAME "nivplot" )
 set( INCLUDE_DIR "include" )
 
 if ( CMAKE_COMPILER_IS_GNUCXX )
@@ -31,7 +31,7 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 set( Boost_USE_STATIC_LIBS ON )
 set( Boost_USE_STATIC ON )
 
-find_package(Boost REQUIRED COMPONENTS system program_options filesystem )
+find_package(Boost REQUIRED COMPONENTS)
 
 find_package(Threads REQUIRED)
 IF (NOT WIN32)
@@ -49,7 +49,14 @@ include_directories(
 )
 
 set(
+    PROJ_EXECUTABLES
+    ${SHELL_PROJ_NAME}
+    ${PLOT_GUI_PROJ_NAME}
+)
+
+set(
   HEADERS
+  version.hpp
   parser.hpp
   plotgui.hpp
   env.hpp
@@ -59,12 +66,12 @@ set(
   eval_expr.hpp
   opcodes.hpp
   diff_expr.hpp
+  plotter.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
 set(
   SOURCES
-  main.cpp
   parser.cpp
   plotgui.cpp
   env.cpp
@@ -74,6 +81,7 @@ set(
   eval_expr.cpp
   opcodes.cpp
   diff_expr.cpp
+  plotter.cpp
 )
 
 set (NANA_DEPENDENCIES
@@ -88,18 +96,19 @@ add_definitions( -D_USE_MATH_DEFINES -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_err
     -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
     -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error ) 
 
-add_executable( ${PROJ_NAME} ${HEADERS} ${SOURCES} )
-set_target_properties( ${PROJ_NAME} PROPERTIES OUTPUT_NAME ${OUTPUT_NAME} )
-target_link_libraries( ${PROJ_NAME}  ${Boost_LIBRARIES} ${NANA_LIBRARIES} ${NANA_DEPENDENCIES} )
-
+foreach(targ ${PROJ_EXECUTABLES})
+add_executable( ${targ} ${HEADERS} ${SOURCES} main_${targ}.cpp )
+target_link_libraries( ${targ} ${Boost_LIBRARIES} ${NANA_LIBRARIES} ${NANA_DEPENDENCIES} )
 if ( MSVC )
     # Extra flags for MSVC to stop it from complaining about LTCG, MT etc.
-    set_property(TARGET ${PROJ_NAME} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
+    set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GL")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 endif ( MSVC )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_link_libraries( ${PROJ_NAME} stdc++fs )
+    target_link_libraries( ${targ} stdc++fs )
 endif ()
+
+endforeach()
 # Create source group for headers
 source_group( "Header Files" FILES ${HEADERS} )

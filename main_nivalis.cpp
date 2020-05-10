@@ -1,4 +1,5 @@
 #include "parser.hpp"
+#include "version.hpp"
 #include "plotgui.hpp"
 #include "util.hpp"
 #include <string>
@@ -33,7 +34,7 @@ std::vector<std::string> get_args(std::string& line) {
 
 int main(int argc, char ** argv) {
     using namespace nivalis;
-    std::cout << "Nivalis 0.0.2 alpha (c) Alex Yu 2020\n";
+    std::cout << "Nivalis " NIVALIS_VERSION " " NIVALIS_COPYRIGHT << std::endl;
 
     std::string orig_line, line, var;
     int assn_opcode = OpCode::bsel;

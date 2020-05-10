@@ -5,12 +5,9 @@
 #include "env.hpp"
 namespace nivalis {
 // Plotter GUI, made with Nana
-struct PlotGUI {
+class PlotGUI {
+public:
     explicit PlotGUI(Environment& env, const std::string& init_expr = "");
-    ~PlotGUI();
-private:
-    struct impl;
-    std::unique_ptr<impl> pImpl;
 };
 }  // namespace nivalis
 #endif // ifndef _PLOTGUI_H_83CE414C_2BBF_49BB_BBE7_83746DD75A5E

@@ -41,16 +41,16 @@ enum _OpCode {
     rifact, // rising factorial
 
     // float
-    beta, // beta function
-    polygamma, // polygamma function
+    betab, // beta function
+    polygammab, // polygamma function
 
     // unary operators
-    uminusb = 32768,
-    lnotb,
-    absb, sqrtb, sqrb, sgnb, floorb, ceilb, roundb,
+    unaryminus = 32768,
+    lnot,
+    absb, sqrtb, sqrb, sgn, floorb, ceilb, roundb,
     expb, exp2b, logb, log10b, log2b, factb,
     sinb, cosb, tanb, asinb, acosb, atanb, sinhb, coshb, tanhb,
-    gammab, lgammab, digammab, trigammab,
+    tgammab, lgammab, digammab, trigammab,
     erfb, zetab,
 };
 

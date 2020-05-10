@@ -1,6 +1,7 @@
 #include "opcodes.hpp"
 
-#include<boost/math/constants/constants.hpp>
+#include <cmath>
+
 namespace nivalis {
 namespace OpCode {
 
@@ -14,7 +15,7 @@ constexpr bool is_binary(uint32_t opcode) {
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case gcd: case lcm:
-        case choose: case fafact: case rifact: case beta: case polygamma:
+        case choose: case fafact: case rifact: case betab: case polygammab:
         case lt: case le: case eq: case ne: case ge: case gt:
             return true;
     }
@@ -57,14 +58,14 @@ const char* repr(uint32_t opcode) {
         case choose:    return "choose(@, @)";
         case fafact:    return "fafact(@, @)";
         case rifact:    return "rifact(@, @)";
-        case beta:      return "beta(@, @)";
-        case polygamma: return "polygamma(@, @)";
-        case uminusb:   return "(-@)";
-        case lnotb:     return "not(@)";
+        case betab:      return "beta(@, @)";
+        case polygammab: return "polygamma(@, @)";
+        case unaryminus:   return "(-@)";
+        case lnot:     return "not(@)";
         case absb:      return "abs(@)";
         case sqrtb:     return "sqrt(@)";
         case sqrb:      return "@^2";
-        case sgnb:      return "sgn(@)";
+        case sgn:      return "sgn(@)";
         case floorb:    return "floor(@)";
         case ceilb:     return "ceil(@)";
         case roundb:    return "round(@)";
@@ -83,7 +84,7 @@ const char* repr(uint32_t opcode) {
         case sinhb:     return "sinh(@)";
         case coshb:     return "cosh(@)";
         case tanhb:     return "tanh(@)";
-        case gammab:    return "gamma(@)";
+        case tgammab:    return "gamma(@)";
         case lgammab:   return "lgamma(@)";
         case digammab:  return "digamma(@)";
         case trigammab: return "trigamma(@)";
@@ -136,11 +137,11 @@ const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
         func_opcodes["and"] = OpCode::land;
         func_opcodes["or"] = OpCode::lor;
         func_opcodes["xor"] = OpCode::lxor;
-        func_opcodes["not"] = OpCode::lnotb;
+        func_opcodes["not"] = OpCode::lnot;
 
         func_opcodes["abs"] = OpCode::absb;
         func_opcodes["sqrt"] = OpCode::sqrtb;
-        func_opcodes["sgn"] = OpCode::sgnb;
+        func_opcodes["sgn"] = OpCode::sgn;
         func_opcodes["floor"] = OpCode::floorb;
         func_opcodes["ceil"] = OpCode::ceilb;
         func_opcodes["round"] = OpCode::roundb;
@@ -162,16 +163,16 @@ const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
         func_opcodes["cosh"] = OpCode::coshb;
         func_opcodes["tanh"] = OpCode::tanhb;
 
-        func_opcodes["gamma"] = OpCode::gammab;
+        func_opcodes["gamma"] = OpCode::tgammab;
         func_opcodes["fact"] = -1; // pseudo
         func_opcodes["ifact"] = OpCode::factb;
         func_opcodes["lgamma"] = OpCode::lgammab;
         func_opcodes["digamma"] = OpCode::digammab;
         func_opcodes["trigamma"] = OpCode::trigammab;
-        func_opcodes["polygamma"] = OpCode::polygamma;
+        func_opcodes["polygamma"] = OpCode::polygammab;
         func_opcodes["erf"] = OpCode::erfb;
         func_opcodes["zeta"] = OpCode::zetab;
-        func_opcodes["beta"] = OpCode::beta;
+        func_opcodes["beta"] = OpCode::betab;
         func_opcodes["gcd"] = OpCode::gcd;
         func_opcodes["lcm"] = OpCode::lcm;
         func_opcodes["choose"] = OpCode::choose;
@@ -188,11 +189,10 @@ const std::map<std::string, double>& constant_value_map() {
     static std::map<std::string, double> constant_values;
     if (constant_values.empty()){
         // Set lookup tables
-        using namespace boost::math;
-        constant_values["pi"] = double_constants::pi;
-        constant_values["e"] = double_constants::e;
-        constant_values["phi"] = double_constants::phi;
-        constant_values["euler"] = double_constants::euler;
+        constant_values["pi"] = M_PI;
+        constant_values["e"] =  M_E;
+        constant_values["phi"] = 0.5 * (1. + sqrt(5)); // golden ratio
+        constant_values["euler"] = 0.577215664901532860606; // Euler-Mascheroni
 
         constant_values["nan"] = std::numeric_limits<double>::quiet_NaN();
     }

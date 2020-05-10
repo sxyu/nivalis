@@ -47,7 +47,7 @@ uint32_t ast_to_nodes(const uint32_t** ast, std::vector<ASTNode>& store) {
             r.val = -r.val;
         } else {
             node.c[1] = static_cast<uint32_t>(store.size());
-            store.emplace_back(OpCode::uminusb);
+            store.emplace_back(OpCode::unaryminus);
             store.back().c[0] = ri;
         }
     }
@@ -111,14 +111,14 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
         if (ri == -1) ri = vi;
         auto* l = &nodes[li], *r = &nodes[ri];
         switch(v.opcode) {
-            case uminusb:
+            case unaryminus:
                 if (l->opcode == val) {
                     v = *l;
                     v.val = -v.val;
                 }
                 break;
             case add: case sub:
-                while (r->opcode == uminusb) {
+                while (r->opcode == unaryminus) {
                     ri = v.c[1] = r->c[0];
                     r = &nodes[ri];
                     v.opcode ^= 1;
@@ -214,7 +214,7 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
 
                 if (l->opcode == val && l->val == 0.) {
                     if (v.opcode == sub) {
-                        v.opcode = uminusb; v.c[0] = v.c[1]; v.c[1] = -1;
+                        v.opcode = unaryminus; v.c[0] = v.c[1]; v.c[1] = -1;
                     } else v = *r;
                 } else if (r->opcode == val && r->val == 0.) v = *l;
                 break;
@@ -245,12 +245,12 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
                 else if (l->opcode == val && l->val == 1.) v = *r;
                 else if (r->opcode == val && r->val == 1.) v = *l;
                 else if (l->opcode == val && l->val == -1.) {
-                    v.opcode = uminusb;
+                    v.opcode = unaryminus;
                     *l = *r;
                     v.c[1] = -1;
                     break;
                 } else if (r->opcode == val && r->val == -1.) {
-                    v.opcode = uminusb;
+                    v.opcode = unaryminus;
                     v.c[1] = -1;
                 } else if (l->opcode == expb && r->opcode == expb) {
                     v.opcode = OpCode::expb; l->opcode = OpCode::add;
@@ -298,7 +298,7 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
                 } else if (r->opcode == val && r->val == 1.) {
                     v = *l;
                 } else if (r->opcode == val && r->val == -1.) {
-                    v.opcode = uminusb;
+                    v.opcode = unaryminus;
                     v.c[1] = -1;
                 } else if (l->opcode == expb && r->opcode == expb) {
                     v.opcode = OpCode::expb; l->opcode = OpCode::sub;

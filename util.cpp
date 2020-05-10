@@ -58,6 +58,9 @@ void push_dbl(std::vector<uint32_t>& v, double value) {
 double as_double(const uint32_t* ast) {
     return *reinterpret_cast<const double*>(ast);
 }
+int sqr_dist(int ax, int ay, int bx, int by) {
+    return (ax-bx)*(ax-bx) + (ay-by)*(ay-by);
+}
 }  // namespace util
 }  // namespace nivalis
 

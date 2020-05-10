@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <iostream>
+#include <numeric>
 #include <boost/math/special_functions/beta.hpp>
 #include <boost/math/special_functions/gamma.hpp>
 #include <boost/math/special_functions/digamma.hpp>
@@ -10,7 +11,6 @@
 #include <boost/math/special_functions/zeta.hpp>
 #include <boost/math/special_functions/binomial.hpp>
 #include <boost/math/special_functions/factorials.hpp>
-#include <boost/integer/common_factor.hpp>
 #include "opcodes.hpp"
 #include "util.hpp"
 
@@ -142,15 +142,15 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case land: ret = EV_NEXT && EV_NEXT; break;
         case lor: ret = EV_NEXT || EV_NEXT; break;
         case lxor: ret = static_cast<bool>(EV_NEXT) ^ static_cast<bool>(EV_NEXT); break;
-        case gcd: { let_ab_i64; ret = integer::gcd(a, b); } break;
-        case lcm: { let_ab_i64; ret = integer::lcm(a, b); } break;
+        case gcd: { let_ab_i64; ret = std::gcd(a, b); } break;
+        case lcm: { let_ab_i64; ret = a * b / std::gcd(a, b); } break;
         case choose: { let_ab_u32; ret = binomial_coefficient<double>(a, b); } break;
         case fafact: { let_ab_u32; ret = falling_factorial<double>(a, b); } break;
         case rifact: { let_ab_u32; ret = rising_factorial<double>(a, b); } break;
-        case beta: ret = EV_NEXT; ret = math::beta<double>(ret, EV_NEXT); break;
-        case polygamma:
+        case betab: ret = EV_NEXT; ret = beta<double>(ret, EV_NEXT); break;
+        case polygammab:
                 ret = EV_NEXT;
-                ret = math::polygamma<double>(static_cast<int>(ret), EV_NEXT);
+                ret = polygamma<double>(static_cast<int>(ret), EV_NEXT);
                 break;
         case lt: ret = EV_NEXT; ret = ret < EV_NEXT; break;
         case le: ret = EV_NEXT; ret = ret <= EV_NEXT; break;
@@ -159,19 +159,19 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case ge: ret = EV_NEXT; ret = ret >= EV_NEXT; break;
         case gt: ret = EV_NEXT; ret = ret > EV_NEXT; break;
 
-        case uminusb: ret = -EV_NEXT; break;
-        case lnotb: ret = !EV_NEXT; break;
+        case unaryminus: ret = -EV_NEXT; break;
+        case lnot: ret = !EV_NEXT; break;
         case absb: EV_UNARY(fabs);
         case sqrtb: EV_UNARY(sqrt);
         case sqrb: ret = eval_ast(env, ast); ret *= ret; break;
-        case sgnb: ret = EV_NEXT;
+        case sgn: ret = EV_NEXT;
                    ret = ret > 0 ? 1 : (ret == 0 ? 0 : -1); break;
         case floorb: EV_UNARY(floor); case ceilb: EV_UNARY(ceil);
         case roundb: EV_UNARY(round);
 
         case expb:  EV_UNARY(exp);   case exp2b:  EV_UNARY(exp2);
         case logb:  EV_UNARY(log);
-        case factb:  ret = math::factorial<double>(static_cast<unsigned>(
+        case factb:  ret = factorial<double>(static_cast<unsigned>(
                                                      std::max(eval_ast(env, ast), 0.)
                                                   )); break;
         case log2b: EV_UNARY(log2);  case log10b: EV_UNARY(log10);
@@ -180,12 +180,12 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case acosb: EV_UNARY(acos);  case atanb:  EV_UNARY(atan);
         case sinhb: EV_UNARY(sinh);  case coshb:  EV_UNARY(cosh);
         case tanhb: EV_UNARY(tanh);
-        case gammab:  EV_UNARY(math::tgamma<double>);
-        case digammab:  EV_UNARY(math::digamma<double>);
-        case trigammab:  EV_UNARY(math::trigamma<double>);
-        case lgammab:  EV_UNARY(math::lgamma<double>);
+        case tgammab:  EV_UNARY(tgamma<double>);
+        case digammab:  EV_UNARY(digamma<double>);
+        case trigammab:  EV_UNARY(trigamma<double>);
+        case lgammab:  EV_UNARY(lgamma<double>);
         case erfb:  EV_UNARY(erf);
-        case zetab:  EV_UNARY(math::zeta<double>);
+        case zetab:  EV_UNARY(zeta<double>);
         default: RET_NONE; break;
     }
     return ret;
