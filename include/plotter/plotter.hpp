@@ -146,6 +146,8 @@ public:
     }
 
     void draw(Graphics& graph) {
+        if (xmin >= xmax) xmax = xmin + 1e-9;
+        if (ymin >= ymax) ymax = ymin + 1e-9;
         graph.rectangle(true, color::WHITE);
         double xdiff = xmax - xmin, ydiff = ymax - ymin;
 
@@ -571,12 +573,12 @@ public:
         }
     }
 
-    void reparse_expr() {
-        size_t idx = curr_func;
+    void reparse_expr(size_t idx = -1) {
+        if (idx == -1 ) idx = curr_func;
         auto& func = funcs[idx];
         auto& expr = func.expr;
         auto& expr_str = func.expr_str;
-        expr_str = be.read_editor(curr_func);
+        expr_str = be.read_editor(idx);
         size_t eqpos = util::find_equality(expr_str);
         if ((func.is_implicit = ~eqpos)) {
             auto lhs = expr_str.substr(0, eqpos),
@@ -611,7 +613,7 @@ public:
     void set_curr_func(int func_id) {
         if (func_id != curr_func) 
             be.show_error("");
-        reparse_expr();
+        reparse_expr(curr_func);
         curr_func = func_id;
         std::string suffix;
         if (curr_func == -1) {
@@ -640,7 +642,7 @@ public:
             }
         }
         be.set_func_name("Function " + std::to_string(curr_func) + suffix);
-        be.update_editor(func_id, funcs[curr_func].expr_str);
+        be.update_editor(func_id, funcs[func_id].expr_str);
         be.update(true);
     }
 
@@ -654,10 +656,14 @@ public:
             }
         } else {
             funcs[0].expr_str = "";
+            be.update_editor(0,
+                    funcs[0].expr_str);
         }
         if (idx == curr_func) {
             set_curr_func(curr_func); // Update text without changing index
             reparse_expr();
+        } else {
+            be.update_editor(idx, funcs[idx].expr_str);
         }
         be.update(true);
     }

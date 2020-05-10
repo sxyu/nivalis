@@ -78,8 +78,9 @@ struct OpenGLPlotBackend {
     using GLPlotter = Plotter<OpenGLPlotBackend, OpenGLGraphicsAdaptor>;
 
     static const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
+    static const int EDITOR_BUF_SZ = 256;
     OpenGLPlotBackend(Environment expr_env, const std::string& init_expr)
-        : plot(*this, expr_env, init_expr, SCREEN_WIDTH, SCREEN_HEIGHT) {
+        :  plot(*this, expr_env, init_expr, SCREEN_WIDTH, SCREEN_HEIGHT) {
             /* Initialize the library */
             if (!glfwInit()) return;
 
@@ -100,6 +101,15 @@ struct OpenGLPlotBackend {
             {
                 fprintf(stderr, "Failed to initialize OpenGL loader!\n");
                 return;
+            }
+
+            {
+                auto* col = edit_colors[0];
+                auto& fcol = plot.funcs[0].line_color;
+                col[0] = fcol.r / 255.;
+                col[1] = fcol.g / 255.;
+                col[2] = fcol.b / 255.;
+                col[3] = 1.;
             }
 
             IMGUI_CHECKVERSION();
@@ -127,8 +137,6 @@ struct OpenGLPlotBackend {
                     // Prevent ImGui events from coming here
                     GLPlotter& plot = be->plot;
                     if (io->WantCaptureKeyboard) {
-                        if (key == 261 && (mods & GLFW_MOD_CONTROL))
-                            plot.delete_func();
                         return;
                     }
                     if (action == GLFW_REPEAT || action == GLFW_PRESS) {
@@ -197,8 +205,11 @@ struct OpenGLPlotBackend {
             ImFont *font_sm = AddDefaultFont(12);
             ImFont *font_md = AddDefaultFont(14);
 
+            bool init = true;
+
             while (!glfwWindowShouldClose(window))
             {
+                bool open_color_picker = false;
                 glfwPollEvents();
                 // Clear
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -219,61 +230,111 @@ struct OpenGLPlotBackend {
                 plot.draw(adaptor);
 
                 // render GUI
-                ImGui::SetNextWindowSize(ImVec2(220, 100));
-                ImGui::Begin("Options", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize);
+                if (init) {
+                    ImGui::SetNextWindowPos(ImVec2(20, 30));
+                }
+                ImGui::Begin("Functions", NULL);
                 ImGui::PushFont(font_md);
 
-                ImGui::PushItemWidth(200.);
-                ImGui::TextUnformatted(func_name.c_str());
-                if (focus_on_text_input) {
-                    focus_on_text_input = false;
-                    ImGui::SetKeyboardFocusHere(-1);
-                }
-                ImGui::InputText("",
-                        editor_str, IM_ARRAYSIZE(editor_str),
-                        ImGuiInputTextFlags_CallbackHistory |
-                        ImGuiInputTextFlags_CallbackAlways,
-                        [](ImGuiTextEditCallbackData* data) -> int {
+                for (size_t func_idx = 0; func_idx < plot.funcs.size();
+                        ++func_idx) {
+                    if (focus_idx == func_idx) {
+                        focus_idx = -1;
+                        ImGui::SetKeyboardFocusHere(0);
+                    }
+                    const std::string fid = std::to_string(func_idx);
+                    ImGui::PushItemWidth(200.);
+                    if (ImGui::InputText(fid.c_str(),
+                            editor_strs[func_idx], EDITOR_BUF_SZ-1,
+                            ImGuiInputTextFlags_CallbackHistory,
+                            [](ImGuiTextEditCallbackData* data) -> int {
                             OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
                                     data->UserData);
                             GLPlotter& plot = be->plot;
-                            if (data->EventFlag == 
-                                   ImGuiInputTextFlags_CallbackHistory) {
-                                plot.set_curr_func(plot.curr_func +
-                                        (data->EventKey == 3 ? -1 : 1));
-                                data->CursorPos = data->SelectionStart =
-                                    data->SelectionEnd = data->BufTextLen =
-                                    (int)snprintf(data->Buf, (size_t)data->BufSize, "%s",
-                                            be->editor_str_back);
-                                    data->BufDirty = true;
-                            } else {
-                                if (strcmp(be->editor_str_back, be->editor_str)) {
-                                    plot.reparse_expr();
-                                    strcpy(be->editor_str_back, be->editor_str);
-                                }
-                            }
+                            plot.set_curr_func(plot.curr_func +
+                                    (data->EventKey == 3 ? -1 : 1));
+                            be->focus_idx = plot.curr_func;
                             return 0;
-                        }, this);
-                // Control
-                if (ImGui::Button("Reset view")) plot.reset_view();
-                ImGui::SameLine();
-                if (ImGui::Button("<")) plot.set_curr_func(plot.curr_func - 1);
-                ImGui::SameLine();
-                if (ImGui::Button(">")) plot.set_curr_func(plot.curr_func + 1);
-                ImGui::SameLine();
-                if (ImGui::Button("x")) plot.delete_func();
+                        }, this)) {
+                        plot.reparse_expr(func_idx);
+                    }
+                    if (ImGui::IsItemHovered() ||
+                            ImGui::IsItemActive()) {
+                        plot.set_curr_func(func_idx);
+                    }
+                    ImGui::SameLine();
+                    // ImGui::PushID(("cp" + fid).c_str());
+                    auto* col = edit_colors[func_idx];
+                    if (ImGui::ColorButton("c", 
+                                ImVec4(col[0], col[1], col[2], col[3]))) {
+                        open_color_picker = true;
+                        curr_edit_color_idx = func_idx;
+                    }
+                    ImGui::SameLine();
+                    ImGui::PushID(("del" + fid).c_str());
+                    if (ImGui::Button("x")) {
+                        for (int i = func_idx; i < plot.funcs.size()-1; ++i) {
+                            strcpy(editor_strs[i], editor_strs[i+1]);
+                            memcpy(edit_colors[i], edit_colors[i+1],
+                                    4*sizeof(float));
+                        }
+                        plot.delete_func(func_idx);
+                    }
+                }
+                if (ImGui::Button("+ New function")) {
+                    plot.set_curr_func(plot.funcs.size());
+                    auto* col = edit_colors[plot.funcs.size()-1];
+                    auto& fcol = plot.funcs.back().line_color;
+                    col[0] = fcol.r / 255.;
+                    col[1] = fcol.g / 255.;
+                    col[2] = fcol.b / 255.;
+                    col[3] = 1.;
+                }
                 ImGui::PushFont(font_sm);
                 ImGui::TextColored(ImColor(255, 50, 50), "%s", error_text.c_str());
                 ImGui::PushFont(font_md);
+                ImGui::End(); //  Functions
 
-                ImGui::End();
+                if (init) {
+                    ImGui::SetNextWindowPos(ImVec2(700, 30));
+                    ImGui::SetNextWindowSize(ImVec2(290, 105));
+                }
+                ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
+                ImGui::PushItemWidth(90.);
+                ImGui::InputDouble("xmin", &plot.xmin); ImGui::SameLine();
+                ImGui::PushItemWidth(90.);
+                ImGui::InputDouble("xmax", &plot.xmax);
+                ImGui::PushItemWidth(90.);
+                ImGui::InputDouble("ymin", &plot.ymin); ImGui::SameLine();
+                ImGui::PushItemWidth(90.);
+                ImGui::InputDouble("ymax", &plot.ymax);
+                if (ImGui::Button("Reset view")) plot.reset_view();
+                ImGui::End(); // View
 
                 if (marker_text.size()) {
                     ImGui::SetNextWindowPos(ImVec2(marker_posx, marker_posy));
                     ImGui::SetNextWindowSize(ImVec2(250, 50));
-                    ImGui::Begin("Marker", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar );
+                    ImGui::Begin("Marker", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
+                            ImGuiWindowFlags_NoFocusOnAppearing);
                     ImGui::TextUnformatted(marker_text.c_str());
                     ImGui::End();
+                }
+                if(open_color_picker) {
+                    ImGui::OpenPopup("Color picker");
+                }
+                if (ImGui::BeginPopupModal("Color picker", NULL,
+                            ImGuiWindowFlags_AlwaysAutoResize))
+                {
+                    auto* sel_col = edit_colors[curr_edit_color_idx];
+                    ImGui::ColorPicker3("color", sel_col);
+                    if (ImGui::Button("Ok", ImVec2(100.f, 0.0f))) {
+                        auto& fcol = plot.funcs[curr_edit_color_idx].line_color;
+                        fcol.r = static_cast<uint8_t>(sel_col[0] * 255.);
+                        fcol.g = static_cast<uint8_t>(sel_col[1] * 255.);
+                        fcol.b = static_cast<uint8_t>(sel_col[2] * 255.);
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::EndPopup();
                 }
 
                 // Render dear imgui into screen
@@ -282,17 +343,19 @@ struct OpenGLPlotBackend {
 
                 glfwSwapBuffers(window);
                 glfwPollEvents();
+                init = false;
             }
+
             ImGui_ImplOpenGL3_Shutdown();
             ImGui_ImplGlfw_Shutdown();
             ImGui::DestroyContext();
     }
 
     // Set focus
-    void focus_editor() { // TODO
-        focus_on_text_input = true;
+    void focus_editor() {
+        focus_idx = plot.curr_func;
     }
-    void focus_background() { // TODO
+    void focus_background() {
         ImGui::SetWindowFocus();
     }
 
@@ -305,14 +368,13 @@ struct OpenGLPlotBackend {
     // Update editor (tb)
     // Assumes func_id is curr_func !
     void update_editor(int func_id, const std::string& contents) {
-        strncpy(editor_str_back, contents.c_str(), contents.size() + 1);
-        strncpy(editor_str, contents.c_str(), contents.size() + 1);
+        strcpy(editor_strs[func_id], contents.c_str());
     }
 
     // Get contents of editor (tb)
     // Assumes func_id is curr_func !
-    const char* read_editor(int func_id) {
-        return editor_str;
+    const char * read_editor(int func_id) {
+        return editor_strs[func_id];
     }
 
     // Set error label
@@ -337,10 +399,12 @@ struct OpenGLPlotBackend {
         marker_text.clear();
     }
 
-    char editor_str[256], editor_str_back[256];
+    char editor_strs[256][EDITOR_BUF_SZ];
     std::string func_name, error_text, marker_text;
     int marker_posx, marker_posy;
-    bool focus_on_text_input = true;
+    int focus_idx = 0;
+    float edit_colors[256][4];
+    int curr_edit_color_idx;
 
 private:
     // Templated plotter instance, contains plotter logic

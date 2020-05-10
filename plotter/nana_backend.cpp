@@ -163,11 +163,17 @@ struct NanaPlotBackend {
 
     // Update editor (tb)
     // Assumes func_id is curr_func !
-    void update_editor(int func_id, std::string contents) { tb.caption(contents); }
+    void update_editor(int func_id, std::string contents) {
+        if (func_id != plot.curr_func) return;
+        tb.caption(contents);
+    }
 
     // Get contents of editor (tb)
     // Assumes func_id is curr_func !
-    std::string read_editor(int func_id) { return tb.caption(); }
+    std::string read_editor(int func_id) {
+        if (func_id != plot.curr_func) return;
+        return tb.caption();
+    }
 
     // Set error label
     void show_error(const std::string& txt) { label_err.caption(txt); }
