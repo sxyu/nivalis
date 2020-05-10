@@ -128,7 +128,7 @@ public:
     Plotter(Backend& backend,
             const Environment& expr_env, std::string init_expr,
             int win_width, int win_height) :
-            be(backend), env(expr_env),
+            env(expr_env), be(backend), 
             swid(win_width), shigh(win_height) {
         curr_func = 0;
         funcs.emplace_back();
@@ -826,9 +826,9 @@ public:
                                             // at every pixel, row major
                                             // (-1 if no marker)
 
+    Environment env;
 private:
     Backend& be;
-    Environment env;
     Parser parser;
 
     std::queue<color::color> reuse_colors;   // Reusable colors

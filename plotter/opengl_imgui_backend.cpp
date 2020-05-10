@@ -5,10 +5,6 @@
 #include "plotter/plot_gui.hpp"
 #include <iostream>
 
-#include "expr.hpp"
-#include "parser.hpp"
-#include "util.hpp"
-
 #include "plotter/plotter.hpp"
 #include "imgui.h"
 #include "imstb_textedit.h"
@@ -108,7 +104,9 @@ struct OpenGLPlotBackend {
                 return;
             }
 
+            // Set up initial variable name, function color
             {
+                var_addr = plot.env.addr_of(var_name_buf, false);
                 auto* col = edit_colors[0];
                 auto& fcol = plot.funcs[0].line_color;
                 col[0] = fcol.r / 255.;
@@ -250,7 +248,7 @@ struct OpenGLPlotBackend {
                     const std::string fid = std::to_string(func_idx);
                     ImGui::PushItemWidth(200.);
                     if (ImGui::InputText(fid.c_str(),
-                            editor_strs[func_idx], EDITOR_BUF_SZ-1,
+                            editor_strs[func_idx], EDITOR_BUF_SZ,
                             ImGuiInputTextFlags_CallbackHistory,
                             [](ImGuiTextEditCallbackData* data) -> int {
                             OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
@@ -304,9 +302,32 @@ struct OpenGLPlotBackend {
                 ImGui::End(); //  Functions
 
                 if (init) {
+                    ImGui::SetNextWindowPos(ImVec2(20, 500));
+                    ImGui::SetNextWindowSize(ImVec2(350, 105));
+                }
+                ImGui::Begin("Sliders", NULL);
+
+                ImGui::PushItemWidth(50.);
+                if (ImGui::InputText("variable", var_name_buf, 256)) {
+                    var_addr = plot.env.addr_of(var_name_buf, false);
+                }
+                ImGui::SameLine(0., 10.0);
+                ImGui::InputFloat("min", &lo);
+                ImGui::SameLine();
+                ImGui::InputFloat("max", &hi);
+
+                ImGui::PushItemWidth(300.);
+                if (ImGui::SliderFloat("##sli", &varval, lo, hi)) {
+                    plot.env.vars[var_addr] = varval;
+                }
+
+                ImGui::End(); // Sliders
+
+                if (init) {
                     ImGui::SetNextWindowPos(ImVec2(700, 30));
                     ImGui::SetNextWindowSize(ImVec2(290, 105));
                 }
+
                 ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
                 ImGui::PushItemWidth(90.);
                 ImGui::InputDouble("xmin", &plot.xmin); ImGui::SameLine();
@@ -331,8 +352,7 @@ struct OpenGLPlotBackend {
                     ImGui::OpenPopup("Color picker");
                 }
                 if (ImGui::BeginPopupModal("Color picker", NULL,
-                            ImGuiWindowFlags_AlwaysAutoResize))
-                {
+                            ImGuiWindowFlags_AlwaysAutoResize)) {
                     auto* sel_col = edit_colors[curr_edit_color_idx];
                     ImGui::ColorPicker3("color", sel_col);
                     if (ImGui::Button("Ok", ImVec2(100.f, 0.0f))) {
@@ -407,18 +427,13 @@ struct OpenGLPlotBackend {
         marker_text.clear();
     }
 
-    char editor_strs[EDITOR_MAX_FUNCS+1][EDITOR_BUF_SZ];
+    char editor_strs[EDITOR_MAX_FUNCS][EDITOR_BUF_SZ];
     std::string func_name, error_text, marker_text;
     int marker_posx, marker_posy;
     size_t focus_idx = 0;
-    float edit_colors[EDITOR_MAX_FUNCS+1][4];
-    size_t curr_edit_color_idx;
 
 private:
     // Templated plotter instance, contains plotter logic
-    Environment env;
-    Parser parser;
-
     GLFWwindow* window;
 
     GLFWkeyfun imgui_key_callback;
@@ -428,6 +443,13 @@ private:
     ImGuiIO* imgui_io;
 
     GLPlotter plot;
+
+    float edit_colors[EDITOR_MAX_FUNCS][4];
+    size_t curr_edit_color_idx;
+
+    char var_name_buf[256] = "a";
+    float varval, lo = 0.0, hi = 1.0;
+    uint32_t var_addr;
 };
 }  // namespace
 
