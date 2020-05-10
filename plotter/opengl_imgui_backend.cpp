@@ -77,8 +77,13 @@ ImFont* AddDefaultFont(float pixel_size) {
 struct OpenGLPlotBackend {
     using GLPlotter = Plotter<OpenGLPlotBackend, OpenGLGraphicsAdaptor>;
 
+    // Screen size
     static const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
-    static const int EDITOR_BUF_SZ = 256;
+    // Max buffer size
+    static const int EDITOR_BUF_SZ = 1024;
+    // Maximum functions supported
+    static const int EDITOR_MAX_FUNCS = 128;
+
     OpenGLPlotBackend(Environment expr_env, const std::string& init_expr)
         :  plot(*this, expr_env, init_expr, SCREEN_WIDTH, SCREEN_HEIGHT) {
             /* Initialize the library */
@@ -87,16 +92,16 @@ struct OpenGLPlotBackend {
             /* Create a windowed mode window and its OpenGL context */
             window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT,
                     "Nivalis Plotter", NULL, NULL);
+            // Init glfw
             if (!window)
             {
                 glfwTerminate();
                 return;
             }
-
-            /* Make the window's context current */
             glfwMakeContextCurrent(window);
             glfwSwapInterval(1); // Enable vsync
 
+            // Init glew context
             if (glewInit() != GLEW_OK)
             {
                 fprintf(stderr, "Failed to initialize OpenGL loader!\n");
@@ -281,14 +286,17 @@ struct OpenGLPlotBackend {
                         plot.delete_func(func_idx);
                     }
                 }
-                if (ImGui::Button("+ New function")) {
-                    plot.set_curr_func(plot.funcs.size());
-                    auto* col = edit_colors[plot.funcs.size()-1];
-                    auto& fcol = plot.funcs.back().line_color;
-                    col[0] = fcol.r / 255.;
-                    col[1] = fcol.g / 255.;
-                    col[2] = fcol.b / 255.;
-                    col[3] = 1.;
+                if (plot.funcs.size() <= EDITOR_MAX_FUNCS) {
+                    if (ImGui::Button("+ New function")) {
+                        plot.set_curr_func(plot.funcs.size());
+                        auto* col = edit_colors[plot.funcs.size()-1];
+                        auto& fcol = plot.funcs.back().line_color;
+                        col[0] = fcol.r / 255.;
+                        col[1] = fcol.g / 255.;
+                        col[2] = fcol.b / 255.;
+                        col[3] = 1.;
+                        focus_idx = plot.funcs.size() - 1;
+                    }
                 }
                 ImGui::PushFont(font_sm);
                 ImGui::TextColored(ImColor(255, 50, 50), "%s", error_text.c_str());
@@ -399,12 +407,12 @@ struct OpenGLPlotBackend {
         marker_text.clear();
     }
 
-    char editor_strs[256][EDITOR_BUF_SZ];
+    char editor_strs[EDITOR_MAX_FUNCS+1][EDITOR_BUF_SZ];
     std::string func_name, error_text, marker_text;
     int marker_posx, marker_posy;
-    int focus_idx = 0;
-    float edit_colors[256][4];
-    int curr_edit_color_idx;
+    size_t focus_idx = 0;
+    float edit_colors[EDITOR_MAX_FUNCS+1][4];
+    size_t curr_edit_color_idx;
 
 private:
     // Templated plotter instance, contains plotter logic
