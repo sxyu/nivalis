@@ -6,10 +6,18 @@ endif()
 
 project( nivalis )
 
+set( _VERSION_ "0.0.3 alpha" )
+set( _COPYRIGHT_ "Alex Yu 2020" )
+
 set( CMAKE_CXX_STACK_SIZE "10000000" )
 set( CMAKE_CXX_STANDARD 17 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON)
 set( CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" )
+
+option ( USE_OPENGL_IMGUI "Use OpenGL3/GLFW/ImGui GUI backend" ON )
+option ( USE_NANA "Use Nana GUI backend (fallback if ImGui config fails)" ON )
+option ( USE_BOOST_MATH "Use Boost math function (e.g. gamma, digamma, zeta, beta)" ON )
+
 if (WIN32)
     set( COLOR_TERM OFF )
 else()
@@ -20,33 +28,14 @@ if( NOT CMAKE_BUILD_TYPE )
   set( CMAKE_BUILD_TYPE Release )
 endif()
 
+set( LIB_PROJ_NAME "libnivalis" )
 set( SHELL_PROJ_NAME "nivalis" )
 set( PLOT_GUI_PROJ_NAME "nivplot" )
-set( INCLUDE_DIR "include" )
+set( INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include" )
 
 if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -O3 -g" )
 endif ( CMAKE_COMPILER_IS_GNUCXX )
-
-set( Boost_USE_STATIC_LIBS ON )
-set( Boost_USE_STATIC ON )
-
-find_package(Boost REQUIRED COMPONENTS)
-
-find_package(Threads REQUIRED)
-IF (NOT WIN32)
-    find_package(X11 REQUIRED)
-    find_package(Fontconfig REQUIRED)
-    find_package(JPEG REQUIRED)
-endif()
-find_package(Nana REQUIRED)
-include_directories(
-    ${INCLUDE_DIR}
-    ${Boost_INCLUDE_DIRS}
-    ${X11_INCLUDE_DIR}
-    ${Fontconfig_INCLUDE_DIRS}
-    ${NANA_INCLUDE_DIR}
-)
 
 set(
     PROJ_EXECUTABLES
@@ -81,34 +70,140 @@ set(
   opcodes.cpp
   diff_expr.cpp
   plotter/common.cpp
-  plotter/nana_backend.cpp
 )
 
+include_directories(
+    ${INCLUDE_DIR}
+    ${X11_INCLUDE_DIR}
+    ${Fontconfig_INCLUDE_DIRS}
+    ${NANA_INCLUDE_DIR}
+)
+
+set (PROJ_DEPENDENCIES )
+
+set ( _BOOST_ENABLED_ "//" )
+set ( BOOST_ENABLED OFF )
+if ( USE_BOOST_MATH )
+    set( Boost_USE_STATIC_LIBS ON )
+    set( Boost_USE_STATIC ON )
+    find_package(Boost)
+    if (Boost_FOUND)
+        set ( _BOOST_ENABLED_ "" )
+        set ( BOOST_ENABLED ON )
+        message ( STATUS "Boost math found, enabled" )
+    else()
+        message ( WARNING "Boost math not found, some functions (beta, digamma,...) may not be available" )
+    endif()
+else ()
+    message ( STATUS "Boost math was disabled by user" )
+endif ()
+
+
+find_package(Threads REQUIRED)
+
+set ( _NANA_ENABLED_ "//" )
+set ( NANA_ENABLED OFF )
+set ( _OPENGL_IMGUI_ENABLED_ "//" )
+set ( OPENGL_IMGUI_ENABLED OFF )
+
+if ( USE_OPENGL_IMGUI )
+    set ( _OPENGL_IMGUI_ENABLED_ "" )
+    set ( OPENGL_IMGUI_ENABLED ON )
+    set ( IMGUI_DIR "${PROJECT_SOURCE_DIR}/3rdparty/imgui" )
+
+    find_package(PkgConfig REQUIRED)
+    pkg_search_module(GLFW REQUIRED glfw3)
+    include_directories(${GLFW_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
+    find_package(GLEW REQUIRED)
+    set( PROJ_DEPENDENCIES
+        ${PROJ_DEPENDENCIES} ${GLFW_LIBRARIES} ${GLFW_STATIC_LIBRARIES}
+        ${GLEW_LIBRARIES})
+
+    set ( SOURCES ${SOURCES}
+        "${IMGUI_DIR}/imgui.cpp"
+        "${IMGUI_DIR}/imgui_draw.cpp"
+        "${IMGUI_DIR}/imgui_widgets.cpp"
+        "${IMGUI_DIR}/imgui_stdlib.cpp"
+        "plotter/opengl_imgui_backend.cpp"
+    )
+    set ( SOURCES ${SOURCES}
+        "${IMGUI_DIR}/imgui_impl_opengl3.cpp"
+        "${IMGUI_DIR}/imgui_impl_glfw.cpp"
+        )
+    include_directories( "${IMGUI_DIR}")
+        
+    message ( STATUS "Using OpenGL with ImGui as backend" )
+else()
+    message ( STATUS "OpenGL + ImGui backend was disabled by user" )
+endif()
+
+if ( (USE_NANA) AND (NOT OPENGL_IMGUI_ENABLED) )
+    IF (NOT WIN32)
+        find_package(X11)
+        find_package(Fontconfig)
+        find_package(JPEG)
+    endif()
+    set (SOURCES ${SOURCES} "plotter/nana_backend.cpp")
+    find_package(Nana)
+    if ((NANA_FOUND) AND (X11_FOUND))
+        set ( _NANA_ENABLED_ "" )
+        set ( NANA_ENABLED ON )
+        message ( STATUS "Nana found, using as backend" )
+    else ()
+        message ( WARNING "Nana not found, Nana backend disabled" )
+    endif ()
+elseif ( NOT USE_NANA )
+    message ( STATUS "Nana was disabled by user" )
+endif ()
+
+if ( (NOT NANA_ENABLED) AND (NOT OPENGL_IMGUI_ENABLED) )
+    message ( FATAL_ERROR "No usable GUI backend found, exitting...")
+endif ()
+
+configure_file( version.hpp.in ${INCLUDE_DIR}/version.hpp )
+
 set (NANA_DEPENDENCIES
+    ${NANA_LIBRARIES}
     ${X11_X11_LIB}
     ${X11_Xft_LIB}
-    ${CMAKE_THREAD_LIBS_INIT}
     ${Fontconfig_LIBRARIES}
     ${JPEG_LIBRARIES}
 )
-# Ensure M_PI, M_E defined; ensure boost doesn't throw exception when evaluating out of domain
-add_definitions( -D_USE_MATH_DEFINES -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
+
+if ( BOOST_ENABLED )
+set (PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} Boost::boost )
+# ensure boost doesn't throw exception when evaluating out of domain
+add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
     -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
     -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error ) 
-
-foreach(targ ${PROJ_EXECUTABLES})
-add_executable( ${targ} ${HEADERS} ${SOURCES} main_${targ}.cpp )
-target_link_libraries( ${targ} ${Boost_LIBRARIES} ${NANA_LIBRARIES} ${NANA_DEPENDENCIES} )
-if ( MSVC )
-    # Extra flags for MSVC to stop it from complaining about LTCG, MT etc.
-    set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GL")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-endif ( MSVC )
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_link_libraries( ${targ} stdc++fs )
 endif ()
 
+if ( NANA_ENABLED )
+set (PROJ_DEPENDENCIES ${NANA_DEPENDENCIES} ${PROJ_DEPENDENCIES} )
+endif ()
+
+add_definitions( -D_USE_MATH_DEFINES ) 
+
+add_library( ${LIB_PROJ_NAME} STATIC ${HEADERS} ${SOURCES} )
+set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME 
+    ${SHELL_PROJ_NAME} )
+
+foreach(targ ${PROJ_EXECUTABLES})
+    add_executable( ${targ} main_${targ}.cpp )
+    target_link_libraries( ${targ}
+        ${LIB_PROJ_NAME}
+        ${CMAKE_THREAD_LIBS_INIT}
+        ${PROJ_DEPENDENCIES} )
+    
+    if ( MSVC )
+        # Extra flags for MSVC to stop it from complaining about LTCG, MT etc.
+        set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GL")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+    endif ( MSVC )
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_link_libraries( ${targ} stdc++fs )
+    endif ()
 endforeach()
 # Create source group for headers
 source_group( "Header Files" FILES ${HEADERS} )

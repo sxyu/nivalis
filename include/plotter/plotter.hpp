@@ -15,37 +15,17 @@
 #include "util.hpp"
 
 namespace nivalis {
-// Required Backend API
-// void focus_editor();                                focus on current function's editor
-// void focus_background();                            focus on background of window (off editor)
-// void close();                                       close GUI
-//
-// void update(bool force);                            update the GUI
-//
-// void update_editor(int func_id, std::string contents);   update the text in the editor for given function
-// std::string read_editor(int func_id);               get text in the editor for given function
-//
-// void show_error(std::string error_msg);                  show error message
-// void set_func_name(std::string name);                    set the 'function name' label if available
-//
-// void show_marker_at(const PointMarker& marker, int px, int py);     show the marker at the position, with given marker data
-// void hide_marker();                                                 hide the
 
-// Required Graphics API
-// void line(int ax, int ay, int bx, int by, color::color color);
-// void rectangle(int x, int y, int w, int h, bool fill, color::color color);
-// void rectangle(bool fill, color::color color);
-// void set_pixel(int x, int y, color::color color);
-// void string(int x, int y, std::string s, color::color c);
-// Hex codes of common colors
 namespace color {
+    // RGB color
     struct color {
         color();
         color(unsigned clr);
-        color(unsigned, unsigned, unsigned);
-        unsigned r, g, b;
+        color(uint8_t, uint8_t, uint8_t);
+        uint8_t r, g, b;
     };
     enum _colors {
+        // Hex codes of common colors
         WHITE = 0xFFFFFF,
         BLACK = 0x000000,
         DARK_GRAY = 0xa9a9a9,
@@ -61,24 +41,31 @@ namespace color {
     const color from_int(size_t color_index);
 }  // namespace color
 
-// Function in plotter
+// Represents function in plotter
 struct Function {
-    bool is_implicit;
+    // Function expression
     Expr expr;
     // Derivative, 2nd derivative
     Expr diff, ddiff;
     // Reciprocal, derivative of reciprocal
     Expr recip, drecip;
+    // Color of function's line
     color::color line_color;
+    // Original expression string in editor
     std::string expr_str;
+    // Whether function is implicit
+    bool is_implicit;
     // Store x-positions of currently visible roots and extrema
+    // does not include y-int (0)
     std::vector<double> roots_and_extrema;
 };
 
+// Marks a single point on the plot which can be clicked
 struct PointMarker {
     double x, y; // position
     int sx, sy;  // location on screen (if applicable)
     enum {
+        // Label to show when hovered over/clicked
         LABEL_NONE,
         LABEL_X_INT,
         LABEL_Y_INT,
@@ -88,9 +75,10 @@ struct PointMarker {
         LABEL_INFLECTION_PT,
     } label;
     size_t rel_func; // associated function, -1 if N/A
-    // passive: show title,position on click
-    // else: show on hover
+    // passive: show marker with title,position on click
+    // else: show .. on hover
     bool passive;
+    // Get string corresponding to each label enum entry
     static constexpr const char* label_repr(int lab) {
         switch(lab) {
             case LABEL_X_INT: return "x-intercept\n";
@@ -104,6 +92,36 @@ struct PointMarker {
     }
 };
 
+/** Generic GUI plotter logic; used in plot_gui.hpp with appropriate backend
+ * Register GUI event handlers to call handle_xxx
+ * Register resize handler to call resize
+ * Call draw() in drawing event/loop
+ * Call reset_view() to reset view, delete_func() delete function,
+ * set_curr_func() to set current function, etc.
+ *
+ * * Required Backend API
+ * void close();                                                        close GUI window
+ * void focus_editor();                                                 focus on current function's editor, if applicable
+ * void focus_background();                                             focus on background of window (off editor), if applicable
+
+ * void update(bool force);                                             update the GUI (redraw); force: force draw, else may ignore
+
+ * void update_editor(int func_id, std::string contents);               update the text in the (expression) editor for given function
+ * std::string read_editor(int func_id);                                get text in the editor for given function
+
+ * void show_error(std::string error_msg);                              show error message (empty = clear)
+ * void set_func_name(std::string name);                                set the 'function name' label if available
+
+ * void show_marker_at(const PointMarker& marker, int px, int py);     show the marker (point label) at the position, with given marker data
+ * void hide_marker();                                                 hide the marker
+
+ * * Required Graphics adapter API
+ * void line(int ax, int ay, int bx, int by, color::color color);                 draw line
+ * void rectangle(int x, int y, int w, int h, bool fill, color::color color);     draw rectangle (filled or non-filled)
+ * void rectangle(bool fill, color::color color);                                 fill entire view
+ * void set_pixel(int x, int y, color::color color);                              set single pixel
+ * void string(int x, int y, std::string s, color::color c);                      draw a string
+ * */
 template<class Backend, class Graphics>
 class Plotter {
 public:
@@ -122,11 +140,9 @@ public:
 
         x_var = env.addr_of("x", false);
         y_var = env.addr_of("y", false);
-    }
 
-    void setup_editor() {
         be.update_editor(curr_func, funcs[curr_func].expr_str);
-        reparse_expr();
+        set_curr_func(0);
     }
 
     void draw(Graphics& graph) {
@@ -477,7 +493,12 @@ public:
                     prev_asd = asd;
                 }
                 // Draw roots/extrema/y-int
-                push_if_valid(0., roots_and_extrema); // y-int
+                if (func.expr.ast[0] != OpCode::null) {
+                    env.vars[x_var] = 0;
+                    double y = expr(env);
+                    if (!std::isnan(y) && !std::isinf(y)) 
+                        push_if_valid(0., roots_and_extrema); // y-int
+                }
                 for (double x : roots_and_extrema) {
                     env.vars[x_var] = x;
                     double y = expr(env);
@@ -588,6 +609,9 @@ public:
     }
 
     void set_curr_func(int func_id) {
+        if (func_id != curr_func) 
+            be.show_error("");
+        reparse_expr();
         curr_func = func_id;
         std::string suffix;
         if (curr_func == -1) {
@@ -638,27 +662,6 @@ public:
         be.update(true);
     }
 
-    void zoom(bool upwards, int distance, int px, int py) {
-        dragdown = false;
-        constexpr double multiplier = 0.01;
-        double scaling;
-        if (upwards) {
-            scaling = exp(-log(distance) * multiplier);
-        } else {
-            scaling = exp(log(distance) * multiplier);
-        }
-        double xdiff = (xmax - xmin) * (scaling-1.);
-        double ydiff = (ymax - ymin) * (scaling-1.);
-
-        double focx = px * 1. / swid;
-        double focy = py * 1./ shigh;
-        xmax += xdiff * (1-focx);
-        xmin -= xdiff * focx;
-        ymax += ydiff * focy;
-        ymin -= ydiff * (1-focy);
-        be.update();
-    }
-
     void resize(int width, int height) {
         double wf = (xmax - xmin) * (1.*width / swid - 1.) / 2;
         double hf = (ymax - ymin) * (1.*height / shigh - 1.) / 2;
@@ -683,17 +686,19 @@ public:
                 // q: quit
                 be.close();
                 break;
-            case 37: case 38: case 39: case 40:
-                // Arrows
-                if (key & 1) {
-                    // LR
+            case 37: case 39: case 262: case 263:
+                    // LR Arrow
+                {
                     auto delta = (xmax - xmin) * 0.02;
-                    if (key == 37) delta = -delta;
+                    if (key == 37 || key == 263) delta = -delta;
                     xmin += delta; xmax += delta;
-                } else {
-                    // UD
+                }
+                be.update();
+                break;
+            case 38: case 40: case 264: case 265:
+                {
                     auto delta = (ymax - ymin) * 0.02;
-                    if (key == 40) delta = -delta;
+                    if (key == 40 || key == 264) delta = -delta;
                     ymin += delta; ymax += delta;
                 }
                 be.update();
@@ -721,8 +726,10 @@ public:
                 }
                 break;
             case 69:
-                // E: Edit (focus tb)
-                be.focus_editor();
+                // ctrl E: Edit (focus tb)
+                if (ctrl) {
+                    be.focus_editor();
+                }
                 break;
         }
     }
@@ -778,6 +785,27 @@ public:
         // Stop dragging
         draglabel = dragdown = false;
         be.hide_marker();
+    }
+
+    void handle_mouse_wheel(bool upwards, int distance, int px, int py) {
+        dragdown = false;
+        constexpr double multiplier = 0.01;
+        double scaling;
+        if (upwards) {
+            scaling = exp(-log(distance) * multiplier);
+        } else {
+            scaling = exp(log(distance) * multiplier);
+        }
+        double xdiff = (xmax - xmin) * (scaling-1.);
+        double ydiff = (ymax - ymin) * (scaling-1.);
+
+        double focx = px * 1. / swid;
+        double focy = py * 1./ shigh;
+        xmax += xdiff * (1-focx);
+        xmin -= xdiff * focx;
+        ymax += ydiff * focy;
+        ymin -= ydiff * (1-focy);
+        be.update();
     }
 
     int swid, shigh;            // Screen size

@@ -3,11 +3,11 @@ namespace nivalis {
 namespace color {
 color::color() = default;
 color::color(unsigned clr)
-        : r((static_cast<unsigned>(clr)& 0xFF0000) >> 16),
-          g((static_cast<unsigned>(clr)& 0xFF00) >> 8),
-          b(static_cast<unsigned>(clr)& 0xFF) { }
+        : r(static_cast<uint8_t>((clr& 0xFF0000) >> 16)),
+          g(static_cast<uint8_t>((clr& 0xFF00) >> 8)),
+          b(static_cast<uint8_t>(clr& 0xFF)) { }
 
-color::color(unsigned r, unsigned g, unsigned b) : r(r), g(g), b(b) {}
+color::color(uint8_t r, uint8_t g, uint8_t b) : r(r), g(g), b(b) {}
 
 const color from_int(size_t color_index) {
     static const color palette[] = {
