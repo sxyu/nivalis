@@ -277,7 +277,7 @@ struct OpenGLPlotBackend {
                     ImGui::SameLine();
                     // ImGui::PushID(("cp" + fid).c_str());
                     auto* col = edit_colors[func_idx];
-                    if (ImGui::ColorButton("c", 
+                    if (ImGui::ColorButton("c",
                                 ImVec4(col[0], col[1], col[2], col[3]))) {
                         open_color_picker = true;
                         curr_edit_color_idx = func_idx;
@@ -307,6 +307,7 @@ struct OpenGLPlotBackend {
                             col[3] = 1.;
                             focus_idx = plot.funcs.size() - 1;
                         }
+                        ImGui::SameLine();
                     }
                 }
                 if (ImGui::Button("? Help")) {
@@ -340,12 +341,12 @@ struct OpenGLPlotBackend {
                             } else if (sliders_vars.count(var_name)) {
                                 // Already has slider
                                 slider_error = "Duplicate slider for " +
-                                    var_name  + "\n"; 
+                                    var_name  + "\n";
                                 sl.var_addr = -1;
                                 sl.var_name.clear();
                             } else if (var_name == "x" || var_name == "y") {
                                 // Not allowed to set in slider (reserved)
-                                slider_error = var_name  + " is reserved\n"; 
+                                slider_error = var_name  + " is reserved\n";
                                 sl.var_addr = -1;
                                 sl.var_name.clear();
                             } else {
