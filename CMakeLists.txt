@@ -58,7 +58,6 @@ set(
   HEADERS
   version.hpp
   parser.hpp
-  plotgui.hpp
   env.hpp
   expr.hpp
   ast_nodes.hpp
@@ -66,14 +65,14 @@ set(
   eval_expr.hpp
   opcodes.hpp
   diff_expr.hpp
-  plotter.hpp
+  plotter/plotter.hpp
+  plotter/plot_gui.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
 set(
   SOURCES
   parser.cpp
-  plotgui.cpp
   env.cpp
   expr.cpp
   ast_nodes.cpp
@@ -81,7 +80,8 @@ set(
   eval_expr.cpp
   opcodes.cpp
   diff_expr.cpp
-  plotter.cpp
+  plotter/common.cpp
+  plotter/nana_backend.cpp
 )
 
 set (NANA_DEPENDENCIES

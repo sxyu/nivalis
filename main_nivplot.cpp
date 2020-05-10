@@ -1,6 +1,6 @@
 #include "parser.hpp"
 #include "version.hpp"
-#include "plotgui.hpp"
+#include "plotter/plot_gui.hpp"
 #include "util.hpp"
 #include <string>
 #include <vector>

@@ -1,4 +1,4 @@
-#include "plotgui.hpp"
+#include "plotter/plot_gui.hpp"
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -12,7 +12,7 @@
 #include "parser.hpp"
 #include "util.hpp"
 
-#include "plotter.hpp"
+#include "plotter/plotter.hpp"
 
 #include "nana/gui/widgets/form.hpp"
 #include "nana/gui/widgets/label.hpp"
@@ -21,7 +21,6 @@
 #include "nana/gui/drawing.hpp"
 #include "nana/gui.hpp"
 #include "nana/gui/widgets/button.hpp"
-// #include <nana/gui/dragger.hpp>
 #include <nana/threads/pool.hpp>
 
 namespace nivalis {
