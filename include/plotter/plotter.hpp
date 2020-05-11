@@ -616,15 +616,16 @@ public:
             expr = parser(expr_str, env, true, true);
         }
         if (!expr.is_null()) {
+            expr.optimize();
             func.diff = expr.diff(x_var, env);
             if (!func.diff.is_null())
                 func.ddiff = func.diff.diff(x_var, env);
             else func.ddiff.ast[0] = OpCode::null;
             func.recip = Expr::constant(1.) / func.expr;
+            func.recip.optimize();
             func.drecip = func.recip.diff(x_var, env);
         } else func.diff.ast[0] = OpCode::null;
         be.show_error(parser.error_msg);
-        expr.optimize();
         be.update();
     }
 

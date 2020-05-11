@@ -94,6 +94,10 @@ int main(int argc, char ** argv) {
             }
 
             auto expr = parse(line, env, !do_diff);
+            if (do_optim) {
+                expr.optimize();
+                std::cout << expr.repr(env) << "\n";
+            }
             if (do_diff) {
                 Expr diff = expr.diff(diff_var_addr, env);
                 std::cout << diff.repr(env) << "\n";

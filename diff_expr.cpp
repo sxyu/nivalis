@@ -12,7 +12,8 @@ namespace detail {
 namespace {
 
 #define EV_NEXT eval_ast(env, ast)
-#define DIFF_NEXT diff_ast_recursive(ast, env, var_addr, out)
+#define DIFF_NEXT if (!diff_ast_recursive(ast, env, var_addr, out)) \
+                        return false
 #define PUSH_OP(op) out.push_back(op)
 #define PUSH_CONST(dbl) util::push_dbl(out, dbl)
 #define CHAIN_RULE(derivop1, derivop2) { \
@@ -40,7 +41,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
     uint32_t opcode = **ast;
     ++*ast;
     switch(opcode) {
-        case null: return false;
+        case null: PUSH_OP(null); break;
         case val: PUSH_CONST(0.); *ast += 2; break;
         case ref: PUSH_CONST(**ast == var_addr ? 1. : 0.); ++*ast; break;
         case bnz:

@@ -79,7 +79,7 @@ std::string Expr::repr(const Environment& env) const {
     const uint32_t* astptr = &ast[0];
     detail::print_ast(ss, &astptr, &env);
     auto s = ss.str();
-    if (s.size() >= 2 && 
+    if (s.size() >= 2 &&
         s[0] == '(' && s.back() == ')') s = s.substr(1, s.size()-2);
     return s;
 }
@@ -107,10 +107,10 @@ double Expr::newton(uint32_t var_addr, double x0, Environment& env,
     for (int i = 0; i < max_iter; ++i) {
         env.vars[var_addr] = x0;
         double fx = (*this)(env);
-        if(std::isnan(fx)) 
+        if(std::isnan(fx))
             return std::numeric_limits<double>::quiet_NaN(); // Fail
         double dfx = (*deriv)(env);
-        if(std::isnan(dfx) || dfx == 0.) 
+        if(std::isnan(dfx) || dfx == 0.)
             return std::numeric_limits<double>::quiet_NaN(); // Fail
         double delta = fx / dfx;
         x0 -= delta;
