@@ -175,8 +175,6 @@ const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
         func_opcodes["fafact"] = OpCode::fafact;
         func_opcodes["rifact"] = OpCode::rifact;
 
-        func_opcodes["bsel"] = OpCode::bsel;
-
         // "pseudo-instructions"
         func_opcodes["fact"] = -1;
         func_opcodes["N"] = -1; // standard normal

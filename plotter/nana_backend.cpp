@@ -24,15 +24,47 @@ using namespace nana;
 namespace {
 
 struct NanaGraphicsAdaptor {
-    void line(float ax, float ay, float bx, float by, color::color c) {
-        graph.line(point((int)ax, (int)ay), point((int)bx, (int)by), nana::color(c.r, c.g, c.b));
+    void line(float ax, float ay, float bx, float by, color::color c, float thickness = 1.) {
+        int axi = (int)ax, ayi = (int)ay, bxi = (int)bx, byi = (int) by;
+        nana::color cl(c.r, c.g, c.b);
+        if (thickness >= 2.) {
+            graph.line(point(axi+1, ayi), point(bxi+1, byi), cl);
+            graph.line(point(axi, ayi+1), point(bxi, byi+1), cl);
+        }
+        if (thickness >= 3.) {
+            graph.line(point(axi-1, ayi), point(bxi-1, byi), cl);
+            graph.line(point(axi, ayi-1), point(bxi, byi-1), cl);
+        }
+        graph.line(point(axi, ayi), point(bxi, byi), cl);
+    }
+    void polyline(const std::vector<std::array<float, 2> >& points, color::color c, float thickness = 1.) {
+        nana::color cl(c.r, c.g, c.b);
+        graph.line_begin((int)points[0][0], (int)points[0][1]);
+        for (size_t i = 1; i < points.size(); ++i)
+            graph.line_to(point((int)points[i][0], (int)points[i][1]), cl);
+        if (thickness >= 2.) {
+            graph.line_begin((int)points[0][0]+1, (int)points[0][1]);
+            for (size_t i = 1; i < points.size(); ++i)
+                graph.line_to(point((int)points[i][0]+1, (int)points[i][1]), cl);
+            graph.line_begin((int)points[0][0], (int)points[0][1]+1);
+            for (size_t i = 1; i < points.size(); ++i)
+                graph.line_to(point((int)points[i][0], (int)points[i][1]+1), cl);
+        }
+        if (thickness >= 3.) {
+            graph.line_begin((int)points[0][0]-1, (int)points[0][1]);
+            for (size_t i = 1; i < points.size(); ++i)
+                graph.line_to(point((int)points[i][0]-1, (int)points[i][1]), cl);
+            graph.line_begin((int)points[0][0], (int)points[0][1]-1);
+            for (size_t i = 1; i < points.size(); ++i)
+                graph.line_to(point((int)points[i][0], (int)points[i][1]-1), cl);
+        }
     }
     void rectangle(float x, float y, float w, float h, bool fill, color::color c) {
         graph.rectangle(nana::rectangle((int)x, (int)y, (int)w, (int)h),
                 fill, nana::color(c.r, c.g, c.b));
     }
-    void clear(bool fill, color::color c) {
-        graph.rectangle(fill, nana::color(c.r, c.g, c.b));
+    void clear(color::color c) {
+        graph.rectangle(true, nana::color(c.r, c.g, c.b));
     }
     void set_pixel(float x, float y, color::color c) {
         graph.set_pixel((int)x, (int)y, nana::color(c.r, c.g, c.b));

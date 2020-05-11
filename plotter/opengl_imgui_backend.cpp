@@ -20,9 +20,17 @@ namespace nivalis {
 namespace {
 
 struct OpenGLGraphicsAdaptor {
-    void line(float ax, float ay, float bx, float by, color::color c) {
+    void line(float ax, float ay, float bx, float by, color::color c, float thickness = 1.) {
         draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
-                ImColor(c.r, c.g, c.b));
+                ImColor(c.r, c.g, c.b), thickness);
+    }
+    void polyline(const std::vector<std::array<float, 2> >& points, color::color c, float thickness = 1.) {
+        std::vector<ImVec2> line(points.size());
+        for (size_t i = 0; i < line.size(); ++i) {
+            line[i].x = (float) points[i][0];
+            line[i].y = (float) points[i][1];
+        }
+        draw_list->AddPolyline(&line[0], line.size(), ImColor(c.r, c.g, c.b), false, thickness);
     }
     void rectangle(float x, float y, float w, float h, bool fill, color::color c) {
         if (fill) {
@@ -34,7 +42,7 @@ struct OpenGLGraphicsAdaptor {
                     ImColor(c.r, c.g, c.b));
         }
     }
-    void clear(bool fill, color::color c) {
+    void clear(color::color c) {
         glClearColor(c.r/255., c.g/255., c.b/255., 1.0f);
     }
     void set_pixel(float x, float y, color::color c) {

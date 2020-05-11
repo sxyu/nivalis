@@ -98,23 +98,29 @@ bool Expr::is_null() const {
 
 double Expr::newton(uint32_t var_addr, double x0, Environment& env,
         double eps_step, double eps_abs, int max_iter,
-        double xmin, double xmax, const Expr* deriv) const {
+        double xmin, double xmax, const Expr* deriv,
+        double fx0, double dfx0) const {
     if (deriv == nullptr) {
         Expr deriv_expr = diff(var_addr, env);
         return newton(var_addr, x0, env, eps_step,
-                eps_abs, max_iter, xmin, xmax, &deriv_expr);
+                eps_abs, max_iter, xmin, xmax, &deriv_expr, fx0, dfx0);
     }
     for (int i = 0; i < max_iter; ++i) {
-        env.vars[var_addr] = x0;
-        double fx = (*this)(env);
-        if(std::isnan(fx))
-            return std::numeric_limits<double>::quiet_NaN(); // Fail
-        double dfx = (*deriv)(env);
-        if(std::isnan(dfx) || dfx == 0.)
-            return std::numeric_limits<double>::quiet_NaN(); // Fail
-        double delta = fx / dfx;
+        if (i || dfx0 == std::numeric_limits<double>::max()) {
+            env.vars[var_addr] = x0;
+            if (i || fx0 == std::numeric_limits<double>::max()) {
+                fx0 = (*this)(env);
+                if(std::isnan(fx0)) return std::numeric_limits<double>::quiet_NaN(); // Fail
+            }
+            dfx0 = (*deriv)(env);
+            if(std::isnan(dfx0) || dfx0 == 0.) return std::numeric_limits<double>::quiet_NaN(); // Fail
+        }
+        double delta = fx0 / dfx0;
         x0 -= delta;
-        if (std::fabs(delta) < eps_step && std::fabs(fx) < eps_abs) return x0;
+        if (std::fabs(delta) < eps_step && std::fabs(fx0) < eps_abs) {
+            // Found root
+            return x0;
+        }
         if (x0 < xmin || x0 > xmax) {
             return std::numeric_limits<double>::quiet_NaN(); // Fail
         }

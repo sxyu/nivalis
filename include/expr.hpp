@@ -49,15 +49,18 @@ struct Expr {
     bool is_null() const;
 
     // Use Newton(-Raphson) method to compute root for variable with addr var_addr
-    // optionally, supply computed derivative
     // eps_step: stopping condition, |f(x)/df(x)|
     // eps_abs: stopping condition, |f(x)|
     // max_iter: stopping condition, steps
+    // deriv: optionally, supply computed derivative
+    // fx0, dfx0: optionally, supply computed funciton/derivative values at x0
     double newton(uint32_t var_addr, double x0, Environment& env,
                   double eps_step, double eps_abs, int max_iter = 20,
                   double xmin = -std::numeric_limits<double>::max(),
                   double xmax = std::numeric_limits<double>::max(),
-                  const Expr* deriv = nullptr) const;
+                  const Expr* deriv = nullptr,
+                  double fx0 = std::numeric_limits<double>::max(),
+                  double dfx0 = std::numeric_limits<double>::max()) const;
 
     // Abstract syntax tree
     std::vector<uint32_t> ast;
