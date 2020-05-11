@@ -138,7 +138,7 @@ private:
             case PRI_ADD_SUB:
                 for (int64_t i = right - 1; i >= left; --i) {
                     const char c = expr[i];
-                    if ((c == '+' || c == '-') && 
+                    if ((c == '+' || c == '-') &&
                             i > left && !util::is_operator(expr[i-1])) {
                         result.ast.push_back(c == '+' ? OpCode::add :
                                 OpCode::sub);
@@ -249,7 +249,7 @@ private:
                           expr[tok_link[left]+1] == '[')) {
                     // Special form
                     int64_t funname_end = tok_link[left] + 1;
-                    int64_t arg_end = 
+                    int64_t arg_end =
                         expr[tok_link[left]+1] == '(' ?
                         tok_link[tok_link[left]+1] + 1 :
                         tok_link[left] + 1;
@@ -257,7 +257,7 @@ private:
                         PARSE_ERR("Expected '[' after special form argument\n");
                     }
                     const std::string func_name = expr.substr(left, funname_end - left);
-                    
+
                     size_t var_end = -1, comma_pos = -1;
                     for (size_t k = funname_end+1; k < static_cast<size_t>(arg_end - 1); ++k) {
                         if (expr[k] == ':') var_end = k;
@@ -269,7 +269,7 @@ private:
                             PARSE_ERR(func_name << " expected argument syntax "
                                        "(<var>:<begin>,<end>)\n");
                         }
-                        result.ast.push_back(func_name[0] == 's' ? 
+                        result.ast.push_back(func_name[0] == 's' ?
                                              OpCode::sums : OpCode::prods);
                         std::string varname =
                             expr.substr(funname_end + 1, var_end -
@@ -379,7 +379,7 @@ private:
                     }
                     return true;
                 } else if ((util::is_varname_first(c) ||
-                            (c=='&' && left < right - 1)) && 
+                            (c=='&' && left < right - 1)) &&
                            util::is_literal(cr)) {
                     // Variable name
                     result.ast.resize(result.ast.size() + 2, OpCode::ref);
@@ -392,7 +392,11 @@ private:
                         result.ast.pop_back(); result.ast.pop_back();
                         if (it != constant_values.end()) {
                             // Fixed constant value (e.g. pi)
-                            util::push_dbl(result.ast, it->second);
+                            if (std::isnan(it->second)) {
+                                result.ast.push_back(OpCode::null);
+                            } else {
+                                util::push_dbl(result.ast, it->second);
+                            }
                             return true;
                         }
                         PARSE_ERR("Undefined variable \"" << varname + "\"\n");
