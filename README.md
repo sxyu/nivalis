@@ -62,9 +62,35 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - Sum/prod special forms: `sum(x:1:10)[<expr>]` and `prod(x:1:10)[<expr>]` (inclusive indexing, upper index can be < lower)
     - Derivative special form: `diff(x)[<expr>]`
 
-### GUI
-- In Shell enter `plot` to show plotter GUI, or `plot <function_expr>` to plot a function expression
-    - Alternatively (0.0.3), run the `nivplot` binary to open GUI directly
+### OpenGL GUI
+- Run the `./nivplot` binary to open GUI
+- Background window (plotter)
+    - Drag mouse (or arrow keys) to move, scroll (or `=`/`-`)  to zoom
+    - `Ctrl`/`Alt` and `=`/`-` to zoom asymmetrically
+    - Mouse over a marked point (minimum/maximum/intersection etc) to see label+coordinates
+- Function window (editor)
+    - `Ctrl`+`E` to edit function expressions (or click the textbox)
+        - Function expressions can be:
+            - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`
+            - Implicit function (slower, less detail):
+              e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
+        - Updates plot automatically
+    - Click `+ New function` to add a function. Click textbox to highlight functions. Alternatively, use `Up`/`Down` arrow keys in textbox to switch between functions or add a new one (by going beyond the bottomost existing function)
+    - Click the x button to delete the current function
+    - Click the `? Help` button for a reference documenting functions/operators etc.
+- View window
+    - `Ctrl`+`H` or click the reset view button (View window) to reset to home view (around origin)
+    - Modify the bounds numbers on the View window to change view (minx maxx miny maxy) manually
+- Sliders window
+    - Click `+ New slider` to add slider
+    - Once added, change first textbox to change variable to modify when moving slider
+    - Second/third boxes are lower/upper bounds for the slider
+    - Click x button to delete slider
+    - Click on slider below to change the variable value
+    - E.g. if variable is `a`, you can write `a*x` in some function (in the Function window) and then drag the slider to see the function change smoothly
+
+### Nana GUI
+- Run the `./nivplot` binary to open GUI
 - After launch, `Ctrl`+`E` to edit function expression (or click the textbox)
     - Function expressions can be:
         - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`
@@ -72,7 +98,7 @@ The evaluator parses expressions into custom bytecode, which is optimized before
           e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
     - Updates plot automatically
 - `Up`/`Down` arrow keys in textbox (or use `<` `>` buttons below textbox) to switch functions or add new functions (by going past last defined function)
-- `Delete` or click the x button to delete current function
+- Click the x button or press `Ctrl`+`Del` to delete current function
 - Drag mouse (or arrow keys) to move, scroll (or `=`/`-`)  to zoom
 - `Ctrl`/`Alt` and `=`/`-` to zoom asymmetrically
 - `Ctrl`+`H` or click the reset view button to reset to home view (around origin)
