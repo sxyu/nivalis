@@ -24,21 +24,21 @@ using namespace nana;
 namespace {
 
 struct NanaGraphicsAdaptor {
-    void line(int ax, int ay, int bx, int by, color::color c) {
-        graph.line(point(ax, ay), point(bx, by), nana::color(c.r, c.g, c.b));
+    void line(float ax, float ay, float bx, float by, color::color c) {
+        graph.line(point((int)ax, (int)ay), point((int)bx, (int)by), nana::color(c.r, c.g, c.b));
     }
-    void rectangle(int x, int y, int w, int h, bool fill, color::color c) {
-        graph.rectangle(nana::rectangle(x,y,w,h),
+    void rectangle(float x, float y, float w, float h, bool fill, color::color c) {
+        graph.rectangle(nana::rectangle((int)x, (int)y, (int)w, (int)h),
                 fill, nana::color(c.r, c.g, c.b));
     }
-    void rectangle(bool fill, color::color c) {
+    void clear(bool fill, color::color c) {
         graph.rectangle(fill, nana::color(c.r, c.g, c.b));
     }
-    void set_pixel(int x, int y, color::color c) {
-        graph.set_pixel(x, y, nana::color(c.r, c.g, c.b));
+    void set_pixel(float x, float y, color::color c) {
+        graph.set_pixel((int)x, (int)y, nana::color(c.r, c.g, c.b));
     }
-    void string(int x, int y, const std::string& s, color::color c) {
-        graph.string(point(x, y), s, nana::color(c.r, c.g, c.b));
+    void string(float x, float y, const std::string& s, color::color c) {
+        graph.string(point((int)x, (int)y), s, nana::color(c.r, c.g, c.b));
     }
     NanaGraphicsAdaptor(nana::paint::graphics& graph) : graph(graph) {}
     nana::paint::graphics& graph;
@@ -163,14 +163,14 @@ struct NanaPlotBackend {
 
     // Update editor (tb)
     // Assumes func_id is curr_func !
-    void update_editor(int func_id, std::string contents) {
+    void update_editor(size_t func_id, std::string contents) {
         if (func_id != plot.curr_func) return;
         tb.caption(contents);
     }
 
     // Get contents of editor (tb)
     // Assumes func_id is curr_func !
-    std::string read_editor(int func_id) {
+    std::string read_editor(size_t func_id) {
         if (func_id != plot.curr_func) return "";
         return tb.caption();
     }

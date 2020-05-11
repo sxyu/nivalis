@@ -20,11 +20,11 @@ namespace nivalis {
 namespace {
 
 struct OpenGLGraphicsAdaptor {
-    void line(int ax, int ay, int bx, int by, color::color c) {
+    void line(float ax, float ay, float bx, float by, color::color c) {
         draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
                 ImColor(c.r, c.g, c.b));
     }
-    void rectangle(int x, int y, int w, int h, bool fill, color::color c) {
+    void rectangle(float x, float y, float w, float h, bool fill, color::color c) {
         if (fill) {
             draw_list->AddRectFilled(ImVec2(x,y), ImVec2(x+w, y+h),
                     ImColor(c.r, c.g, c.b));
@@ -34,14 +34,14 @@ struct OpenGLGraphicsAdaptor {
                     ImColor(c.r, c.g, c.b));
         }
     }
-    void rectangle(bool fill, color::color c) {
+    void clear(bool fill, color::color c) {
         glClearColor(c.r/255., c.g/255., c.b/255., 1.0f);
     }
-    void set_pixel(int x, int y, color::color c) {
+    void set_pixel(float x, float y, color::color c) {
         draw_list->AddRect(ImVec2(x,y), ImVec2(x, y),
                 ImColor(c.r, c.g, c.b));
     }
-    void string(int x, int y, const std::string& s, color::color c) {
+    void string(float x, float y, const std::string& s, color::color c) {
         // String using ImGui API
         draw_list->AddText(ImVec2(x, y),
                 ImColor(c.r, c.g, c.b), s.c_str());
@@ -109,9 +109,9 @@ struct OpenGLPlotBackend {
             {
                 auto* col = edit_colors[0];
                 auto& fcol = plot.funcs[0].line_color;
-                col[0] = fcol.r / 255.;
-                col[1] = fcol.g / 255.;
-                col[2] = fcol.b / 255.;
+                col[0] = fcol.r / 255.0f;
+                col[1] = fcol.g / 255.0f;
+                col[2] = fcol.b / 255.0f;
                 col[3] = 1.;
             }
 
@@ -156,7 +156,7 @@ struct OpenGLPlotBackend {
                     // Prevent ImGui events from coming here
                     if (io->WantCaptureMouse) return;
                     GLPlotter& plot = be->plot;
-                    plot.handle_mouse_move(xpos, ypos);
+                    plot.handle_mouse_move(static_cast<int>(xpos), static_cast<int>(ypos));
             });
 
             imgui_mousebutton_callback =
@@ -169,12 +169,14 @@ struct OpenGLPlotBackend {
                     double xpos, ypos;
                     glfwGetCursorPos(window, &xpos, &ypos);
                     be->imgui_mousebutton_callback(window, button, action, mods);
+                    int xposi = static_cast<int>(xpos);
+                    int yposi = static_cast<int>(ypos);
                     if (action == GLFW_PRESS) {
                         // Prevent ImGui events from coming here
                         if (io->WantCaptureMouse) return;
-                        plot.handle_mouse_down(xpos, ypos);
+                        plot.handle_mouse_down(xposi, yposi);
                     } else { //if (action == GLFW_RELEASE) {
-                        plot.handle_mouse_up(xpos, ypos);
+                        plot.handle_mouse_up(xposi, yposi);
                     }
             });
 
@@ -202,8 +204,9 @@ struct OpenGLPlotBackend {
                     double xpos, ypos;
                     glfwGetCursorPos(window, &xpos, &ypos);
                     plot.handle_mouse_wheel(
-                            yoffset > 0, std::abs(yoffset) * 120,
-                            xpos, ypos);
+                            yoffset > 0, static_cast<int>(std::fabs(yoffset) * 120),
+                            static_cast<int>(xpos),
+                            static_cast<int>(ypos));
             });
             ImFont *font_sm = AddDefaultFont(12);
             ImFont *font_md = AddDefaultFont(14);
@@ -284,7 +287,7 @@ struct OpenGLPlotBackend {
                     }
                     ImGui::SameLine();
                     if (ImGui::Button(("x##delfun-" + fid).c_str())) {
-                        for (int i = func_idx; i < plot.funcs.size()-1; ++i) {
+                        for (size_t i = func_idx; i < plot.funcs.size()-1; ++i) {
                             strcpy(editor_strs[i], editor_strs[i+1]);
                             memcpy(edit_colors[i], edit_colors[i+1],
                                     4*sizeof(float));
@@ -301,9 +304,9 @@ struct OpenGLPlotBackend {
                             plot.set_curr_func(plot.funcs.size());
                             auto* col = edit_colors[plot.funcs.size()-1];
                             auto& fcol = plot.funcs.back().line_color;
-                            col[0] = fcol.r / 255.;
-                            col[1] = fcol.g / 255.;
-                            col[2] = fcol.b / 255.;
+                            col[0] = fcol.r / 255.0f;
+                            col[1] = fcol.g / 255.0f;
+                            col[2] = fcol.b / 255.0f;
                             col[3] = 1.;
                             focus_idx = plot.funcs.size() - 1;
                         }
@@ -319,7 +322,8 @@ struct OpenGLPlotBackend {
                 ImGui::End(); //  Functions
 
                 if (init) {
-                    ImGui::SetNextWindowPos(ImVec2(20, 700));
+                    ImGui::SetNextWindowPos(ImVec2(20,
+                            static_cast<float>(SCREEN_HEIGHT - 220)));
                     ImGui::SetNextWindowSize(ImVec2(290, 200));
                 }
                 ImGui::Begin("Sliders", NULL);
@@ -355,6 +359,8 @@ struct OpenGLPlotBackend {
                                 sliders_vars.insert(var_name);
                                 sl.var_name = var_name;
                                 slider_error.clear();
+                                for (size_t t = 0; t < plot.funcs.size(); ++t)
+                                    plot.reparse_expr(t);
                             }
                         }
                     }
@@ -390,9 +396,11 @@ struct OpenGLPlotBackend {
                         ++var_name[0];
                     }
                     sl.var_name = var_name;
-                    strcpy(sl.var_name_buf, var_name.c_str());
+                    strncpy(sl.var_name_buf, var_name.c_str(), var_name.size()+1);
                     sl.var_addr = plot.env.addr_of(sl.var_name_buf, false);
                     plot.env.vars[sl.var_addr] = sl.lo;
+                    for (size_t t = 0; t < plot.funcs.size(); ++t)
+                        plot.reparse_expr(t);
                     sliders_vars.insert(var_name);
                 }
                 ImGui::PushFont(font_sm);
@@ -403,7 +411,8 @@ struct OpenGLPlotBackend {
                 ImGui::End(); // Sliders
 
                 if (init) {
-                    ImGui::SetNextWindowPos(ImVec2(760, 30));
+                    ImGui::SetNextWindowPos(ImVec2(
+                                static_cast<float>(SCREEN_WIDTH - 275), 30));
                     ImGui::SetNextWindowSize(ImVec2(250, 105));
                 }
 
@@ -420,7 +429,8 @@ struct OpenGLPlotBackend {
                 ImGui::End(); // View
 
                 if (marker_text.size()) {
-                    ImGui::SetNextWindowPos(ImVec2(marker_posx, marker_posy));
+                    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(marker_posx),
+                                static_cast<float>(marker_posy)));
                     ImGui::SetNextWindowSize(ImVec2(250, 50));
                     ImGui::Begin("Marker", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
                             ImGuiWindowFlags_NoFocusOnAppearing);
@@ -527,13 +537,13 @@ struct OpenGLPlotBackend {
 
     // Update editor (tb)
     // Assumes func_id is curr_func !
-    void update_editor(int func_id, const std::string& contents) {
-        strcpy(editor_strs[func_id], contents.c_str());
+    void update_editor(size_t func_id, const std::string& contents) {
+        strncpy(editor_strs[func_id], contents.c_str(), contents.size()+1);
     }
 
     // Get contents of editor (tb)
     // Assumes func_id is curr_func !
-    const char * read_editor(int func_id) {
+    const char * read_editor(size_t func_id) {
         return editor_strs[func_id];
     }
 

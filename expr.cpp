@@ -104,7 +104,6 @@ double Expr::newton(uint32_t var_addr, double x0, Environment& env,
         return newton(var_addr, x0, env, eps_step,
                 eps_abs, max_iter, xmin, xmax, &deriv_expr);
     }
-    // std::cerr << ">>" << x0 << "\n";
     for (int i = 0; i < max_iter; ++i) {
         env.vars[var_addr] = x0;
         double fx = (*this)(env);
@@ -115,7 +114,6 @@ double Expr::newton(uint32_t var_addr, double x0, Environment& env,
             return std::numeric_limits<double>::quiet_NaN(); // Fail
         double delta = fx / dfx;
         x0 -= delta;
-        // std::cerr << x0 << " " << std::fabs(delta) << " "<<std::fabs(fx)<<"\n";
         if (std::fabs(delta) < eps_step && std::fabs(fx) < eps_abs) return x0;
         if (x0 < xmin || x0 > xmax) {
             return std::numeric_limits<double>::quiet_NaN(); // Fail

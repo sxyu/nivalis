@@ -244,7 +244,7 @@ private:
                     return true;
                 }
                 else if (cr == ']' && ~tok_link[left] &&
-                        tok_link[left]+1 < expr.size() &&
+                        tok_link[left]+1 < static_cast<int64_t>(expr.size()) &&
                          (expr[tok_link[left]+1] == '(' ||
                           expr[tok_link[left]+1] == '[')) {
                     // Special form
@@ -259,7 +259,7 @@ private:
                     const std::string func_name = expr.substr(left, funname_end - left);
                     
                     size_t var_end = -1, comma_pos = -1;
-                    for (size_t k = funname_end+1; k < arg_end - 1; ++k) {
+                    for (size_t k = funname_end+1; k < static_cast<size_t>(arg_end - 1); ++k) {
                         if (expr[k] == ':') var_end = k;
                         else if (~var_end && expr[k] == ',') comma_pos = k;
                     }
@@ -424,7 +424,6 @@ private:
                 }
         }
         return _parse(left, right, pri+1);
-        return true;
     }
     Environment& env;
     const std::string& expr;

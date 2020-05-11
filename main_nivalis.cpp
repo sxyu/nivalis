@@ -1,6 +1,5 @@
 #include "parser.hpp"
 #include "version.hpp"
-#include "plotter/plot_gui.hpp"
 #include "util.hpp"
 #include <string>
 #include <vector>
@@ -54,10 +53,6 @@ int main(int argc, char ** argv) {
         std::string cmd = get_word(orig_line);
         util::trim(orig_line);
         if (cmd == "exit") break;
-        else if (cmd == "plot") {
-            // Plot function
-            PlotGUI gui(env, orig_line);
-        }
         else if (cmd == "del") {
             // Delete variable
             if (env.del(orig_line)) {

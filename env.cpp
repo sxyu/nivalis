@@ -10,8 +10,8 @@ bool Environment::is_set(const std::string& var_name) {
 uint32_t Environment::addr_of(const std::string& var_name, bool mode_explicit) {
     if (var_name[0] == '&') {
         // Address
-        auto addr = std::atoll(var_name.substr(1).c_str());
-        return (addr < 0 || static_cast<size_t>(addr) >= vars.size()) ? -1 : addr;
+        int64_t addr = std::atoll(var_name.substr(1).c_str());
+        return (addr < 0 || static_cast<size_t>(addr) >= vars.size()) ? -1 : static_cast<uint32_t>(addr);
     }
     auto it = vreg.find(var_name);
     if (it != vreg.end()) {
@@ -34,11 +34,11 @@ uint32_t Environment::addr_of(const std::string& var_name, bool mode_explicit) {
 uint32_t Environment::addr_of(const std::string& var_name, bool mode_explicit) const {
     if (var_name[0] == '&') {
         // Address
-        auto addr = std::atoll(var_name.substr(1).c_str());
-        return (addr < 0 || static_cast<size_t>(addr) >= vars.size()) ? -1 : addr;
+        int64_t addr = std::atoll(var_name.substr(1).c_str());
+        return (addr < 0 || static_cast<size_t>(addr) >= vars.size()) ? -1 : static_cast<uint32_t>(addr);
     }
     auto it = vreg.find(var_name);
-    return it != vreg.end() ? : -1;
+    return it != vreg.end() ? it->second : -1;
 }
 void Environment::set(const std::string& var_name, double value) {
     auto idx = addr_of(var_name, false);

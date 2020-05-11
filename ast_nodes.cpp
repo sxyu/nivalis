@@ -1,6 +1,7 @@
 #include "ast_nodes.hpp"
 
 #include <string_view>
+#include <iostream>
 #include <cstring>
 #include <cmath>
 #include <boost/math/constants/constants.hpp>
@@ -24,14 +25,18 @@ ASTNode::ASTNode(uint32_t opcode) : opcode(opcode) {
 }
 
 uint32_t ast_to_nodes(const uint32_t** ast, std::vector<ASTNode>& store) {
-    uint32_t node_idx = store.size();
+    uint32_t node_idx = static_cast<uint32_t>(store.size());
     store.emplace_back(**ast);
     std::string_view repr = subexpr_repr(store.back().opcode);
     ++*ast;
     uint32_t cct = 0;
     for (char c : repr) {
         switch(c) {
-            case '@': store[node_idx].c[cct++] = ast_to_nodes(ast, store);
+            case '@':
+                {
+                    uint32_t ret = ast_to_nodes(ast, store);
+                    store[node_idx].c[cct++] = ret;
+                }
                       break; // subexpr
             case '#': store[node_idx].val = util::as_double(*ast); *ast += 2; break; // value
             case '&': store[node_idx].ref = **ast; ++*ast; break; // ref
@@ -56,6 +61,11 @@ uint32_t ast_to_nodes(const uint32_t** ast, std::vector<ASTNode>& store) {
 
 void ast_from_nodes(const std::vector<ASTNode>& nodes, std::vector<uint32_t>& out, uint32_t index) {
     const auto& node = nodes[index];
+    if (index >= nodes.size()) {
+        std::cerr << "ast_from_nodes ERROR: invalid AST. Node index " <<
+            index << " out of bounds.\n";
+        return;
+    }
     std::string_view repr = subexpr_repr(node.opcode);
     out.push_back(node.opcode);
     uint32_t cct = 0;

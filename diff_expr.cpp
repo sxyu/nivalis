@@ -66,7 +66,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                 for (int64_t i = a; i != b; i += step) {
                     const uint32_t* tmp = *ast;
                     if (i + step != b) PUSH_OP(OpCode::add);
-                    env.vars[var_id] = i;
+                    env.vars[var_id] = static_cast<double>(i);
                     diff_ast_recursive(&tmp, env, var_addr, out);
                 }
                 skip_ast(ast);
@@ -90,15 +90,15 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                     for (int64_t j = a; j != b; j += step) {
                         if (j + step != b) PUSH_OP(OpCode::mul);
                         if (j == i) {
-                            env.vars[var_id] = i;
+                            env.vars[var_id] = static_cast<double>(i);
                             diff_tmp.clear();
                             const uint32_t* tmp = *ast;
-                            eval_ast_sub_var(&tmp, var_id, i, diff_tmp);
+                            eval_ast_sub_var(&tmp, var_id, static_cast<double>(i), diff_tmp);
                             tmp = &diff_tmp[0];
                             diff_ast_recursive(&tmp, env, var_addr, out);
                         } else {
                             const uint32_t* tmp2 = *ast;
-                            eval_ast_sub_var(&tmp2, var_id, j, out);
+                            eval_ast_sub_var(&tmp2, var_id, static_cast<double>(j), out);
                         }
                     }
                 }

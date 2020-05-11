@@ -3,6 +3,9 @@ cmake_minimum_required( VERSION 2.8 )
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
+if (POLICY CMP0048)
+    cmake_policy(SET CMP0048 NEW)
+endif (POLICY CMP0048)
 
 project( nivalis )
 
@@ -40,7 +43,6 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 set(
     PROJ_EXECUTABLES
     ${SHELL_PROJ_NAME}
-    ${PLOT_GUI_PROJ_NAME}
 )
 
 set(
@@ -107,23 +109,40 @@ set ( _OPENGL_IMGUI_ENABLED_ "//" )
 set ( OPENGL_IMGUI_ENABLED OFF )
 
 if ( USE_OPENGL_IMGUI )
+    set ( IMGUI_DIR "${PROJECT_SOURCE_DIR}/3rdparty/imgui" )
+    set ( GLFW_DIR "${PROJECT_SOURCE_DIR}/3rdparty/glfw3" )
+
+    find_package(PkgConfig)
+    if ( NOT PkgConfig_FOUND )
+        add_subdirectory( "${GLFW_DIR}" )
+        set( PROJ_DEPENDENCIES
+            ${PROJ_DEPENDENCIES} glfw)
+    else()
+        pkg_check_modules(GLFW glfw3)
+        if ( NOT glfw3_FOUND )
+            add_subdirectory( "${GLFW_DIR}" )
+            set( PROJ_DEPENDENCIES
+                ${PROJ_DEPENDENCIES} glfw)
+        endif ()
+    endif ()
+    find_package(OpenGL REQUIRED)
+    find_package(GLEW REQUIRED)
+    add_definitions(-DGLEW_STATIC)
+
+    include_directories("${GLFW_DIR}/include" ${GLEW_INCLUDE_DIRS})
+
     set ( _OPENGL_IMGUI_ENABLED_ "" )
     set ( OPENGL_IMGUI_ENABLED ON )
-    set ( IMGUI_DIR "${PROJECT_SOURCE_DIR}/3rdparty/imgui" )
-
-    find_package(PkgConfig REQUIRED)
-    pkg_search_module(GLFW REQUIRED glfw3)
-    include_directories(${GLFW_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
-    find_package(GLEW REQUIRED)
     set( PROJ_DEPENDENCIES
+        OpenGL::GL
         ${PROJ_DEPENDENCIES} ${GLFW_LIBRARIES} ${GLFW_STATIC_LIBRARIES}
-        ${GLEW_LIBRARIES})
+        ${GLEW_LIBRARIES}
+        )
 
     set ( SOURCES ${SOURCES}
         "${IMGUI_DIR}/imgui.cpp"
         "${IMGUI_DIR}/imgui_draw.cpp"
         "${IMGUI_DIR}/imgui_widgets.cpp"
-        "${IMGUI_DIR}/imgui_stdlib.cpp"
         "plotter/opengl_imgui_backend.cpp"
     )
     set ( SOURCES ${SOURCES}
@@ -145,7 +164,7 @@ if ( (USE_NANA) AND (NOT OPENGL_IMGUI_ENABLED) )
     endif()
     set (SOURCES ${SOURCES} "plotter/nana_backend.cpp")
     find_package(Nana)
-    if ((NANA_FOUND) AND (X11_FOUND))
+    if (NANA_FOUND)
         set ( _NANA_ENABLED_ "" )
         set ( NANA_ENABLED ON )
         message ( STATUS "Nana found, using as backend" )
@@ -156,8 +175,10 @@ elseif ( NOT USE_NANA )
     message ( STATUS "Nana was disabled by user" )
 endif ()
 
-if ( (NOT NANA_ENABLED) AND (NOT OPENGL_IMGUI_ENABLED) )
-    message ( FATAL_ERROR "No usable GUI backend found, exitting...")
+if ( (NANA_ENABLED) OR (OPENGL_IMGUI_ENABLED) )
+    set( PROJ_EXECUTABLES ${PROJ_EXECUTABLES} ${PLOT_GUI_PROJ_NAME} )
+else()
+    message ( WARNING "No usable GUI backend found, no GUI will be built...")
 endif ()
 
 configure_file( version.hpp.in ${INCLUDE_DIR}/version.hpp )
@@ -171,11 +192,15 @@ set (NANA_DEPENDENCIES
 )
 
 if ( BOOST_ENABLED )
-set (PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} Boost::boost )
+    include_directories( ${Boost_INCLUDE_DIRS} )
+    set (PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} )
 # ensure boost doesn't throw exception when evaluating out of domain
 add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
     -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
     -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error ) 
+if ( MSVC )
+    add_definitions(-D_HAS_AUTO_PTR_ETC=1)
+endif ()
 endif ()
 
 if ( NANA_ENABLED )
@@ -196,10 +221,12 @@ foreach(targ ${PROJ_EXECUTABLES})
         ${PROJ_DEPENDENCIES} )
     
     if ( MSVC )
-        # Extra flags for MSVC to stop it from complaining about LTCG, MT etc.
         set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GL")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+        add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+        if ( NANA_ENABLED )
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GLT")
+            set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+        endif ()
     endif ( MSVC )
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         target_link_libraries( ${targ} stdc++fs )

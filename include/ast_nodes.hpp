@@ -10,7 +10,7 @@ namespace detail {
 // ** AST node form processing + optimization **
 // AST Node representation
 struct ASTNode {
-    ASTNode(uint32_t opcode); 
+    explicit ASTNode(uint32_t opcode); 
     uint32_t opcode, c[3], ref;
     double val;
     bool nonconst_flag, null_flag;

@@ -1,4 +1,8 @@
 #pragma once
+#ifdef _MSC_VER 
+#pragma warning( disable : 4244 )
+#endif
+
 #ifndef _PLOTTER_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
 #define _PLOTTER_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
 #include <cstddef>
@@ -106,8 +110,8 @@ struct PointMarker {
 
  * void update(bool force);                                             update the GUI (redraw); force: force draw, else may ignore
 
- * void update_editor(int func_id, std::string contents);               update the text in the (expression) editor for given function
- * std::string read_editor(int func_id);                                get text in the editor for given function
+ * void update_editor(size_t func_id, std::string contents);               update the text in the (expression) editor for given function
+ * std::string read_editor(size_t func_id);                                get text in the editor for given function
 
  * void show_error(std::string error_msg);                              show error message (empty = clear)
  * void set_func_name(std::string name);                                set the 'function name' label if available
@@ -116,11 +120,11 @@ struct PointMarker {
  * void hide_marker();                                                 hide the marker
 
  * * Required Graphics adapter API
- * void line(int ax, int ay, int bx, int by, color::color color);                 draw line
- * void rectangle(int x, int y, int w, int h, bool fill, color::color color);     draw rectangle (filled or non-filled)
- * void rectangle(bool fill, color::color color);                                 fill entire view
- * void set_pixel(int x, int y, color::color color);                              set single pixel
- * void string(int x, int y, std::string s, color::color c);                      draw a string
+ * void line(float ax, float ay, float bx, float by, color::color color);                 draw line
+ * void rectangle(float x, float y, float w, float h, bool fill, color::color color);     draw rectangle (filled or non-filled)
+ * void clear(bool fill, color::color color);                                             fill entire view (clear)
+ * void set_pixel(float x, float y, color::color color);                                  set single pixel
+ * void string(float x, float y, std::string s, color::color c);                          draw a string
  * */
 template<class Backend, class Graphics>
 class Plotter {
@@ -148,7 +152,7 @@ public:
     void draw(Graphics& graph) {
         if (xmin >= xmax) xmax = xmin + 1e-9;
         if (ymin >= ymax) ymax = ymin + 1e-9;
-        graph.rectangle(true, color::WHITE);
+        graph.clear(true, color::WHITE);
         double xdiff = xmax - xmin, ydiff = ymax - ymin;
 
         int sx0 = 0, sy0 = 0;
@@ -343,7 +347,7 @@ public:
                 static const int rect_rad = 3, click_rect_rad = 4;
                 // Draw a line and construct markers along the line
                 // to allow clicking
-                auto draw_line = [&](double psx, double psy, double sx, double sy, double x, double y) {
+                auto draw_line = [&](int psx, int psy, int sx, int sy, double x, double y) {
                     graph.line(psx, psy, sx,sy, func_color);
                     graph.line(psx+1, psy, sx+1,sy, func_color);
                     graph.line(psx, psy+1, sx,sy+1, func_color);
@@ -370,7 +374,7 @@ public:
                         // Assign to grid
                         for (int r = std::max(syp - click_rect_rad, 0); r <= std::min(syp + click_rect_rad, shigh-1); ++r) {
                             for (int c = std::max<int>(sx - click_rect_rad, 0); c <= std::min<int>(sx + click_rect_rad, swid-1); ++c) {
-                                int existing_marker_idx = grid[r * swid + c];
+                                size_t existing_marker_idx = grid[r * swid + c];
                                 if (~existing_marker_idx) {
                                     auto& existing_marker = pt_markers[existing_marker_idx];
                                     if (util::sqr_dist(existing_marker.sx, existing_marker.sy, c, r) <=
@@ -385,8 +389,8 @@ public:
                     }
                     if (curr_func == exprid) {
                         // current function, thicken
-                        graph.line(psx-1, psy, sx-1,sy, func_color);
-                        graph.line(psx, psy-1, sx,sy-1, func_color);
+                        graph.line(psx-1, psy, sx-1, sy, func_color);
+                        graph.line(psx, psy-1, sx, sy-1, func_color);
                     }
                 };
                 // Find roots, asymptotes, extrema
@@ -442,12 +446,12 @@ public:
                                     env.vars[x_var] = prev_as + 1e-6;
                                     double yp = expr(env);
                                     if (yp > ymax && sy > 0) {
-                                        psx = prev_asd;
+                                        psx = static_cast<int>(prev_asd);
                                         psy = 0;
                                         reinit = false;
                                     }
                                     if (yp < ymin && sy < shigh) {
-                                        psx = prev_asd;
+                                        psx = static_cast<int>(prev_asd);
                                         psy = shigh;
                                         reinit = false;
                                     }
@@ -484,12 +488,12 @@ public:
                             double yp = expr(env);
                             int sx = -1, sy;
                             if (yp > ymax) {
-                                sx = asd;
+                                sx = static_cast<int>(asd);
                                 sy = 0;
                                 if (psy <= 0) sx = -1;
                             }
                             if (yp < ymin) {
-                                sx = asd;
+                                sx = static_cast<int>(asd);
                                 sy = shigh;
                                 if (psy >= shigh) sx = -1;
                             }
@@ -543,11 +547,12 @@ public:
                 if (!func.diff.is_null()) {
                     for (size_t exprid2 = 0; exprid2 < exprid; ++exprid2) {
                         auto& func2 = funcs[exprid2];
-                        if (!func2.diff.is_null()) continue;
+                        if (func2.diff.is_null()) continue;
                         if (func2.is_implicit) continue; // not supported right now
                         Expr sub_expr = expr - func2.expr;
-                        Expr diff_sub_expr = sub_expr.diff(x_var, env);
-                        if (diff_sub_expr.ast[0] == OpCode::null) continue;
+                        Expr diff_sub_expr = func.diff - func2.diff;
+                        diff_sub_expr.optimize();
+                        if (diff_sub_expr.is_null()) continue;
                         std::set<double> st;
                         for (int sxd = 0; sxd < swid; sxd += 5) {
                             const double x = sxd*1. * xdiff / swid + xmin;
@@ -623,7 +628,7 @@ public:
         be.update();
     }
 
-    void set_curr_func(int func_id) {
+    void set_curr_func(size_t func_id) {
         if (func_id != curr_func) 
             be.show_error("");
         reparse_expr(curr_func);
@@ -659,7 +664,7 @@ public:
         be.update(true);
     }
 
-    void delete_func(int idx = -1) {
+    void delete_func(size_t idx = -1) {
         if (idx == -1) idx = curr_func;
         if (funcs.size() > 1) {
             reuse_colors.push(funcs[idx].line_color);

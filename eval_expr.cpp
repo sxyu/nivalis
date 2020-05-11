@@ -128,7 +128,7 @@ double eval_ast(Environment& env, const uint32_t** ast) {
                 ret = 0.0;
                 for (int64_t i = a; i != b; i += step) {
                     const uint32_t* tmp = *ast;
-                    env.vars[var_id] = i;
+                    env.vars[var_id] = static_cast<double>(i);
                     ret += eval_ast(env, &tmp);
                 }
                 skip_ast(ast);
@@ -142,7 +142,7 @@ double eval_ast(Environment& env, const uint32_t** ast) {
                 ret = 1.0;
                 for (int64_t i = a; i != b; i += step) {
                     const uint32_t* tmp = *ast;
-                    env.vars[var_id] = i;
+                    env.vars[var_id] = static_cast<double>(i);
                     ret *= eval_ast(env, &tmp);
                 }
                 skip_ast(ast);
@@ -160,11 +160,11 @@ double eval_ast(Environment& env, const uint32_t** ast) {
 
         case max: ret = std::max(EV_NEXT, EV_NEXT); break;
         case min: ret = std::min(EV_NEXT, EV_NEXT); break;
-        case land: ret = EV_NEXT && EV_NEXT; break;
-        case lor: ret = EV_NEXT || EV_NEXT; break;
+        case land: ret = static_cast<double>(EV_NEXT && EV_NEXT); break;
+        case lor: ret = static_cast<double>(EV_NEXT || EV_NEXT); break;
         case lxor: ret = static_cast<bool>(EV_NEXT) ^ static_cast<bool>(EV_NEXT); break;
-        case gcd: { let_ab_i64; ret = std::gcd(a, b); } break;
-        case lcm: { let_ab_i64; ret = a * b / std::gcd(a, b); } break;
+        case gcd: { let_ab_i64; ret = static_cast<double>(std::gcd(a, b)); } break;
+        case lcm: { let_ab_i64; ret = a * b / static_cast<double>(std::gcd(a, b)); } break;
 #ifdef ENABLE_NIVALIS_BOOST_MATH
         case choose: { let_ab_u32; ret = binomial_coefficient<double>(a, b); } break;
         case fafact: { let_ab_u32; ret = falling_factorial<double>(a, b); } break;
@@ -206,15 +206,15 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case betab: case polygammab: skip_ast(ast); skip_ast(ast); ret = NONE; print_boost_warning(opcode);
 #endif
                 break;
-        case lt: ret = EV_NEXT; ret = ret < EV_NEXT; break;
-        case le: ret = EV_NEXT; ret = ret <= EV_NEXT; break;
-        case eq: ret = EV_NEXT == EV_NEXT; break;
-        case ne: ret = EV_NEXT != EV_NEXT; break;
-        case ge: ret = EV_NEXT; ret = ret >= EV_NEXT; break;
-        case gt: ret = EV_NEXT; ret = ret > EV_NEXT; break;
+        case lt: ret = EV_NEXT; ret = static_cast<double>(ret < EV_NEXT); break;
+        case le: ret = EV_NEXT; ret = static_cast<double>(ret <= EV_NEXT); break;
+        case eq: ret = static_cast<double>(EV_NEXT == EV_NEXT); break;
+        case ne: ret = static_cast<double>(EV_NEXT != EV_NEXT); break;
+        case ge: ret = EV_NEXT; ret = static_cast<double>(ret >= EV_NEXT); break;
+        case gt: ret = EV_NEXT; ret = static_cast<double>(ret > EV_NEXT); break;
 
         case unaryminus: ret = -EV_NEXT; break;
-        case lnot: ret = !EV_NEXT; break;
+        case lnot: ret = static_cast<double>(!EV_NEXT); break;
         case absb: EV_UNARY(fabs);
         case sqrtb: EV_UNARY(sqrt);
         case sqrb: ret = eval_ast(env, ast); ret *= ret; break;
