@@ -224,11 +224,17 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                 break;
         case unaryminus: PUSH_OP(unaryminus); DIFF_NEXT; break;
         case absb: {
+                       PUSH_OP(bnz); PUSH_OP(ge); 
                        const uint32_t* tmp = *ast;
-                       double value = eval_ast(env, &tmp);
-                       if (value >= 0.) { DIFF_NEXT; }
-                       else { PUSH_OP(unaryminus); DIFF_NEXT; }
+                       copy_to_derivative(tmp, out);
+                       PUSH_CONST(0.);
+                       std::vector<uint32_t> tmp_out;
+                       diff_ast_recursive(ast, env, var_addr, tmp_out);
+                       std::copy(tmp_out.begin(), tmp_out.end(), std::back_inserter(out));
+                       PUSH_OP(unaryminus);
+                       std::copy(tmp_out.begin(), tmp_out.end(), std::back_inserter(out));
                    }
+                   break;
         case sqrtb: CHAIN_RULE(
                             PUSH_OP(mul);
                             PUSH_CONST(0.5);
