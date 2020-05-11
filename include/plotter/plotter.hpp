@@ -469,17 +469,14 @@ public:
                                 reinit = true;
                             }
                             if (asymps.size() > 2 && asymps.size() < 100) {
-                                if ((as_idx > 1 && sxd - prev_asd < 1.) ||
-                                        (as_idx < asymps.size() - 1 && asd - sxd < 1.)) {
-                                    sxd += 0.1;
-                                } else if ((as_idx > 1 && sxd - prev_asd < 5.) ||
+                                if ((as_idx > 1 && sxd - prev_asd < 2.) ||
                                         (as_idx < asymps.size() - 1 && asd - sxd < 5.)) {
-                                    sxd += 0.2;
+                                    sxd += 0.4;
                                 } else {
-                                    sxd += 1.0;
+                                    sxd += 1.5;
                                 }
                             } else {
-                                sxd += 1.0;
+                                sxd += 1.5;
                             }
                         }
                         // Connect next asymptote

@@ -68,6 +68,7 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - Drag mouse (or arrow keys) to move, scroll (or `=`/`-`)  to zoom
     - `Ctrl`/`Alt` and `=`/`-` to zoom asymmetrically
     - Mouse over a marked point (minimum/maximum/intersection etc) to see label+coordinates
+    - Click any point on an explicit function to see the x-value and function value
 - Function window (editor)
     - `Ctrl`+`E` to edit function expressions (or click the textbox)
         - Function expressions can be:
@@ -88,6 +89,7 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - Click x button to delete slider
     - Click on slider below to change the variable value
     - E.g. if variable is `a`, you can write `a*x` in some function (in the Function window) and then drag the slider to see the function change smoothly
+![Screenshot2](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
 
 ### Nana GUI
 - Run the `./nivplot` binary to open GUI
@@ -103,5 +105,7 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 - `Ctrl`/`Alt` and `=`/`-` to zoom asymmetrically
 - `Ctrl`+`H` or click the reset view button to reset to home view (around origin)
 - Mouse over a marked point (minimum/maximum/intersection etc) to see label+coordinates
+- Click any point on an explicit function to see the x-value and function value
+
 ![Screenshot](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
 ![Screenshot: implicit functions (older version)](https://github.com/sxyu/nivalis/blob/master/readme_img/implicit.png?raw=true)

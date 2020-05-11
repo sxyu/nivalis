@@ -206,7 +206,10 @@ if ( BOOST_ENABLED )
 # ensure boost doesn't throw exception when evaluating out of domain
 add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
     -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
-    -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error ) 
+    -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
+    -DBOOST_MATH_ROUNDING_ERROR_POLICY=ignore_error
+    -DBOOST_MATH_EVALUATION_ERROR_POLICY=ignore_error
+    ) 
 if ( MSVC )
     add_definitions(-D_HAS_AUTO_PTR_ETC=1)
 endif ()
