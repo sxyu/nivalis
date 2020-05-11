@@ -111,25 +111,30 @@ set ( OPENGL_IMGUI_ENABLED OFF )
 if ( USE_OPENGL_IMGUI )
     set ( IMGUI_DIR "${PROJECT_SOURCE_DIR}/3rdparty/imgui" )
     set ( GLFW_DIR "${PROJECT_SOURCE_DIR}/3rdparty/glfw3" )
+    set ( USE_SYSTEM_GLFW ON )
 
     find_package(PkgConfig)
     if ( NOT PkgConfig_FOUND )
+        set ( USE_SYSTEM_GLFW OFF )
+    else()
+        set ( USE_SYSTEM_GLFW OFF )
+        pkg_check_modules(GLFW glfw3)
+        if ( NOT glfw3_FOUND )
+        endif ()
+    endif ()
+
+    if ( NOT USE_SYSTEM_GLFW )
         add_subdirectory( "${GLFW_DIR}" )
         set( PROJ_DEPENDENCIES
             ${PROJ_DEPENDENCIES} glfw)
-    else()
-        pkg_check_modules(GLFW glfw3)
-        if ( NOT glfw3_FOUND )
-            add_subdirectory( "${GLFW_DIR}" )
-            set( PROJ_DEPENDENCIES
-                ${PROJ_DEPENDENCIES} glfw)
-        endif ()
+        include_directories( "${GLFW_DIR}/include" )
     endif ()
+
     find_package(OpenGL REQUIRED)
     find_package(GLEW REQUIRED)
     add_definitions(-DGLEW_STATIC)
 
-    include_directories("${GLFW_DIR}/include" ${GLEW_INCLUDE_DIRS})
+    include_directories(${GLEW_INCLUDE_DIRS})
 
     set ( _OPENGL_IMGUI_ENABLED_ "" )
     set ( OPENGL_IMGUI_ENABLED ON )
