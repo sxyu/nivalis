@@ -6,25 +6,50 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 ## Dependencies
 - C++ 17
 - Boost 1.58+ (Optional, only need math)
-- GUI Library
-    - OpenGL3 and GLFW (and Dear ImGui which is included in repo), OR
-    - Nana
+- GUI Library; one of
+    - OpenGL3 and GLEW
+        - and glfw3, Dear ImGui which are included in repo
+    - Nana (limited 
 
 ## Installation
-- Install OpenGL3 and GLFW, OR
-- Install Nana <https://github.com/qPCR4vir/nana>
-    - Windows: Use Visual Studio 17. A solution file is in the build directory of the repo
-    - Linux: I used CMake to build. You may also try one of the other provided methods. Unfortunately CMake install doesn't appear to be set up correctly.
-      Aftr build, you'll need to manually install `libnana.a` to `/usr/local/lib` and copy `include/nana` directory to `/usr/local/include` (on Linux)
-        - Pitfall: if you decided to use CMake and build in the `build` directory, you must first rename the `build/makefile` directory in repo, or
-          else CMake's build will break
-- Configure project with CMake: `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release8`
-    - You may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
-    - You may need to set Nana's library path: `cmake .. -DNANA_LIBRARY='nana_output_lib_name'`
-- Built project: *Linux*: `make -j8` *MSVC*: `cmake --build . --config Release`, or open the solution
-    - To force disable Boost add `-DUSE_BOOST_MATH=OFF` to this command (some functions like digamma, beta will become unavailable)
-    - To disable OpenGL/Dear ImGui and force using Nana, add
-      `-DUSE_OPENGL_IMGUI=OFF` to this command 
+
+- I offer instructions for Ubuntu and Windows, since I only have access to these systems
+
+### Ubuntu 
+- Install a modern version of GCC which supports C++17
+- Choose a GUI backend option:
+    - Install OpenGL3, GLEW, and glfw3 (more features, recommended)
+        - `sudo apt update && sudo apt install -y pkg-config mesa-utils libglew-dev libglfw3-dev`
+    - Install Nana: clone and follow the instructions in <https://github.com/qPCR4vir/nana>. You can use CMake or just GCC. Good luck!
+- Configure project with CMake:
+    - `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release`
+    - CMake options:
+        - To force disable Boost math add `-DUSE_BOOST_MATH=OFF` to this command (some functions like digamma, beta will become unavailable)
+        - To force using glfw3 in the repo (as opposed to the one you installed) use `-DUSE_SYSTEM_GLFW=OFF`
+        - To disable OpenGL/Dear ImGui and force using Nana, add
+          `-DUSE_OPENGL_IMGUI=OFF` to this command 
+        - If using Nana: you may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
+          and library path: `cmake .. -DNANA_LIBRARY='nana_output_lib_name'`
+- Built project: `make -j8`
+
+### Windows
+- Install Visual Studio 2017+, if not already present. I used 2017
+- Choose a GUI backend option:
+    - Install GLEW, and glfw3 (more features, recommended)
+        - Go to  <http://glew.sourceforge.net/> and click "Binaries Windows 32-bit and 64-bit"; extract it somewhere. Note the directory
+            `.../glew-x.x.x` containing `include` and `lib/Release/x64/glew32s.lib`
+    - Install Nana <https://github.com/qPCR4vir/nana>
+        - Clone <https://github.com/qPCR4vir/nana>. VS solution files are in the build directory of this repo.
+- Configure project with CMake:
+    - `mkdir build && cd build && cmake .. -G"Visual Studio 15 2017 Win64" -DCMAKE_BUILD_TYPE=Release`
+    - CMake options:
+        - To force disable Boost math add `-DUSE_BOOST_MATH=OFF` to this command (some functions like digamma, beta will become unavailable)
+        - To force using glfw3 in the repo (as opposed to the one you installed) use `-DUSE_SYSTEM_GLFW=OFF`
+        - To disable OpenGL/Dear ImGui and force using Nana, add
+          `-DUSE_OPENGL_IMGUI=OFF` to this command 
+        - If using Nana: you may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
+          and library path: `cmake .. -DNANA_LIBRARY='nana_output_lib_name'`
+- Built project: `cmake --build . --config Release`, or open the solution in VS and build in "Release" configuration manually
 
 ## Usage 
 ### Shell
