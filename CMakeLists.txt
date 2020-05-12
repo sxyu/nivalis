@@ -158,6 +158,7 @@ if ( USE_OPENGL_IMGUI )
         OpenGL::GL
         ${PROJ_DEPENDENCIES} ${GLFW_STATIC_LIBRARIES}
         ${GLEW_LIBRARIES}
+        GLEW::glew_s
         )
 
     set ( SOURCES ${SOURCES}
