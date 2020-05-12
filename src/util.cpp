@@ -15,7 +15,7 @@ bool is_varname(const std::string& expr) {
     return true;
 }
 
-size_t find_equality(const std::string& expr) {
+size_t find_equality(const std::string& expr, char eqn_chr) {
     size_t stkh = 0;
     for (size_t i = 0; i < expr.size(); ++i) {
         const char c = expr[i];
@@ -23,7 +23,7 @@ size_t find_equality(const std::string& expr) {
             ++stkh;
         } else if (is_close_bracket(c)) {
             --stkh;
-        } else if (stkh == 0 && c == '=' &&
+        } else if (stkh == 0 && c == eqn_chr &&
                    i > 0 && i < expr.size()-1 &&
                    !util::is_comp_operator(expr[i-1]) &&
                    !util::is_comp_operator(expr[i+1])) {

@@ -60,11 +60,16 @@ struct Function {
     color::color line_color;
     // Original expression string in editor
     std::string expr_str;
-    // Whether function is implicit
-    bool is_implicit;
+    enum FuncType {
+        FUNC_TYPE_EXPLICIT, // normal func like x^2
+        FUNC_TYPE_IMPLICIT, // implicit func like abs(x)=abs(y)
+        FUNC_TYPE_POLYLINE,  // poly-lines (x,y) (x',y') (x'',y'')...
+    } type;
     // Store x-positions of currently visible roots and extrema
     // does not include y-int (0)
     std::vector<double> roots_and_extrema;
+    // Stores line points, if polyline-type
+    std::vector<Expr> polyline;
 };
 
 // Marks a single point on the plot which can be clicked
@@ -143,7 +148,7 @@ public:
         auto& f = funcs.back();
         f.expr_str = init_expr;
         f.line_color = color::from_int(last_expr_color++);
-        f.is_implicit = false;
+        f.type = Function::FUNC_TYPE_EXPLICIT;
         draglabel = dragdown = false;
 
         x_var = env.addr_of("x", false);
@@ -262,7 +267,7 @@ public:
         static const double MIN_DIST_BETWEEN_ROOTS  = 1e-4;
         // Point marker display size / mouse selecting area size
         static const int MARKER_DISP_RADIUS = 3,
-                         MARKER_MOUSE_RADIUS = 4;
+                     MARKER_MOUSE_RADIUS = 4;
 
         // x-epsilon for domain bisection
         // (finding cutoff where function becomes undefined)
@@ -290,453 +295,515 @@ public:
             auto& func = funcs[exprid];
             auto& expr = func.expr;
             const color::color& func_color = func.line_color;
-            if (func.is_implicit) {
-                // implicit function
-                int interval = 1;
-                std::vector<double> line(swid + 2);
-                // Increase interval per x pixels
-                static const size_t HIGH_PIX_LIMIT = 25000;
-                // Maximum number of pixels to draw (stops drawing)
-                static const size_t MAX_PIXELS = 300000;
-                // Epsilon for bisection
-                static const double BISECTION_EPS = 1e-5;
-                size_t pix_cnt = 0;
-
-                for (int sy = 0; sy < shigh; sy += interval) {
-                    if (pix_cnt > MAX_PIXELS) break;
-                    const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
-                    for (int sx = 0; sx < swid; sx += interval) {
-                        if (pix_cnt > MAX_PIXELS) break;
-                        // Update interval based on point count
-                        interval = static_cast<int>(pix_cnt / HIGH_PIX_LIMIT + 1);
-
-                        const double x = 1.*sx / swid * xdiff + xmin;
-                        double precise_x = x, precise_y = y;
-
-                        env.vars[y_var] = y;
-                        env.vars[x_var] = x;
-                        double z = expr(env);
-                        int sgn_z = (z < 0 ? -1 : 1);
-                        bool paint_square = false;
-                        if (z == 0) {
-                            paint_square = true;
-                        } else if (sy > 0) {
-                            double zup = line[sx];
-                            if (zup) {
-                                int sgn_zup = (zup < 0 ? -1 : 1);
-                                paint_square = !(sgn_zup + sgn_z);
-                                if (paint_square) {
-                                    // Bisect up
-                                    double lo = y;
-                                    double hi = (shigh - (sy - interval))*1. / shigh * ydiff + ymin;
-                                    while (hi - lo > BISECTION_EPS) {
-                                        double mi = (lo + hi) / 2;
-                                        env.vars[y_var] = mi;
-                                        double zmi = expr(env);
-                                        int sgn_zmi = (zmi < 0 ? -1 : 1);
-                                        if (sgn_z == sgn_zmi) lo = mi;
-                                        else hi = mi;
-                                    }
-                                    precise_y = lo;
+            switch (func.type) {
+                case Function::FUNC_TYPE_POLYLINE:
+                    {
+                        // Draw polyline
+                        if (func.polyline.size() && (func.polyline.size() & 1) == 0) {
+                            std::vector<std::array<float, 2> > line;
+                            double mark_radius = (curr_func == exprid) ? MARKER_DISP_RADIUS :
+                                MARKER_DISP_RADIUS-1;
+                            for (size_t i = 0; i < func.polyline.size(); i += 2) {
+                                auto& expr_x = func.polyline[i],
+                                    & expr_y = func.polyline[i+1];
+                                double x = expr_x(env), y = expr_y(env);
+                                if (std::isnan(x) || std::isnan(y) ||
+                                        std::isinf(x) || std::isinf(y)) {
+                                    continue;
                                 }
+                                float sx = static_cast<float>((x - xmin) * swid / xdiff);
+                                float sy = static_cast<float>((ymax - y) * shigh / ydiff);
+                                line.push_back({sx, sy});
+                                graph.rectangle(sx - (float)mark_radius,
+                                        sy - (float)mark_radius,
+                                        (float)mark_radius*2 + 1.f,
+                                        (float)mark_radius*2 + 1.f, true, func_color);
+                                size_t new_marker_idx = pt_markers.size();
+                                {
+                                    PointMarker ptm;
+                                    ptm.label = PointMarker::LABEL_NONE;
+                                    ptm.y = y; ptm.x = x;
+                                    ptm.passive = true;
+                                    ptm.rel_func = exprid;
+                                    pt_markers.push_back(std::move(ptm));
+                                }
+                                int cmin = std::max(static_cast<int>(sx - MARKER_MOUSE_RADIUS), 0);
+                                int cmax = std::min(static_cast<int>(sx + MARKER_MOUSE_RADIUS), swid - 1);
+                                int rmin = std::max(static_cast<int>(sy - MARKER_MOUSE_RADIUS), 0);
+                                int rmax = std::min(static_cast<int>(sy + MARKER_MOUSE_RADIUS), shigh - 1);
+                                if (cmin <= cmax) {
+                                    for (int r = rmin; r <= rmax; ++r) {
+                                        std::fill(grid.begin() + (r * swid + cmin),
+                                                grid.begin() + (r * swid + cmax + 1),
+                                                new_marker_idx);
+                                    }
+                                }
+
+                            }
+                            graph.polyline(line, func_color, (curr_func == exprid) ? 3.f : 2.f);
+                        }
+                    }
+                    break;
+                case Function::FUNC_TYPE_IMPLICIT:
+                    {
+                        // Implicit function
+                        int interval = 1;
+                        std::vector<double> line(swid + 2);
+                        // Increase interval per x pixels
+                        static const size_t HIGH_PIX_LIMIT = 25000;
+                        // Maximum number of pixels to draw (stops drawing)
+                        static const size_t MAX_PIXELS = 300000;
+                        // Epsilon for bisection
+                        static const double BISECTION_EPS = 1e-5;
+                        size_t pix_cnt = 0;
+
+                        for (int sy = 0; sy < shigh; sy += interval) {
+                            if (pix_cnt > MAX_PIXELS) break;
+                            const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
+                            for (int sx = 0; sx < swid; sx += interval) {
+                                if (pix_cnt > MAX_PIXELS) break;
+                                // Update interval based on point count
+                                interval = static_cast<int>(pix_cnt / HIGH_PIX_LIMIT + 1);
+
+                                const double x = 1.*sx / swid * xdiff + xmin;
+                                double precise_x = x, precise_y = y;
+
+                                env.vars[y_var] = y;
+                                env.vars[x_var] = x;
+                                double z = expr(env);
+                                int sgn_z = (z < 0 ? -1 : 1);
+                                bool paint_square = false;
+                                if (z == 0) {
+                                    paint_square = true;
+                                } else if (sy > 0) {
+                                    double zup = line[sx];
+                                    if (zup) {
+                                        int sgn_zup = (zup < 0 ? -1 : 1);
+                                        paint_square = !(sgn_zup + sgn_z);
+                                        if (paint_square) {
+                                            // Bisect up
+                                            double lo = y;
+                                            double hi = (shigh - (sy - interval))*1. / shigh * ydiff + ymin;
+                                            while (hi - lo > BISECTION_EPS) {
+                                                double mi = (lo + hi) / 2;
+                                                env.vars[y_var] = mi;
+                                                double zmi = expr(env);
+                                                int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                                if (sgn_z == sgn_zmi) lo = mi;
+                                                else hi = mi;
+                                            }
+                                            precise_y = lo;
+                                        }
+                                    }
+                                }
+                                if (!paint_square && sx >= interval) {
+                                    double zleft = line[sx - interval];
+                                    if (zleft) {
+                                        int sgn_zleft = (zleft < 0 ? -1 : 1);
+                                        paint_square = !(sgn_zleft + sgn_z);
+                                        if (paint_square) {
+                                            // Bisect left
+                                            double lo = 1.*(sx - interval) / swid * xdiff + xmin;
+                                            double hi = x;
+                                            while (hi - lo > BISECTION_EPS) {
+                                                double mi = (lo + hi) / 2;
+                                                env.vars[x_var] = mi;
+                                                double zmi = expr(env);
+                                                int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                                if (sgn_zleft == sgn_zmi) lo = mi;
+                                                else hi = mi;
+                                            }
+                                            precise_x = lo;
+                                        }
+                                    }
+                                }
+                                if (paint_square) {
+                                    int pad = (curr_func == exprid) ? 1 : 0;
+                                    graph.rectangle((float)(sx - interval + 1 - pad),
+                                            (float)(sy - interval + 1 - pad),
+                                            (float)(interval + pad), (float)(interval + pad), true,
+                                            func_color);
+                                    // Add labels
+                                    size_t new_marker_idx = pt_markers.size();
+                                    PointMarker new_marker;
+                                    new_marker.x = precise_x; new_marker.y = precise_y;
+                                    new_marker.rel_func = exprid;
+                                    new_marker.label = PointMarker::LABEL_NONE;
+                                    new_marker.passive = true;
+                                    pt_markers.push_back(std::move(new_marker));
+                                    int cmin = std::max(sx - interval + 1 - MARKER_MOUSE_RADIUS, 0);
+                                    int cmax = std::min(sx + MARKER_MOUSE_RADIUS, swid - 1);
+                                    if (cmin <= cmax) {
+                                        for (int r = std::max(sy - interval + 1 - MARKER_MOUSE_RADIUS, 0);
+                                                r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh - 1); ++ r) {
+                                            std::fill(grid.begin() + (r * swid + cmin),
+                                                    grid.begin() + (r * swid + cmax + 1),
+                                                    new_marker_idx);
+                                        }
+                                    }
+                                    ++pix_cnt;
+                                }
+                                line[sx] = z;
                             }
                         }
-                        if (!paint_square && sx >= interval) {
-                            double zleft = line[sx - interval];
-                            if (zleft) {
-                                int sgn_zleft = (zleft < 0 ? -1 : 1);
-                                paint_square = !(sgn_zleft + sgn_z);
-                                if (paint_square) {
-                                    // Bisect left
-                                    double lo = 1.*(sx - interval) / swid * xdiff + xmin;
-                                    double hi = x;
-                                    while (hi - lo > BISECTION_EPS) {
-                                        double mi = (lo + hi) / 2;
-                                        env.vars[x_var] = mi;
-                                        double zmi = expr(env);
-                                        int sgn_zmi = (zmi < 0 ? -1 : 1);
-                                        if (sgn_zleft == sgn_zmi) lo = mi;
-                                        else hi = mi;
-                                    }
-                                    precise_x = lo;
+                        // Show detail lost warning
+                        if (interval > 1) loss_detail = true;
+                    }
+                    break;
+                case Function::FUNC_TYPE_EXPLICIT:
+                    {
+                        // explicit function
+                        env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
+                        // Store roots and extrema
+                        std::set<double> roots_and_extrema;
+                        // Discontinuity type
+                        // first: x-position
+                        // second: DISCONT_xxx
+                        using Discontinuity = std::pair<double, int>;
+                        // Store discontinuities
+                        std::set<Discontinuity> discont;
+                        size_t idx = 0;
+                        // Push check helpers
+                        auto push_if_valid = [this](double value, std::set<double>& st) {
+                            if (!std::isnan(value) && !std::isinf(value) &&
+                                    value >= xmin && value <= xmax) {
+                                auto it = st.lower_bound(value);
+                                double cdist = 1.;
+                                if (it != st.end()) cdist = *it - value;
+                                if (it != st.begin()) {
+                                    auto itp = it; --itp;
+                                    cdist = std::min(cdist, value - *itp);
+                                }
+                                if (cdist >= MIN_DIST_BETWEEN_ROOTS) st.insert(value);
+                            }
+                        };
+                        auto push_discont_if_valid = [&](double value, Discontinuity::second_type type) {
+                            auto vc = Discontinuity(value, type);
+                            if (!std::isnan(value) && !std::isinf(value) &&
+                                    value >= xmin && value <= xmax) {
+                                auto it = discont.lower_bound(vc);
+                                double cdist = 1.;
+                                if (it != discont.end())
+                                    cdist = it->first - value;
+                                if (it != discont.begin()) {
+                                    auto itp = it; --itp;
+                                    cdist = std::min(cdist, value - itp->first);
+                                }
+                                if (cdist >= MIN_DIST_BETWEEN_ROOTS) {
+                                    discont.insert(vc);
                                 }
                             }
-                        }
-                        if (paint_square) {
-                            int pad = (curr_func == exprid) ? 1 : 0;
-                            graph.rectangle((float)(sx - interval + 1 - pad),
-                                        (float)(sy - interval + 1 - pad),
-                                         (float)(interval + pad), (float)(interval + pad), true,
-                                         func_color);
-                            // Add labels
+                        };
+                        std::vector<std::array<float, 2> > curr_line;
+                        // Draw a line and construct markers along the line
+                        // to allow clicking
+                        auto draw_line = [&](float psx, float psy, float sx, float sy, double x, double y) {
+                            float miny = std::min(sy, psy), maxy = sy + psy - miny;
+
+                            // Construct a (passive) point marker for this point,
+                            // so that the user can click to see the position
                             size_t new_marker_idx = pt_markers.size();
                             pt_markers.emplace_back();
                             auto& new_marker = pt_markers.back();
-                            new_marker.x = precise_x; new_marker.y = precise_y;
+                            new_marker.x = x; new_marker.y = y;
                             new_marker.rel_func = exprid;
                             new_marker.label = PointMarker::LABEL_NONE;
+                            new_marker.sx = static_cast<int>(sx + psx) / 2;
+                            new_marker.sy = static_cast<int>(sy + psy) / 2;
                             new_marker.passive = true;
-                            int cmin = std::max(sx - interval + 1 - MARKER_MOUSE_RADIUS, 0);
-                            int cmax = std::min(sx + MARKER_MOUSE_RADIUS, swid - 1);
-                            for (int r = std::max(sy - interval + 1 - MARKER_MOUSE_RADIUS, 0);
-                                    r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh - 1); ++ r) {
-                                std::fill(grid.begin() + (r * swid + cmin),
-                                        grid.begin() + (r * swid + cmax + 1),
-                                        new_marker_idx);
-                            }
-                            ++pix_cnt;
-                        }
-                        line[sx] = z;
-                    }
-                }
-                if (interval > 1) loss_detail = true;
-            } else {
-                // explicit function
-                env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
-                // Store roots and extrema
-                std::set<double> roots_and_extrema;
-                // Discontinuity type
-                // first: x-position
-                // second: DISCONT_xxx
-                using Discontinuity = std::pair<double, int>;
-                // Store discontinuities
-                std::set<Discontinuity> discont;
-                size_t idx = 0;
-                // Push check helpers
-                auto push_if_valid = [this](double value, std::set<double>& st) {
-                    if (!std::isnan(value) && !std::isinf(value) &&
-                            value >= xmin && value <= xmax) {
-                        auto it = st.lower_bound(value);
-                        double cdist = 1.;
-                        if (it != st.end()) cdist = *it - value;
-                        if (it != st.begin()) {
-                            auto itp = it; --itp;
-                            cdist = std::min(cdist, value - *itp);
-                        }
-                        if (cdist >= MIN_DIST_BETWEEN_ROOTS) st.insert(value);
-                    }
-                };
-                auto push_discont_if_valid = [&](double value, Discontinuity::second_type type) {
-                    auto vc = Discontinuity(value, type);
-                    if (!std::isnan(value) && !std::isinf(value) &&
-                            value >= xmin && value <= xmax) {
-                        auto it = discont.lower_bound(vc);
-                        double cdist = 1.;
-                        if (it != discont.end())
-                            cdist = it->first - value;
-                        if (it != discont.begin()) {
-                            auto itp = it; --itp;
-                            cdist = std::min(cdist, value - itp->first);
-                        }
-                        if (cdist >= MIN_DIST_BETWEEN_ROOTS) {
-                            discont.insert(vc);
-                        }
-                    }
-                };
-                std::vector<std::array<float, 2> > curr_line;
-                // Draw a line and construct markers along the line
-                // to allow clicking
-                auto draw_line = [&](float psx, float psy, float sx, float sy, double x, double y) {
-                    float miny = std::min(sy, psy), maxy = sy + psy - miny;
 
-                    // Construct a (passive) point marker for this point,
-                    // so that the user can click to see the position
-                    size_t new_marker_idx = pt_markers.size();
-                    pt_markers.emplace_back();
-                    auto& new_marker = pt_markers.back();
-                    new_marker.x = x; new_marker.y = y;
-                    new_marker.rel_func = exprid;
-                    new_marker.label = PointMarker::LABEL_NONE;
-                    new_marker.sx = static_cast<int>(sx + psx) / 2;
-                    new_marker.sy = static_cast<int>(sy + psy) / 2;
-                    new_marker.passive = true;
-
-                    int sxi = static_cast<int>(sx);
-                    int syi = static_cast<int>(sy);
-                    int minyi = std::max(static_cast<int>(miny) - MARKER_MOUSE_RADIUS, 0);
-                    int maxyi = std::min(static_cast<int>(maxy) + MARKER_MOUSE_RADIUS, shigh-1);
-                    for (int r = minyi; r <= maxyi; ++r) {
-                        int cmin = std::max(sxi - MARKER_MOUSE_RADIUS, 0);
-                        int cmax = std::min(sxi + MARKER_MOUSE_RADIUS, swid-1);
-                        // Assign to grid
-                        for (int c = cmin; c <= cmax; ++c) {
-                            size_t existing_marker_idx = grid[r * swid + c];
-                            if (~existing_marker_idx) {
-                                auto& existing_marker = pt_markers[existing_marker_idx];
-                                if (util::sqr_dist(existing_marker.sx,
-                                            existing_marker.sy, c, r) <=
-                                        util::sqr_dist(new_marker.sx,
-                                            new_marker.sy, c, r)) {
-                                    // If existing marker is closer, do not overwrite it
-                                    continue;
+                            int sxi = static_cast<int>(sx);
+                            int syi = static_cast<int>(sy);
+                            int minyi = std::max(static_cast<int>(miny) - MARKER_MOUSE_RADIUS, 0);
+                            int maxyi = std::min(static_cast<int>(maxy) + MARKER_MOUSE_RADIUS, shigh-1);
+                            for (int r = minyi; r <= maxyi; ++r) {
+                                int cmin = std::max(sxi - MARKER_MOUSE_RADIUS, 0);
+                                int cmax = std::min(sxi + MARKER_MOUSE_RADIUS, swid-1);
+                                // Assign to grid
+                                for (int c = cmin; c <= cmax; ++c) {
+                                    size_t existing_marker_idx = grid[r * swid + c];
+                                    if (~existing_marker_idx) {
+                                        auto& existing_marker = pt_markers[existing_marker_idx];
+                                        if (util::sqr_dist(existing_marker.sx,
+                                                    existing_marker.sy, c, r) <=
+                                                util::sqr_dist(new_marker.sx,
+                                                    new_marker.sy, c, r)) {
+                                            // If existing marker is closer, do not overwrite it
+                                            continue;
+                                        }
+                                    }
+                                    grid[r * swid + c] = new_marker_idx;
                                 }
                             }
-                            grid[r * swid + c] = new_marker_idx;
-                        }
-                    }
-                    // Draw the line
-                    if (curr_line.empty() ||
-                        (psx > curr_line.back()[0] || psy != curr_line.back()[1])) {
-                        if (curr_line.size() > 1) {
-                            graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
-                        }
-                        curr_line.resize(2);
-                        curr_line[0] = {psx, psy};
-                        curr_line[1] = {sx, sy};
-                    } else {
-                        curr_line.push_back({sx, sy});
-                    }
-                };
-                // Find roots, asymptotes, extrema
-                if (!func.diff.is_null()) {
-                    double prev_x, prev_y = 0.;
-                    for (int sx = 0; sx < swid; sx += 5) {
-                        const double x = sx*1. * xdiff / swid + xmin;
-                        env.vars[x_var] = x;
-                        double y = expr(env);
-                        const bool is_y_nan = std::isnan(y);
-
-                        if (!is_y_nan) {
-                            double dy = func.diff(env);
-                            if (!std::isnan(dy)) {
-                                double root = expr.newton(NEWTON_ARGS, &func.diff, y, dy);
-                                push_if_valid(root, roots_and_extrema);
-                                double asymp = func.recip.newton(NEWTON_ARGS,
-                                        &func.drecip, 1. / y, -dy / (y*y));
-                                push_discont_if_valid(asymp, DISCONT_ASYMPT);
-
-                                double ddy = func.diff(env);
-                                if (!std::isnan(ddy)) {
-                                    double extr = func.diff.newton(NEWTON_ARGS,
-                                            &func.ddiff, dy, ddy);
-                                    push_if_valid(extr, roots_and_extrema);
+                            // Draw the line
+                            if (curr_line.empty() ||
+                                    (psx > curr_line.back()[0] || psy != curr_line.back()[1])) {
+                                if (curr_line.size() > 1) {
+                                    graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
                                 }
+                                curr_line.resize(2);
+                                curr_line[0] = {psx, psy};
+                                curr_line[1] = {sx, sy};
+                            } else {
+                                curr_line.push_back({sx, sy});
                             }
-                        }
-                        if (sx) {
-                            const bool is_prev_y_nan = std::isnan(prev_y);
-                            if (is_y_nan != is_prev_y_nan) {
-                                // Search for cutoff via bisection
-                                double lo = prev_x, hi = x;
-                                while (hi - lo > DOMAIN_BISECTION_EPS) {
-                                    double mi = (lo + hi) * 0.5;
-                                    env.vars[x_var] = mi; double mi_y = expr(env);
-                                    if (std::isnan(mi_y) == is_prev_y_nan) {
-                                        lo = mi;
-                                    } else {
-                                        hi = mi;
+                        };
+                        // Find roots, asymptotes, extrema
+                        if (!func.diff.is_null()) {
+                            double prev_x, prev_y = 0.;
+                            for (int sx = 0; sx < swid; sx += 5) {
+                                const double x = sx*1. * xdiff / swid + xmin;
+                                env.vars[x_var] = x;
+                                double y = expr(env);
+                                const bool is_y_nan = std::isnan(y);
+
+                                if (!is_y_nan) {
+                                    double dy = func.diff(env);
+                                    if (!std::isnan(dy)) {
+                                        double root = expr.newton(NEWTON_ARGS, &func.diff, y, dy);
+                                        push_if_valid(root, roots_and_extrema);
+                                        double asymp = func.recip.newton(NEWTON_ARGS,
+                                                &func.drecip, 1. / y, -dy / (y*y));
+                                        push_discont_if_valid(asymp, DISCONT_ASYMPT);
+
+                                        double ddy = func.diff(env);
+                                        if (!std::isnan(ddy)) {
+                                            double extr = func.diff.newton(NEWTON_ARGS,
+                                                    &func.ddiff, dy, ddy);
+                                            push_if_valid(extr, roots_and_extrema);
+                                        }
                                     }
                                 }
-                                double boundary_x_not_nan_side = is_prev_y_nan ? hi : lo;
-                                push_discont_if_valid(boundary_x_not_nan_side,
-                                                      DISCONT_DOMAIN);
-                            }
-                        }
-                        prev_x = x; prev_y = y;
-                    }
-                }
-                // Copy into function
-                func.roots_and_extrema.resize(roots_and_extrema.size());
-                std::copy(roots_and_extrema.begin(),
-                        roots_and_extrema.end(),
-                        func.roots_and_extrema.begin());
-
-                // Add screen edges to discontinuities list for convenience
-                discont.emplace(xmin, DISCONT_SCREEN);
-                discont.emplace(xmax, DISCONT_SCREEN);
-                // std::cerr << discont.size() << ": ";
-                // for (auto i : discont) std::cerr << i.first << ":" << i.second <<" ";
-                // std::cerr <<  "\n";
-                double prev_discont_x = xmin;
-                float prev_discont_sx;
-                int prev_discont_type;
-                size_t as_idx = 0;
-
-                float psx = -1.f, psy = -1.f;
-                // Draw function from discont to discont
-                for (const auto& discontinuity : discont) {
-                    double discont_x = discontinuity.first;
-                    int discont_type = discontinuity.second;
-                    float discont_sx = static_cast<float>((discont_x - xmin) / xdiff * swid);
-                    if (as_idx > 0) {
-                        bool connector = prev_discont_type != DISCONT_SCREEN;
-                        // Draw func between asymptotes
-                        for (float sxd = prev_discont_sx + DISCONTINUITY_EPS;
-                                sxd < discont_sx;) {
-                            const double x = sxd / swid * xdiff + xmin;
-                            env.vars[x_var] = x;
-                            double y = expr(env);
-
-                            if (!std::isnan(y)) {
-                                if (y > ymax + ydiff) y = ymax + ydiff;
-                                else if (y < ymin - ydiff) y = ymin - ydiff;
-                                float sy = static_cast<float>((ymax - y) * shigh / ydiff);
-                                float sx = sxd;
-                                if (reinit) {
-                                    if (!(y > ymax || y < ymin)) {
-                                        reinit = false;
+                                if (sx) {
+                                    const bool is_prev_y_nan = std::isnan(prev_y);
+                                    if (is_y_nan != is_prev_y_nan) {
+                                        // Search for cutoff via bisection
+                                        double lo = prev_x, hi = x;
+                                        while (hi - lo > DOMAIN_BISECTION_EPS) {
+                                            double mi = (lo + hi) * 0.5;
+                                            env.vars[x_var] = mi; double mi_y = expr(env);
+                                            if (std::isnan(mi_y) == is_prev_y_nan) {
+                                                lo = mi;
+                                            } else {
+                                                hi = mi;
+                                            }
+                                        }
+                                        double boundary_x_not_nan_side = is_prev_y_nan ? hi : lo;
+                                        push_discont_if_valid(boundary_x_not_nan_side,
+                                                DISCONT_DOMAIN);
                                     }
                                 }
-                                if (connector) {
-                                    // Check if asymptote at previous position;
-                                    // if so then connect it
-                                    connector = false;
-                                    env.vars[x_var] = prev_discont_x + ASYMPTOTE_CHECK_DELTA1;
-                                    double yp = expr(env);
-                                    env.vars[x_var] = prev_discont_x + ASYMPTOTE_CHECK_DELTA2;
-                                    double yp2 = expr(env);
-                                    double eps = discont_type == DISCONT_ASYMPT ?
+                                prev_x = x; prev_y = y;
+                            }
+                        }
+                        // Copy into function
+                        func.roots_and_extrema.resize(roots_and_extrema.size());
+                        std::copy(roots_and_extrema.begin(),
+                                roots_and_extrema.end(),
+                                func.roots_and_extrema.begin());
+
+                        // Add screen edges to discontinuities list for convenience
+                        discont.emplace(xmin, DISCONT_SCREEN);
+                        discont.emplace(xmax, DISCONT_SCREEN);
+                        // std::cerr << discont.size() << ": ";
+                        // for (auto i : discont) std::cerr << i.first << ":" << i.second <<" ";
+                        // std::cerr <<  "\n";
+                        double prev_discont_x = xmin;
+                        float prev_discont_sx;
+                        int prev_discont_type;
+                        size_t as_idx = 0;
+
+                        float psx = -1.f, psy = -1.f;
+                        // Draw function from discont to discont
+                        for (const auto& discontinuity : discont) {
+                            double discont_x = discontinuity.first;
+                            int discont_type = discontinuity.second;
+                            float discont_sx = static_cast<float>((discont_x - xmin) / xdiff * swid);
+                            if (as_idx > 0) {
+                                bool connector = prev_discont_type != DISCONT_SCREEN;
+                                // Draw func between asymptotes
+                                for (float sxd = prev_discont_sx + DISCONTINUITY_EPS;
+                                        sxd < discont_sx;) {
+                                    const double x = sxd / swid * xdiff + xmin;
+                                    env.vars[x_var] = x;
+                                    double y = expr(env);
+
+                                    if (!std::isnan(y)) {
+                                        if (y > ymax + ydiff) y = ymax + ydiff;
+                                        else if (y < ymin - ydiff) y = ymin - ydiff;
+                                        float sy = static_cast<float>((ymax - y) * shigh / ydiff);
+                                        float sx = sxd;
+                                        if (reinit) {
+                                            if (!(y > ymax || y < ymin)) {
+                                                reinit = false;
+                                            }
+                                        }
+                                        if (connector) {
+                                            // Check if asymptote at previous position;
+                                            // if so then connect it
+                                            connector = false;
+                                            env.vars[x_var] = prev_discont_x + ASYMPTOTE_CHECK_DELTA1;
+                                            double yp = expr(env);
+                                            env.vars[x_var] = prev_discont_x + ASYMPTOTE_CHECK_DELTA2;
+                                            double yp2 = expr(env);
+                                            double eps = discont_type == DISCONT_ASYMPT ?
                                                 ASYMPTOTE_CHECK_EPS:
                                                 ASYMPTOTE_CHECK_BOUNDARY_EPS;
-                                    if (yp - yp2 > eps && sy > 0.f) {
-                                        psx = prev_discont_sx;
-                                        psy = 0.f;
-                                        reinit = false;
-                                    } else if (yp - yp2 < -eps && sy < (float)shigh) {
-                                        psx = prev_discont_sx;
-                                        psy = static_cast<float>(shigh);
-                                        reinit = false;
-                                    }
-                                }
-                                if (!reinit && psx >= 0) {
-                                    draw_line(psx, psy, sx, sy, x, y);
-                                    if (y > ymax || y < ymin) {
+                                            if (yp - yp2 > eps && sy > 0.f) {
+                                                psx = prev_discont_sx;
+                                                psy = 0.f;
+                                                reinit = false;
+                                            } else if (yp - yp2 < -eps && sy < (float)shigh) {
+                                                psx = prev_discont_sx;
+                                                psy = static_cast<float>(shigh);
+                                                reinit = false;
+                                            }
+                                        }
+                                        if (!reinit && psx >= 0) {
+                                            draw_line(psx, psy, sx, sy, x, y);
+                                            if (y > ymax || y < ymin) {
+                                                reinit = true;
+                                                psx = -1;
+                                            }
+                                        }
+                                        psx = sx;
+                                        psy = sy;
+                                    } else {
                                         reinit = true;
                                         psx = -1;
                                     }
+                                    if (discont.size() > 2 && discont.size() < 100) {
+                                        if ((as_idx > 1 && sxd - prev_discont_sx < 1.) ||
+                                                (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
+                                            sxd += 0.1f;
+                                        } else if ((as_idx > 1 && sxd - prev_discont_sx < 5.) ||
+                                                (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
+                                            sxd += 0.5f;
+                                        } else {
+                                            sxd += 1.0f;
+                                        }
+                                    } else {
+                                        sxd += 1.0f;
+                                    }
                                 }
-                                psx = sx;
-                                psy = sy;
-                            } else {
-                                reinit = true;
-                                psx = -1;
-                            }
-                            if (discont.size() > 2 && discont.size() < 100) {
-                                if ((as_idx > 1 && sxd - prev_discont_sx < 1.) ||
-                                        (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
-                                    sxd += 0.1f;
-                                } else if ((as_idx > 1 && sxd - prev_discont_sx < 5.) ||
-                                        (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
-                                    sxd += 0.5f;
-                                } else {
-                                    sxd += 1.0f;
+                                // Connect next asymptote
+                                if (discont_type != DISCONT_SCREEN) {
+                                    env.vars[x_var] = discont_x - ASYMPTOTE_CHECK_DELTA1;
+                                    double yp = expr(env);
+                                    env.vars[x_var] = discont_x - ASYMPTOTE_CHECK_DELTA2;
+                                    double yp2 = expr(env);
+                                    float sx = -1, sy;
+                                    double eps = discont_type == DISCONT_ASYMPT ?
+                                        ASYMPTOTE_CHECK_EPS:
+                                        ASYMPTOTE_CHECK_BOUNDARY_EPS;
+                                    if (yp - yp2 > eps && psy > 0) {
+                                        sx = static_cast<float>(discont_sx);
+                                        sy = 0.f;
+                                    }
+                                    if (yp - yp2 < -eps && psy < shigh) {
+                                        sx = discont_sx;
+                                        sy = static_cast<float>(shigh);
+                                    }
+                                    if (sx >= 0.f) {
+                                        draw_line(psx, psy, sx, sy, discont_x - 1e-6f, yp);
+                                    }
                                 }
-                            } else {
-                                sxd += 1.0f;
                             }
+                            ++as_idx;
+                            prev_discont_x = discont_x;
+                            prev_discont_type = discont_type;
+                            prev_discont_sx = discont_sx;
                         }
-                        // Connect next asymptote
-                        if (discont_type != DISCONT_SCREEN) {
-                            env.vars[x_var] = discont_x - ASYMPTOTE_CHECK_DELTA1;
-                            double yp = expr(env);
-                            env.vars[x_var] = discont_x - ASYMPTOTE_CHECK_DELTA2;
-                            double yp2 = expr(env);
-                            float sx = -1, sy;
-                            double eps = discont_type == DISCONT_ASYMPT ?
-                                ASYMPTOTE_CHECK_EPS:
-                                ASYMPTOTE_CHECK_BOUNDARY_EPS;
-                            if (yp - yp2 > eps && psy > 0) {
-                                sx = static_cast<float>(discont_sx);
-                                sy = 0.f;
-                            }
-                            if (yp - yp2 < -eps && psy < shigh) {
-                                sx = discont_sx;
-                                sy = static_cast<float>(shigh);
-                            }
-                            if (sx >= 0.f) {
-                                draw_line(psx, psy, sx, sy, discont_x - 1e-6f, yp);
-                            }
-                        }
-                    }
-                    ++as_idx;
-                    prev_discont_x = discont_x;
-                    prev_discont_type = discont_type;
-                    prev_discont_sx = discont_sx;
-                }
 
-                // finish last line, if exists
-                if (curr_line.size() > 1) {
-                    graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
-                }
-                // Draw roots/extrema/y-int
-                if (!func.expr.is_null() && !func.diff.is_null()) {
-                    env.vars[x_var] = 0;
-                    double y = expr(env);
-                    if (!std::isnan(y) && !std::isinf(y))
-                        push_if_valid(0., roots_and_extrema); // y-int
-                }
-                for (double x : roots_and_extrema) {
-                    env.vars[x_var] = x;
-                    double y = expr(env);
-                    double dy = func.diff(env);
-                    double ddy = func.ddiff(env);
-                    auto label =
-                        x == 0. ? PointMarker::LABEL_Y_INT :
-                        std::fabs(dy) > 1e-6 ? PointMarker::LABEL_X_INT :
-                        ddy > 1e-6 ? PointMarker::LABEL_LOCAL_MIN :
-                        ddy < -1e-6 ? PointMarker::LABEL_LOCAL_MAX:
-                        PointMarker::LABEL_INFLECTION_PT;
-                    // Do not show
-                    if (label == PointMarker::LABEL_INFLECTION_PT) continue;
-
-                    int sy = static_cast<int>((ymax - y) / ydiff * shigh);
-                    int sx = static_cast<int>((x - xmin) / xdiff * swid);
-                    graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
-                    graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
-                    size_t idx = pt_markers.size();
-                    pt_markers.emplace_back();
-                    auto& ptm = pt_markers.back();
-                    ptm.label = label;
-                    ptm.y = y; ptm.x = x;
-                    ptm.sx = sx; ptm.sy = sy;
-                    ptm.passive = false;
-                    ptm.rel_func = exprid;
-                    for (int r = std::max(sy - MARKER_MOUSE_RADIUS, 0); r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh-1); ++r) {
-                        for (int c = std::max(sx - MARKER_MOUSE_RADIUS, 0); c <= std::min(sx + MARKER_MOUSE_RADIUS, swid-1); ++c) {
-                            grid[r * swid + c] = idx;
+                        // finish last line, if exists
+                        if (curr_line.size() > 1) {
+                            graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
                         }
-                    }
-                }
-
-                // Function intersection
-                if (!func.diff.is_null()) {
-                    for (size_t exprid2 = 0; exprid2 < exprid; ++exprid2) {
-                        auto& func2 = funcs[exprid2];
-                        if (func2.diff.is_null()) continue;
-                        if (func2.is_implicit) continue; // not supported right now
-                        Expr sub_expr = expr - func2.expr;
-                        Expr diff_sub_expr = func.diff - func2.diff;
-                        diff_sub_expr.optimize();
-                        if (diff_sub_expr.is_null()) continue;
-                        std::set<double> st;
-                        for (int sxd = 0; sxd < swid; sxd += 2) {
-                            const double x = sxd * xdiff / swid + xmin;
-                            double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
-                            push_if_valid(root, st);
+                        // Draw roots/extrema/y-int
+                        if (!func.expr.is_null() && !func.diff.is_null()) {
+                            env.vars[x_var] = 0;
+                            double y = expr(env);
+                            if (!std::isnan(y) && !std::isinf(y))
+                                push_if_valid(0., roots_and_extrema); // y-int
                         }
-                        for (double x : st) {
+                        for (double x : roots_and_extrema) {
                             env.vars[x_var] = x;
                             double y = expr(env);
+                            double dy = func.diff(env);
+                            double ddy = func.ddiff(env);
+                            auto label =
+                                x == 0. ? PointMarker::LABEL_Y_INT :
+                                std::fabs(dy) > 1e-6 ? PointMarker::LABEL_X_INT :
+                                ddy > 1e-6 ? PointMarker::LABEL_LOCAL_MIN :
+                                ddy < -1e-6 ? PointMarker::LABEL_LOCAL_MAX:
+                                PointMarker::LABEL_INFLECTION_PT;
+                            // Do not show
+                            if (label == PointMarker::LABEL_INFLECTION_PT) continue;
+
                             int sy = static_cast<int>((ymax - y) / ydiff * shigh);
                             int sx = static_cast<int>((x - xmin) / xdiff * swid);
-                            graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS, true, color::LIGHT_GRAY);
-                            graph.rectangle(sx-MARKER_DISP_RADIUS-1, sy-MARKER_DISP_RADIUS-1, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
-                            graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func2.line_color);
+                            graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
+                            graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
                             size_t idx = pt_markers.size();
-                            pt_markers.emplace_back();
-                            auto& ptm = pt_markers.back();
-                            ptm.label = PointMarker::LABEL_INTERSECTION;
-                            ptm.x = x; ptm.y = y;
-                            ptm.passive = false;
-                            ptm.rel_func = -1;
+                            {
+                                PointMarker ptm;
+                                ptm.label = label;
+                                ptm.y = y; ptm.x = x;
+                                ptm.sx = sx; ptm.sy = sy;
+                                ptm.passive = false;
+                                ptm.rel_func = exprid;
+                                pt_markers.push_back(std::move(ptm));
+                            }
                             for (int r = std::max(sy - MARKER_MOUSE_RADIUS, 0); r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh-1); ++r) {
                                 for (int c = std::max(sx - MARKER_MOUSE_RADIUS, 0); c <= std::min(sx + MARKER_MOUSE_RADIUS, swid-1); ++c) {
                                     grid[r * swid + c] = idx;
                                 }
                             }
                         }
+
+                        // Function intersection
+                        if (!func.diff.is_null()) {
+                            for (size_t exprid2 = 0; exprid2 < exprid; ++exprid2) {
+                                auto& func2 = funcs[exprid2];
+                                if (func2.diff.is_null()) continue;
+                                if (func2.type != Function::FUNC_TYPE_EXPLICIT) continue; // not supported right now
+                                Expr sub_expr = expr - func2.expr;
+                                Expr diff_sub_expr = func.diff - func2.diff;
+                                diff_sub_expr.optimize();
+                                if (diff_sub_expr.is_null()) continue;
+                                std::set<double> st;
+                                for (int sxd = 0; sxd < swid; sxd += 2) {
+                                    const double x = sxd * xdiff / swid + xmin;
+                                    double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
+                                    push_if_valid(root, st);
+                                }
+                                for (double x : st) {
+                                    env.vars[x_var] = x;
+                                    double y = expr(env);
+                                    int sy = static_cast<int>((ymax - y) / ydiff * shigh);
+                                    int sx = static_cast<int>((x - xmin) / xdiff * swid);
+                                    graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS, true, color::LIGHT_GRAY);
+                                    graph.rectangle(sx-MARKER_DISP_RADIUS-1, sy-MARKER_DISP_RADIUS-1, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
+                                    graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func2.line_color);
+                                    size_t idx = pt_markers.size();
+                                    {
+                                        PointMarker ptm;
+                                        ptm.label = PointMarker::LABEL_INTERSECTION;
+                                        ptm.x = x; ptm.y = y;
+                                        ptm.passive = false;
+                                        ptm.rel_func = -1;
+                                        pt_markers.push_back(std::move(ptm));
+                                    }
+                                    for (int r = std::max(sy - MARKER_MOUSE_RADIUS, 0); r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh-1); ++r) {
+                                        for (int c = std::max(sx - MARKER_MOUSE_RADIUS, 0); c <= std::min(sx + MARKER_MOUSE_RADIUS, swid-1); ++c) {
+                                            grid[r * swid + c] = idx;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                }
+                    break;
             }
         }
         if (loss_detail) {
@@ -754,40 +821,130 @@ public:
         auto& func = funcs[idx];
         auto& expr = func.expr;
         auto& expr_str = func.expr_str;
+        func.polyline.clear();
         expr_str = be.read_editor(idx);
-        size_t eqpos = util::find_equality(expr_str);
-        if ((func.is_implicit = ~eqpos)) {
-            auto lhs = expr_str.substr(0, eqpos),
-                 rhs = expr_str.substr(eqpos+1);
-            util::trim(lhs); util::trim(rhs);
-            if (lhs == "y" || rhs == "y") {
-                expr = parser(lhs == "y" ? rhs : lhs, env,
-                        true, // explicit
-                        true  // quiet
-                        );
-                if (!expr.has_var(y_var)) {
-                    // if one side is y and other side has no y,
-                    // treat as explicit function
-                    func.is_implicit = false;
+        size_t eqpos;
+        // Marks whether this is a vlaid polyline expr
+        bool valid_polyline;
+        util::trim(expr_str);
+        // Determine if function type is polyline
+        if (expr_str.size() &&
+            expr_str[0] == '(' && expr_str.back() == ')') {
+            // Only try if of form (...)
+            valid_polyline = true;
+            std::string polyline_err;
+
+            // Try to parse function as polyline expr
+            size_t last_begin = 0, stkh = 0;
+            bool has_comma = false;
+            for (size_t i = 0; i < expr_str.size(); ++i) {
+                const char c = expr_str[i];
+                if (std::isspace(c)) continue;
+                // Handle nested brackets
+                if (util::is_open_bracket(c)) ++stkh;
+                else if (util::is_close_bracket(c)) --stkh;
+                switch(c) {
+                    case '(':
+                        if (stkh == 1) {
+                            last_begin = i + 1;
+                        }
+                        break;
+                    case ',':
+                        if (stkh == 1) {
+                            func.polyline.push_back(parser(
+                                    expr_str.substr(last_begin,
+                                        i - last_begin), env,
+                                    true, true));
+                            if (parser.error_msg.size()) polyline_err = parser.error_msg;
+                            last_begin = i + 1;
+                            has_comma = true;
+                        }
+                        break;
+                    case ')':
+                        if (stkh == 0) {
+                            if (!has_comma) {
+                                // Must have comma
+                                valid_polyline = false;
+                                break;
+                            }
+                            func.polyline.push_back(parser(
+                                    expr_str.substr(last_begin,
+                                        i - last_begin), env,
+                                    true, true));
+                            if (parser.error_msg.size()) polyline_err = parser.error_msg;
+                            has_comma = false;
+                        }
+                        break;
+                    default:
+                        // Can't have things between ), (
+                        if (stkh == 0) valid_polyline = false;
                 }
+                if (!valid_polyline || polyline_err.size()) break;
             }
-            if (func.is_implicit) {
-                expr = parser(lhs, env, true, true) - parser(rhs, env, true, true);
+            if (valid_polyline) {
+                // Polyline.
+                func.type = Function::FUNC_TYPE_POLYLINE;
+                if (polyline_err.empty()) {
+                    for (Expr& e1 : func.polyline) {
+                        if (e1.has_var(x_var) || e1.has_var(y_var)) {
+                            // Can't have x,y, show warning
+                            func.polyline.clear();
+                            polyline_err = "x, y disallowed\n";
+                            break;
+                        }
+                    }
+                }
+                // Keep as polyline type but show error
+                // so that the user can see info about why it failed to parse
+                if (polyline_err.size())
+                    be.show_error("Polyline expr error: " + polyline_err);
+                else
+                    be.show_error(""); // Clear
             }
-        } else {
-            expr = parser(expr_str, env, true, true);
+        } else valid_polyline = false;
+        if (!valid_polyline) {
+            // If failed to parse as polyline expr, try to detect if
+            // it is an implicit function
+            eqpos = util::find_equality(expr_str);
+            if (~eqpos) {
+                func.type = Function::FUNC_TYPE_IMPLICIT;
+                auto lhs = expr_str.substr(0, eqpos),
+                     rhs = expr_str.substr(eqpos+1);
+                util::trim(lhs); util::trim(rhs);
+                if (lhs == "y" || rhs == "y") {
+                    expr = parser(lhs == "y" ? rhs : lhs, env,
+                            true, // explicit
+                            true  // quiet
+                            );
+                    if (!expr.has_var(y_var)) {
+                        // if one side is y and other side has no y,
+                        // treat as explicit function
+                        func.type = Function::FUNC_TYPE_EXPLICIT;
+                    }
+                }
+                if (func.type == Function::FUNC_TYPE_EXPLICIT) {
+                    // If still valid, set expression to difference
+                    // i.e. rearrange so RHS is 0
+                    expr = parser(lhs, env, true, true)
+                         - parser(rhs, env, true, true);
+                }
+            } else {
+                func.type = Function::FUNC_TYPE_EXPLICIT;
+                expr = parser(expr_str, env, true, true);
+            }
+            if (!expr.is_null()) {
+                // Compute derivatives
+                expr.optimize();
+                func.diff = expr.diff(x_var, env);
+                if (!func.diff.is_null())
+                    func.ddiff = func.diff.diff(x_var, env);
+                else func.ddiff.ast[0] = OpCode::null;
+                func.recip = Expr::constant(1.) / func.expr;
+                func.recip.optimize();
+                func.drecip = func.recip.diff(x_var, env);
+            } else func.diff.ast[0] = OpCode::null;
+            be.show_error(parser.error_msg);
         }
-        if (!expr.is_null()) {
-            expr.optimize();
-            func.diff = expr.diff(x_var, env);
-            if (!func.diff.is_null())
-                func.ddiff = func.diff.diff(x_var, env);
-            else func.ddiff.ast[0] = OpCode::null;
-            func.recip = Expr::constant(1.) / func.expr;
-            func.recip.optimize();
-            func.drecip = func.recip.diff(x_var, env);
-        } else func.diff.ast[0] = OpCode::null;
-        be.show_error(parser.error_msg);
         loss_detail = false;
         be.update();
     }
@@ -807,7 +964,7 @@ public:
             util::trim(tmp);
             if (!tmp.empty()) {
                 funcs.emplace_back();
-                funcs.back().is_implicit = false;
+                funcs.back().type = Function::FUNC_TYPE_EXPLICIT;
                 if (reuse_colors.empty()) {
                     funcs.back().line_color =
                         color::from_int(last_expr_color++);

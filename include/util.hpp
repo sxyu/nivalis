@@ -60,7 +60,7 @@ bool is_varname(const std::string& expr);
 // 1. not be at index 0 or expr.size()-1
 // 2. at top bracket level wrt ([{
 // 3. not be followed/preceded by any comparison operator
-size_t find_equality(const std::string& expr);
+size_t find_equality(const std::string& expr, char eqn_chr = '=');
 
 // string trimming/strip
 void ltrim(std::string &s);

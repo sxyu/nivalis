@@ -318,9 +318,10 @@ struct OpenGLPlotBackend {
                 ImGui::NewFrame();
 
                 // Handle resize
-                int wwidth, wheight;
+                int wwidth, wheight, pwwidth = -1, pwheight;
                 glfwGetWindowSize(window, &wwidth, &wheight);
                 if (wwidth != plot.swid || wheight != plot.shigh) {
+                    pwwidth = plot.swid; pwheight = plot.shigh;
                     plot.resize(wwidth, wheight);
                 }
 
@@ -341,7 +342,7 @@ struct OpenGLPlotBackend {
 
                 // Render GUI
                 if (init) {
-                    ImGui::SetNextWindowPos(ImVec2(20, 30));
+                    ImGui::SetNextWindowPos(ImVec2(10, 10));
                     ImGui::SetNextWindowSize(ImVec2(400, 130));
                 }
                 ImGui::Begin("Functions", NULL);
@@ -415,17 +416,24 @@ struct OpenGLPlotBackend {
                 ImGui::End(); //  Functions
 
                 if (init) {
-                    ImGui::SetNextWindowPos(ImVec2(20,
-                            static_cast<float>(plot.shigh - 220)));
-                    ImGui::SetNextWindowSize(ImVec2(290, 200));
+                    ImGui::SetNextWindowPos(ImVec2(10,
+                            static_cast<float>(plot.shigh - 150)));
+                    ImGui::SetNextWindowSize(ImVec2(333, 130));
                 }
-                ImGui::Begin("Sliders", NULL);
+                if (ImGui::Begin("Sliders", NULL)) {
+                    if (~pwwidth && !init) {
+                        // Outer window was resized
+                        ImVec2 pos = ImGui::GetWindowPos();
+                        ImGui::SetWindowPos(ImVec2(pos.x,
+                                    (float)wheight - ((float)pwheight - pos.y)));
+                    }
+                }
 
                 for (size_t i = 0; i < sliders.size(); ++i) {
                     ImGui::PushItemWidth(50.);
                     auto& sl = sliders[i];
                     std::string slid = std::to_string(i);
-                    if (ImGui::InputText(("var##vsl-" + slid).c_str(),
+                    if (ImGui::InputText(("=##vsl-" + slid).c_str(),
                                 sl.var_name_buf,
                                 SliderData::VAR_NAME_MAX)) {
                         std::string var_name = sl.var_name_buf;
@@ -458,6 +466,19 @@ struct OpenGLPlotBackend {
                             }
                         }
                     }
+
+                    ImGui::SameLine();
+                    if (ImGui::InputFloat(("##vslinput-" + slid).c_str(),
+                                &sl.var_val)) {
+                        if (~sl.var_addr) {
+                            plot.env.vars[sl.var_addr] = sl.var_val;
+                            if (sl.var_val > sl.hi) sl.hi = sl.var_val;
+                            if (sl.var_val < sl.lo) sl.lo = sl.var_val;
+                            update();
+                            make_active();
+                        }
+                    }
+
                     ImGui::SameLine(0., 10.0);
                     ImGui::InputFloat(("min##vsl-"+slid).c_str(), &sl.lo);
                     ImGui::SameLine();
@@ -471,7 +492,7 @@ struct OpenGLPlotBackend {
                         continue;
                     }
 
-                    ImGui::PushItemWidth(275.);
+                    ImGui::PushItemWidth(318.);
                     if (ImGui::SliderFloat(("##vslslider" + slid).c_str(),
                                 &sl.var_val, sl.lo, sl.hi)) {
                         if (~sl.var_addr) {
@@ -508,19 +529,27 @@ struct OpenGLPlotBackend {
 
                 if (init) {
                     ImGui::SetNextWindowPos(ImVec2(
-                                static_cast<float>(plot.swid - 275), 30));
-                    ImGui::SetNextWindowSize(ImVec2(250, 105));
+                                static_cast<float>(plot.swid - 182), 10));
+                    ImGui::SetNextWindowSize(ImVec2(175, 105));
                 }
 
-                ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
-                ImGui::PushItemWidth(80.);
-                ImGui::InputDouble("xmin", &plot.xmin); ImGui::SameLine();
-                ImGui::PushItemWidth(80.);
-                ImGui::InputDouble("xmax", &plot.xmax);
-                ImGui::PushItemWidth(80.);
-                ImGui::InputDouble("ymin", &plot.ymin); ImGui::SameLine();
-                ImGui::PushItemWidth(80.);
-                ImGui::InputDouble("ymax", &plot.ymax);
+                if (ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize)) {
+                    if (~pwwidth && !init) {
+                        // Outer window was resized
+                        ImVec2 pos = ImGui::GetWindowPos();
+                        ImGui::SetWindowPos(ImVec2(
+                                    wwidth - ((float) pwwidth - pos.x),
+                                    pos.y));
+                    }
+                }
+                ImGui::PushItemWidth(60.);
+                ImGui::InputDouble("<x<", &plot.xmin); ImGui::SameLine();
+                ImGui::PushItemWidth(60.);
+                ImGui::InputDouble("##xmax", &plot.xmax);
+                ImGui::PushItemWidth(60.);
+                ImGui::InputDouble("<y<", &plot.ymin); ImGui::SameLine();
+                ImGui::PushItemWidth(60.);
+                ImGui::InputDouble("##ymax", &plot.ymax);
                 if (ImGui::Button("Reset view")) plot.reset_view();
                 ImGui::End(); // View
 
@@ -537,14 +566,17 @@ struct OpenGLPlotBackend {
                 if(open_reference) ImGui::OpenPopup("Reference");
                 if (ImGui::BeginPopupModal("Color picker", NULL,
                             ImGuiWindowFlags_AlwaysAutoResize)) {
+                    // Color picker dialog
                     auto* sel_col = edit_colors[curr_edit_color_idx];
                     ImGui::ColorPicker3("color", sel_col);
                     if (ImGui::Button("Ok##cpickok", ImVec2(100.f, 0.0f))) {
+                        // Update color when ok pressed
                         auto& fcol = plot.funcs[curr_edit_color_idx].line_color;
                         fcol.r = static_cast<uint8_t>(sel_col[0] * 255.);
                         fcol.g = static_cast<uint8_t>(sel_col[1] * 255.);
                         fcol.b = static_cast<uint8_t>(sel_col[2] * 255.);
                         ImGui::CloseCurrentPopup();
+                        update();
                     }
                     ImGui::EndPopup();
                 }
