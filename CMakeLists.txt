@@ -53,10 +53,10 @@ set(
   parser.hpp
   env.hpp
   expr.hpp
-  ast_nodes.hpp
   util.hpp
-  eval_expr.hpp
   opcodes.hpp
+  eval_expr.hpp
+  optimize_expr.hpp
   diff_expr.hpp
   plotter/plotter.hpp
   plotter/plot_gui.hpp
@@ -68,10 +68,10 @@ set(
   parser.cpp
   env.cpp
   expr.cpp
-  ast_nodes.cpp
   util.cpp
-  eval_expr.cpp
   opcodes.cpp
+  eval_expr.cpp
+  optimize_expr.cpp
   diff_expr.cpp
   plotter/common.cpp
 )

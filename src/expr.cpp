@@ -8,7 +8,7 @@
 #include "util.hpp"
 #include "eval_expr.hpp"
 #include "diff_expr.hpp"
-#include "ast_nodes.hpp"
+#include "optimize_expr.hpp"
 namespace nivalis {
 
 namespace {
