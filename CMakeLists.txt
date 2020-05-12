@@ -21,6 +21,7 @@ option ( USE_OPENGL_IMGUI "Use OpenGL3/GLFW/ImGui GUI backend" ON )
 option ( USE_NANA "Use Nana GUI backend (fallback if ImGui config fails)" ON )
 option ( USE_BOOST_MATH "Use Boost math function (e.g. gamma, digamma, zeta, beta)" ON )
 option ( USE_SYSTEM_GLFW "Use system glfw3 if available" ON )
+option ( BUILD_TESTS "Build tests" ON )
 
 if (WIN32)
     set( COLOR_TERM OFF )
@@ -37,6 +38,7 @@ set( SHELL_PROJ_NAME "nivalis" )
 set( PLOT_GUI_PROJ_NAME "nivplot" )
 set( INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include" )
 set( SRC_DIR "${PROJECT_SOURCE_DIR}/src" )
+set( TEST_DIR "${PROJECT_SOURCE_DIR}/test" )
 
 if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -O3 -g" )
@@ -45,6 +47,14 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 set(
     PROJ_EXECUTABLES
     ${SHELL_PROJ_NAME}
+)
+
+set(
+    PROJ_TESTS
+    test_parser
+    test_eval_expr
+    test_optimize_expr
+    test_diff_expr
 )
 
 set(
@@ -244,5 +254,38 @@ foreach(targ ${PROJ_EXECUTABLES})
         target_link_libraries( ${targ} stdc++fs )
     endif ()
 endforeach()
+
+if (BUILD_TESTS)
+    include_directories( ${TEST_DIR})
+    enable_testing()
+    set(TEST_BINARY_DIR "${CMAKE_BINARY_DIR}/test")
+    foreach(targ ${PROJ_TESTS})
+        add_executable( ${targ} "${TEST_DIR}/${targ}.cpp" )
+        target_link_libraries( ${targ}
+            ${LIB_PROJ_NAME}
+            ${CMAKE_THREAD_LIBS_INIT}
+            ${PROJ_DEPENDENCIES} )
+
+        set_target_properties( ${targ}
+            PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_BINARY_DIR}")
+        
+        if ( MSVC )
+            set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
+            add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GLT")
+            set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+        endif ( MSVC )
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            target_link_libraries( ${targ} stdc++fs )
+        endif ()
+        add_test(${targ} "${TEST_BINARY_DIR}/${targ}")
+    endforeach()
+    message ( STATUS "Will build tests; 'make test' after build to use. -DBUILD_TESTS=OFF to disable" )
+else ()
+    message ( STATUS "NOT building tests" )
+endif (BUILD_TESTS)
+
+install(TARGETS ${PROJ_EXECUTABLES} DESTINATION bin)
+
 # Create source group for headers
 source_group( "Header Files" FILES ${HEADERS} )

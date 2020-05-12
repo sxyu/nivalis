@@ -226,15 +226,9 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                 break;
         case unaryminus: PUSH_OP(unaryminus); DIFF_NEXT; break;
         case absb: {
-                       PUSH_OP(bnz); PUSH_OP(ge); 
-                       const uint32_t* tmp = *ast;
-                       copy_to_derivative(tmp, out);
-                       PUSH_CONST(0.);
-                       std::vector<uint32_t> tmp_out;
-                       diff_ast_recursive(ast, env, var_addr, tmp_out);
-                       std::copy(tmp_out.begin(), tmp_out.end(), std::back_inserter(out));
-                       PUSH_OP(unaryminus);
-                       std::copy(tmp_out.begin(), tmp_out.end(), std::back_inserter(out));
+                       PUSH_OP(mul); PUSH_OP(sgn);
+                       copy_to_derivative(*ast, out);
+                       DIFF_NEXT;
                    }
                    break;
         case sqrtb: CHAIN_RULE(
@@ -252,7 +246,8 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case log10b: CHAIN_RULE(PUSH_OP(div);PUSH_CONST(1.0);PUSH_OP(mul);PUSH_CONST(log(10));,); break;
         case sinb:  CHAIN_RULE(PUSH_OP(cosb),); break;
         case cosb:  CHAIN_RULE(PUSH_OP(unaryminus); PUSH_OP(sinb),); break;
-        case tanb:  CHAIN_RULE(PUSH_OP(div); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(cosb),); break;
+        case tanb:  CHAIN_RULE(PUSH_OP(power); PUSH_OP(cosb);
+                            PUSH_CONST(-2),); break;
         case asinb: case acosb: 
             CHAIN_RULE(if (opcode == acosb) PUSH_OP(unaryminus);
                     PUSH_OP(div); PUSH_CONST(1);

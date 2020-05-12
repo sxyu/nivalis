@@ -29,7 +29,6 @@ struct ParseSession {
         PRI_COMPARISON,
         PRI_ADD_SUB,
         PRI_MUL_DIV,
-        PRI_UNARY_PLUS_MINUS,
         PRI_POW,
         PRI_BRACKETS,
         _PRI_COUNT,
@@ -162,19 +161,13 @@ private:
                     }
                 }
                 break;
-            case PRI_UNARY_PLUS_MINUS:
-                for (int64_t i = left; i < right; ++i) {
-                    const char c = expr[i];
-                    if (c == '+' || c == '-') {
-                        if (c == '-') result.ast.push_back(OpCode::unaryminus);
-                        return _parse(i + 1, right, pri);
-                    }
-                    else if (tok_link[i] > i) {
-                        i = tok_link[i];
-                    }
-                }
-                break;
             case PRI_POW:
+                while (left < right &&
+                        (expr[left] == '+' || expr[left] == '-')) {
+                    if (expr[left] == '-')
+                        result.ast.push_back(OpCode::unaryminus);
+                    ++left;
+                }
                 for (int64_t i = left; i < right; ++i) {
                     const char c = expr[i];
                     if (c == '^') {
@@ -187,6 +180,12 @@ private:
                 }
                 break;
             case PRI_BRACKETS:
+                while (left < right &&
+                        (expr[left] == '+' || expr[left] == '-')) {
+                    if (expr[left] == '-')
+                        result.ast.push_back(OpCode::unaryminus);
+                    ++left;
+                }
                 const char c = expr[left], cr = expr[right-1];
                 if (left >= right) {
                     PARSE_ERR("Syntax error\n");
