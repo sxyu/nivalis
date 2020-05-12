@@ -29,8 +29,8 @@ namespace {
             env.vars[var_id] = x;
             double dfx = diff(env);
             double dfx_expect = expect(env);
-            if (std::isnan(dfx) && std::isnan(dfx)) ++cnt;
-            else cnt += (std::fabs(dfx - dfx_expect) < FLOAT_EPS);
+            if (std::isnan(dfx) && std::isnan(dfx_expect)) ++cnt;
+            else cnt += (absrelerr(dfx, dfx_expect) < FLOAT_EPS);
         }
         if (cnt != N_ITER) {
             std::cerr << "Derivative equiv test fail\ndiff   " << diff <<

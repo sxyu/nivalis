@@ -84,7 +84,7 @@ struct OpenGLGraphicsAdaptor {
             line[i].x = (float) points[i][0];
             line[i].y = (float) points[i][1];
         }
-        draw_list->AddPolyline(&line[0], line.size(), ImColor(c.r, c.g, c.b), false, thickness);
+        draw_list->AddPolyline(&line[0], (int)line.size(), ImColor(c.r, c.g, c.b), false, thickness);
         if (upd_cache) {
             DrawObj obj(DrawObj::Type::POLYLINE, 0., 0., c);
             obj.points = points;

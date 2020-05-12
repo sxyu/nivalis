@@ -247,7 +247,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case sinb:  CHAIN_RULE(PUSH_OP(cosb),); break;
         case cosb:  CHAIN_RULE(PUSH_OP(unaryminus); PUSH_OP(sinb),); break;
         case tanb:  CHAIN_RULE(PUSH_OP(power); PUSH_OP(cosb);
-                            PUSH_CONST(-2),); break;
+                            ,PUSH_CONST(-2)); break;
         case asinb: case acosb: 
             CHAIN_RULE(if (opcode == acosb) PUSH_OP(unaryminus);
                     PUSH_OP(div); PUSH_CONST(1);
@@ -255,7 +255,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case atanb:  CHAIN_RULE(PUSH_OP(div); PUSH_CONST(1); PUSH_OP(add); PUSH_CONST(1); PUSH_OP(sqrb),); break;
         case sinhb: CHAIN_RULE(PUSH_OP(coshb),); break;
         case coshb: CHAIN_RULE(PUSH_OP(sinhb),); break;
-        case tanhb: CHAIN_RULE(PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(tanhb),);
+        case tanhb: CHAIN_RULE(PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(tanhb),); break;
         case tgammab:  
                     {
                         // diff(x)[1/fact(x)]

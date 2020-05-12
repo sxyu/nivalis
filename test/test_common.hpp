@@ -26,7 +26,7 @@
 #define FLOAT_EPS 1e-6
 #define ASSERT_FLOAT_EQ(x, y) do {\
     double tx = x, ty = y; \
-    if (std::fabs(tx - ty) > FLOAT_EPS) { \
+    if (absrelerr(tx, ty) > FLOAT_EPS) { \
     std::cout << "Assertion FAILED: (float compare) " << \
         std::setprecision(10) <<#x << " != " << #y << " (" << tx << " != " << ty << \
         ")\n  at " << _tname << " line " << __LINE__ <<"\n"; \
@@ -58,6 +58,9 @@ template <class T1, class T2> std::ostream& operator<<(std::ostream& os, const s
 }
 template <class T> std::ostream& operator<<(std::ostream& os, const std::vector<T> & v){
     for(int i=0; i<(int)v.size();++i){ if(i) os << " "; os << v[i];} return os; 
+}
+template <class Float> Float absrelerr(Float x, Float y) {
+    return std::min(std::fabs(x - y), std::fabs(x - y) / std::fabs(x));
 }
 
 namespace nivalis {

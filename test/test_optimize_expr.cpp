@@ -9,13 +9,15 @@
 using namespace nivalis;
 namespace {
     Parser parse;
-    Environment env;
     std::default_random_engine reng;
 
     // Automatically test if optimization leaves expression intact
     bool test_optim_equiv_random(const std::string& str,
             uint32_t var_id,
             double xmin = -100, double xmax = 100) {
+        Environment env;
+        env.addr_of("x", false);
+        env.set("a", 10.);
         Expr expr = parse(str, env);
         Expr orig = expr;
         expr.optimize();
@@ -28,7 +30,10 @@ namespace {
             double fx = expr(env);
             double ofx = orig(env);
             if (std::isnan(fx) && std::isnan(ofx)) ++cnt;
-            else cnt += (std::fabs(fx - ofx) < FLOAT_EPS);
+            else cnt += (absrelerr(fx, ofx) < FLOAT_EPS);
+            if (absrelerr(fx, ofx) > FLOAT_EPS) {
+                std::cerr << x << ":"<<fx << "," << ofx << "\n";
+            }
         }
         if (cnt != N_ITER) {
             std::cerr << "Optimization equiv test fail\nopti " << expr <<
@@ -42,7 +47,6 @@ namespace {
 int main() {
     BEGIN_TEST(test_optimize_expr);
 
-    env.addr_of("x", false);
     ASSERT(test_optim_equiv_random("nan", 0));
 
     ASSERT(test_optim_equiv_random("2*-x*x", 0));
@@ -59,7 +63,6 @@ int main() {
     ASSERT(test_optim_equiv_random("-2*x+3*x", 0));
     ASSERT(test_optim_equiv_random("3.2/(x+3)*x-3*x", 0));
 
-    env.addr_of("a", false);
     ASSERT(test_optim_equiv_random("-29*a+3*a-5*a*x", 1));
     ASSERT(test_optim_equiv_random("-29*a+3*a-5*a", 1));
     ASSERT(test_optim_equiv_random("-a^2+a^1-a^0", 1));

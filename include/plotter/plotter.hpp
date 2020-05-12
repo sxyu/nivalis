@@ -308,7 +308,7 @@ public:
                     for (int sx = 0; sx < swid; sx += interval) {
                         if (pix_cnt > MAX_PIXELS) break;
                         // Update interval based on point count
-                        interval = pix_cnt / HIGH_PIX_LIMIT + 1;
+                        interval = static_cast<int>(pix_cnt / HIGH_PIX_LIMIT + 1);
 
                         const double x = 1.*sx / swid * xdiff + xmin;
                         double precise_x = x, precise_y = y;
@@ -614,15 +614,15 @@ public:
                             if (discont.size() > 2 && discont.size() < 100) {
                                 if ((as_idx > 1 && sxd - prev_discont_sx < 1.) ||
                                         (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
-                                    sxd += 0.1;
+                                    sxd += 0.1f;
                                 } else if ((as_idx > 1 && sxd - prev_discont_sx < 5.) ||
                                         (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
-                                    sxd += 0.5;
+                                    sxd += 0.5f;
                                 } else {
-                                    sxd += 1.0;
+                                    sxd += 1.0f;
                                 }
                             } else {
-                                sxd += 1.0;
+                                sxd += 1.0f;
                             }
                         }
                         // Connect next asymptote
