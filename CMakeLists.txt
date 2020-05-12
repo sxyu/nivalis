@@ -36,6 +36,7 @@ set( LIB_PROJ_NAME "libnivalis" )
 set( SHELL_PROJ_NAME "nivalis" )
 set( PLOT_GUI_PROJ_NAME "nivplot" )
 set( INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include" )
+set( SRC_DIR "${PROJECT_SOURCE_DIR}/src" )
 
 if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -O3 -g" )
@@ -74,6 +75,7 @@ set(
   diff_expr.cpp
   plotter/common.cpp
 )
+list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 
 include_directories(
     ${INCLUDE_DIR}
@@ -152,7 +154,7 @@ if ( USE_OPENGL_IMGUI )
         "${IMGUI_DIR}/imgui.cpp"
         "${IMGUI_DIR}/imgui_draw.cpp"
         "${IMGUI_DIR}/imgui_widgets.cpp"
-        "plotter/opengl_imgui_backend.cpp"
+        "${SRC_DIR}/plotter/opengl_imgui_backend.cpp"
     )
     set ( SOURCES ${SOURCES}
         "${IMGUI_DIR}/imgui_impl_opengl3.cpp"
@@ -171,7 +173,7 @@ if ( (USE_NANA) AND (NOT OPENGL_IMGUI_ENABLED) )
         find_package(Fontconfig)
         find_package(JPEG)
     endif()
-    set (SOURCES ${SOURCES} "plotter/nana_backend.cpp")
+    set (SOURCES ${SOURCES} "${SRC_DIR}/plotter/nana_backend.cpp")
     find_package(Nana)
     if (NANA_FOUND)
         set ( _NANA_ENABLED_ "" )
@@ -190,7 +192,7 @@ else()
     message ( WARNING "No usable GUI backend found, no GUI will be built...")
 endif ()
 
-configure_file( version.hpp.in ${INCLUDE_DIR}/version.hpp )
+configure_file( version.hpp.in "${INCLUDE_DIR}/version.hpp" )
 
 set (NANA_DEPENDENCIES
     ${NANA_LIBRARIES}
@@ -226,7 +228,7 @@ set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME
     ${SHELL_PROJ_NAME} )
 
 foreach(targ ${PROJ_EXECUTABLES})
-    add_executable( ${targ} main_${targ}.cpp )
+    add_executable( ${targ} "${SRC_DIR}/main_${targ}.cpp" )
     target_link_libraries( ${targ}
         ${LIB_PROJ_NAME}
         ${CMAKE_THREAD_LIBS_INIT}
