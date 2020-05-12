@@ -729,7 +729,7 @@ private:
     int active_counter = 0;
 
     // FPS restriction when not moving (to reduce CPU usage)
-    const int RESTING_FPS = 5;
+    const int RESTING_FPS = 12;
     // Frames to stay active after update
     const int ACTIVE_FRAMES = 60;
     // Number of frames to average
