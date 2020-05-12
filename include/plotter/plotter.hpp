@@ -922,7 +922,7 @@ public:
                         func.type = Function::FUNC_TYPE_EXPLICIT;
                     }
                 }
-                if (func.type == Function::FUNC_TYPE_EXPLICIT) {
+                if (func.type == Function::FUNC_TYPE_IMPLICIT) {
                     // If still valid, set expression to difference
                     // i.e. rearrange so RHS is 0
                     expr = parser(lhs, env, true, true)
