@@ -186,6 +186,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case land: case lor: case lxor: case gcd: case lcm: case choose: case fafact: case rifact:
         case lt: case le: case eq: case ne: case ge: case gt:
                   PUSH_CONST(0.0); skip_ast(ast); skip_ast(ast); // Integer functions: 0 derivative
+                  break;
         case betab:
                   {
                       const uint32_t* tmp = *ast, *x_pos = *ast;
@@ -260,10 +261,16 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case sinhb: CHAIN_RULE(PUSH_OP(coshb),); break;
         case coshb: CHAIN_RULE(PUSH_OP(sinhb),); break;
         case tanhb: CHAIN_RULE(PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(tanhb),);
-        case tgammab:  CHAIN_RULE(
-                              PUSH_OP(mul); PUSH_OP(tgammab);
-                              copy_to_derivative(tmp, out);
-                              PUSH_OP(digammab),);
+        case tgammab:  
+                    {
+                        // diff(x)[1/fact(x)]
+                        const uint32_t* tmp = *ast;
+                        out.push_back(mul); DIFF_NEXT;
+                        PUSH_OP(mul); PUSH_OP(tgammab);
+                        copy_to_derivative(tmp, out);
+                        PUSH_OP(digammab);
+                        copy_to_derivative(tmp, out);
+                    }
                       break;
         case digammab: CHAIN_RULE(PUSH_OP(trigammab),); break;
         case trigammab: CHAIN_RULE(PUSH_OP(polygammab); PUSH_CONST(2),); break;

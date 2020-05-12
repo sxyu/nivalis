@@ -225,7 +225,7 @@ double eval_ast(Environment& env, const uint32_t** ast) {
 
         case expb:  EV_UNARY(exp);   case exp2b:  EV_UNARY(exp2);
         case logb:  EV_UNARY(log);
-        case factb:  
+        case factb:
                     {
                         unsigned n = static_cast<unsigned>(std::max(eval_ast(env, ast), 0.));
 #ifdef ENABLE_NIVALIS_BOOST_MATH
@@ -251,7 +251,7 @@ double eval_ast(Environment& env, const uint32_t** ast) {
         case tgammab:  EV_UNARY(std::tgamma);
         case lgammab:  EV_UNARY(std::lgamma);
         // The following functions are unavailable without Boost
-        case digammab: case trigammab: case zetab: 
+        case digammab: case trigammab: case zetab:
            skip_ast(ast); ret = NONE; print_boost_warning(opcode); break;
 #endif
         case erfb:  EV_UNARY(erf);
@@ -266,7 +266,7 @@ void print_ast(std::ostream& os, const uint32_t** ast, const Environment* env) {
         switch(c) {
             case '@': print_ast(os, ast, env); break; // subexpr
             case '#': os << util::as_double(*ast); *ast += 2; break; // value
-            case '&': 
+            case '&':
                       if (env != nullptr) os << env->varname.at(**ast);
                       else os << "&" << **ast;
                       ++*ast; break; // ref

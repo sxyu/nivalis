@@ -4,6 +4,8 @@
 
 #include "plotter/plot_gui.hpp"
 #include <iostream>
+#include <utility>
+#include <thread>
 
 #include "plotter/plotter.hpp"
 #include "imgui.h"
@@ -20,19 +22,77 @@ namespace nivalis {
 namespace {
 
 struct OpenGLGraphicsAdaptor {
-    void line(float ax, float ay, float bx, float by, color::color c, float thickness = 1.) {
+    // Drawing object
+    struct DrawObj {
+        enum Type {
+            LINE, POLYLINE, RECT, RECT_FILL, STRING, CLEAR
+        };
+        DrawObj() =default;
+        DrawObj(int type, float x, float y, color::color c) :
+            type(type), x(x), y(y), c(c) {}
+
+        int type;
+        float x, y, w, h, t;
+        std::vector<std::array<float, 2> > points;
+        color::color c;
+        std::string s;
+    };
+
+    OpenGLGraphicsAdaptor(GLFWwindow* window) : window(window)  {}
+    void frame(ImDrawList* new_draw_list, bool reload_previous = false) {
+        draw_list = new_draw_list;
+        if (reload_previous) {
+            for (auto& obj : objs) {
+                switch(obj.type) {
+                    case DrawObj::Type::LINE:
+                        line(obj.x, obj.y, obj.w, obj.h, obj.c, obj.t, false);
+                        break;
+                    case DrawObj::Type::POLYLINE:
+                        polyline(obj.points, obj.c, obj.t, false);
+                        break;
+                    case DrawObj::Type::RECT:
+                    case DrawObj::Type::RECT_FILL:
+                        rectangle(obj.x, obj.y, obj.w, obj.h,
+                                obj.type == DrawObj::Type::RECT_FILL, obj.c, false);
+                        break;
+                    case DrawObj::Type::CLEAR:
+                        clear(obj.c, false);
+                        break;
+                    case DrawObj::Type::STRING:
+                        string(obj.x, obj.y, obj.s, obj.c, false);
+                        break;
+                }
+            }
+        } else {
+            objs.clear();
+        }
+    }
+
+    void line(float ax, float ay, float bx, float by, color::color c, float thickness = 1., bool upd_cache = true) {
         draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
                 ImColor(c.r, c.g, c.b), thickness);
+        if (upd_cache) {
+            DrawObj obj(DrawObj::Type::LINE, ax, ay, c);
+            obj.w = bx; obj.h = by;
+            obj.t = thickness;
+            objs.push_back(obj);
+        }
     }
-    void polyline(const std::vector<std::array<float, 2> >& points, color::color c, float thickness = 1.) {
+    void polyline(const std::vector<std::array<float, 2> >& points, color::color c, float thickness = 1., bool upd_cache = true) {
         std::vector<ImVec2> line(points.size());
         for (size_t i = 0; i < line.size(); ++i) {
             line[i].x = (float) points[i][0];
             line[i].y = (float) points[i][1];
         }
         draw_list->AddPolyline(&line[0], line.size(), ImColor(c.r, c.g, c.b), false, thickness);
+        if (upd_cache) {
+            DrawObj obj(DrawObj::Type::POLYLINE, 0., 0., c);
+            obj.points = points;
+            obj.t = thickness;
+            objs.push_back(obj);
+        }
     }
-    void rectangle(float x, float y, float w, float h, bool fill, color::color c) {
+    void rectangle(float x, float y, float w, float h, bool fill, color::color c, bool upd_cache = true) {
         if (fill) {
             draw_list->AddRectFilled(ImVec2(x,y), ImVec2(x+w, y+h),
                     ImColor(c.r, c.g, c.b));
@@ -41,25 +101,38 @@ struct OpenGLGraphicsAdaptor {
             draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
                     ImColor(c.r, c.g, c.b));
         }
+        if (upd_cache) {
+            DrawObj obj(fill ? DrawObj::Type::RECT_FILL : DrawObj::Type::RECT, x, y, c);
+            obj.w = w; obj.h = h;
+            objs.push_back(obj);
+        }
     }
-    void clear(color::color c) {
+    void clear(color::color c, bool upd_cache = true) {
         glClearColor(c.r/255., c.g/255., c.b/255., 1.0f);
+        if (upd_cache) {
+            DrawObj obj(DrawObj::Type::CLEAR, 0.f, 0.f, c);
+            objs.push_back(obj);
+        }
     }
-    void set_pixel(float x, float y, color::color c) {
-        draw_list->AddRect(ImVec2(x,y), ImVec2(x, y),
-                ImColor(c.r, c.g, c.b));
-    }
-    void string(float x, float y, const std::string& s, color::color c) {
+    void string(float x, float y, const std::string& s, color::color c, bool upd_cache = true) {
         // String using ImGui API
         draw_list->AddText(ImVec2(x, y),
                 ImColor(c.r, c.g, c.b), s.c_str());
+        if (upd_cache) {
+            DrawObj obj(DrawObj::Type::STRING, x, y, c);
+            obj.s = s;
+            objs.push_back(obj);
+        }
     }
-    OpenGLGraphicsAdaptor(GLFWwindow* window, ImDrawList* draw_list)
-        : window(window), draw_list(draw_list)  {}
+
+    // Cache
+    std::vector<DrawObj> objs;
+
     GLFWwindow* window;
     ImDrawList* draw_list;
 };
 
+// Add scaled default font
 ImFont* AddDefaultFont(float pixel_size) {
     ImGuiIO &io = ImGui::GetIO();
     ImFontConfig config;
@@ -104,7 +177,7 @@ struct OpenGLPlotBackend {
                 return;
             }
             glfwMakeContextCurrent(window);
-            glfwSwapInterval(1); // Enable vsync
+            glfwSwapInterval(1);
 
             // Init glew context
             if (glewInit() != GLEW_OK)
@@ -114,14 +187,7 @@ struct OpenGLPlotBackend {
             }
 
             // Set up initial function color
-            {
-                auto* col = edit_colors[0];
-                auto& fcol = plot.funcs[0].line_color;
-                col[0] = fcol.r / 255.0f;
-                col[1] = fcol.g / 255.0f;
-                col[2] = fcol.b / 255.0f;
-                col[3] = 1.;
-            }
+            update_func_color(0);
 
             IMGUI_CHECKVERSION();
             ImGui::CreateContext();
@@ -142,6 +208,7 @@ struct OpenGLPlotBackend {
                         int key, int scancode, int action, int mods){
                     OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
                         glfwGetWindowUserPointer(window));
+                    be->make_active();
                     ImGuiIO* io = be->imgui_io;
                     be->imgui_key_callback(window, key, scancode,
                             action, mods);
@@ -172,6 +239,7 @@ struct OpenGLPlotBackend {
                         int button, int action, int mods){
                     OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
                         glfwGetWindowUserPointer(window));
+                    be->make_active();
                     ImGuiIO* io = be->imgui_io;
                     GLPlotter& plot = be->plot;
                     double xpos, ypos;
@@ -204,6 +272,7 @@ struct OpenGLPlotBackend {
                     OpenGLPlotBackend* be =
                         reinterpret_cast<OpenGLPlotBackend*>(
                             glfwGetWindowUserPointer(window));
+                    be->make_active();
                     GLPlotter& plot = be->plot;
                     ImGuiIO* io = be->imgui_io;
                     be->imgui_scroll_callback(window, xoffset, yoffset);
@@ -218,11 +287,19 @@ struct OpenGLPlotBackend {
             });
             ImFont *font_sm = AddDefaultFont(12);
             ImFont *font_md = AddDefaultFont(14);
+            char frame_rate_buf[16];
 
+            std::queue<double> fps_hist;
+            double fps_sum = 0.0;
+
+            double frame_time;
             bool init = true;
+            OpenGLGraphicsAdaptor adaptor(window);
 
-            while (!glfwWindowShouldClose(window))
-            {
+            // Main GLFW loop
+            while (!glfwWindowShouldClose(window)) {
+                frame_time = glfwGetTime();
+                // Set to open popups
                 bool open_color_picker = false,
                      open_reference = false;
                 glfwPollEvents();
@@ -248,8 +325,19 @@ struct OpenGLPlotBackend {
                 }
 
                 ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
-                OpenGLGraphicsAdaptor adaptor(window, draw_list);
-                plot.draw(adaptor);
+                adaptor.frame(draw_list, !require_update);
+                if (require_update) {
+                    require_update = false;
+                    plot.draw(adaptor);
+                    make_active();
+                } else if (active_counter > 0) {
+                    --active_counter;
+                } else {
+                    // Sleep to throttle FPS
+                    std::this_thread::sleep_for(std::chrono::microseconds(
+                        1000000 / RESTING_FPS
+                    ));
+                }
 
                 // Render GUI
                 if (init) {
@@ -271,24 +359,26 @@ struct OpenGLPlotBackend {
                             editor_strs[func_idx], EDITOR_BUF_SZ,
                             ImGuiInputTextFlags_CallbackHistory,
                             [](ImGuiTextEditCallbackData* data) -> int {
-                            OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
-                                    data->UserData);
-                            GLPlotter& plot = be->plot;
-                            plot.set_curr_func(plot.curr_func +
-                                    (data->EventKey == 3 ? -1 : 1));
-                            be->focus_idx = plot.curr_func;
-                            return 0;
+                                // Handle up/down arrow keys in textboxes
+                                OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
+                                        data->UserData);
+                                GLPlotter& plot = be->plot;
+                                plot.set_curr_func(plot.curr_func +
+                                        (data->EventKey == 3 ? -1 : 1));
+                                be->update_func_color(plot.curr_func);
+                                be->focus_idx = plot.curr_func;
+                                return 0;
                         }, this)) {
                         plot.reparse_expr(func_idx);
                     }
                     if (ImGui::IsItemHovered() ||
                             ImGui::IsItemActive()) {
-                        plot.set_curr_func(func_idx);
+                        if (func_idx != plot.curr_func)
+                            plot.set_curr_func(func_idx);
                     }
                     ImGui::SameLine();
-                    // ImGui::PushID(("cp" + fid).c_str());
                     auto* col = edit_colors[func_idx];
-                    if (ImGui::ColorButton("c",
+                    if (ImGui::ColorButton(("c##colfun" +fid).c_str(),
                                 ImVec4(col[0], col[1], col[2], col[3]))) {
                         open_color_picker = true;
                         curr_edit_color_idx = func_idx;
@@ -310,12 +400,7 @@ struct OpenGLPlotBackend {
                     if (tmp.size()) {
                         if (ImGui::Button("+ New function")) {
                             plot.set_curr_func(plot.funcs.size());
-                            auto* col = edit_colors[plot.funcs.size()-1];
-                            auto& fcol = plot.funcs.back().line_color;
-                            col[0] = fcol.r / 255.0f;
-                            col[1] = fcol.g / 255.0f;
-                            col[2] = fcol.b / 255.0f;
-                            col[3] = 1.;
+                            update_func_color(plot.funcs.size()-1);
                             focus_idx = plot.funcs.size() - 1;
                         }
                         ImGui::SameLine();
@@ -331,7 +416,7 @@ struct OpenGLPlotBackend {
 
                 if (init) {
                     ImGui::SetNextWindowPos(ImVec2(20,
-                            static_cast<float>(SCREEN_HEIGHT - 220)));
+                            static_cast<float>(plot.shigh - 220)));
                     ImGui::SetNextWindowSize(ImVec2(290, 200));
                 }
                 ImGui::Begin("Sliders", NULL);
@@ -420,7 +505,7 @@ struct OpenGLPlotBackend {
 
                 if (init) {
                     ImGui::SetNextWindowPos(ImVec2(
-                                static_cast<float>(SCREEN_WIDTH - 275), 30));
+                                static_cast<float>(plot.swid - 275), 30));
                     ImGui::SetNextWindowSize(ImVec2(250, 105));
                 }
 
@@ -515,6 +600,18 @@ struct OpenGLPlotBackend {
                     ImGui::EndPopup();
                 }
 
+                // Show the FPS in background
+                double fps = 1. / (glfwGetTime() - frame_time);
+                fps_hist.push(fps);
+                fps_sum += fps;
+                std::snprintf(frame_rate_buf, (sizeof frame_rate_buf) /
+                        (sizeof frame_rate_buf[0]), "%.1f FPS", fps_sum / fps_hist.size());
+                if (fps_hist.size() >= FPS_AVG_SIZE) {
+                    fps_sum -= fps_hist.front();
+                    fps_hist.pop();
+                }
+                draw_list->AddText(ImVec2(10, plot.shigh - 20), ImColor(0,0,0), frame_rate_buf);
+
                 // Render dear imgui into screen
                 ImGui::Render();
                 ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -540,8 +637,10 @@ struct OpenGLPlotBackend {
     // Close window
     void close() { glfwSetWindowShouldClose(window, GL_TRUE); }
 
-    // Update the view (don't need to do anything of OpenGL)
-    void update(bool force = false) {}
+    // Require the plot to be updated
+    void update(bool force = false) {
+        require_update = true;
+    }
 
     // Update editor (tb)
     // Assumes func_id is curr_func !
@@ -566,8 +665,11 @@ struct OpenGLPlotBackend {
     // Show marker at position
     void show_marker_at(const PointMarker& ptm, int px, int py) {
         marker_posx = px; marker_posy = py + 20;
-        marker_text = PointMarker::label_repr(ptm.label) +
-            std::to_string(ptm.x) + ", " + std::to_string(ptm.y);
+        std::stringstream ss;
+        ss << std::fixed << std::setprecision(4) <<
+            PointMarker::label_repr(ptm.label) << ptm.x << ", " << ptm.y;
+        marker_text = ss.str();
+        make_active();
     }
 
     // Hide marker (label)
@@ -575,8 +677,20 @@ struct OpenGLPlotBackend {
         marker_text.clear();
     }
 
-    char editor_strs[EDITOR_MAX_FUNCS][EDITOR_BUF_SZ];
-    size_t focus_idx = 0;
+    // Update color of function in function window
+    // to match color in plotter
+    void update_func_color(size_t func_id) {
+        auto* col = edit_colors[func_id];
+        auto& fcol = plot.funcs[func_id].line_color;
+        col[0] = fcol.r / 255.0f;
+        col[1] = fcol.g / 255.0f;
+        col[2] = fcol.b / 255.0f;
+        col[3] = 1.;
+    }
+
+    void make_active() {
+        active_counter = ACTIVE_FRAMES;
+    }
 
 private:
     GLFWwindow* window;
@@ -595,10 +709,28 @@ private:
     float edit_colors[EDITOR_MAX_FUNCS][4];
     size_t curr_edit_color_idx;
 
+    // Editor data
+    char editor_strs[EDITOR_MAX_FUNCS][EDITOR_BUF_SZ];
+
     // Slider data
     std::string slider_error;
     std::vector<SliderData> sliders;
     std::set<std::string> sliders_vars;
+
+    // Set to focus an editor
+    size_t focus_idx = 0;
+
+    // Require update?
+    bool require_update = false;
+    // Active counter: if > 0 updates at full FPS
+    int active_counter = 0;
+
+    // FPS restriction when not moving (to reduce CPU usage)
+    const int RESTING_FPS = 5;
+    // Frames to stay active after update
+    const int ACTIVE_FRAMES = 60;
+    // Number of frames to average
+    const size_t FPS_AVG_SIZE = 5;
 
     // Templated plotter instance, contains plotter logic
     GLPlotter plot;

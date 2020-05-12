@@ -16,6 +16,7 @@
 #include <array>
 #include <vector>
 #include <set>
+#include <algorithm>
 #include "expr.hpp"
 #include "parser.hpp"
 #include "util.hpp"
@@ -44,7 +45,7 @@ namespace color {
         ORANGE = 0xffa500,
         PURPLE = 0x800080
     };
-    const color from_int(size_t color_index);
+    color from_int(size_t color_index);
 }  // namespace color
 
 // Represents function in plotter
@@ -127,7 +128,6 @@ struct PointMarker {
  * void polyline(const std::vector<std::array<float, 2> >& points, color::color c, float thickness = 1.);   draw polyline
  * void rectangle(float x, float y, float w, float h, bool fill, color::color color);                     draw rectangle (filled or non-filled)
  * void clear(color::color color);                                                                        fill entire view (clear)
- * void set_pixel(float x, float y, color::color color);                                                  set single pixel
  * void string(float x, float y, std::string s, color::color c);                                          draw a string
  * */
 template<class Backend, class Graphics>
@@ -160,8 +160,8 @@ public:
         // Draw axes
         if (ymin <= 0 && ymax >= 0) {
             double y0 = ymax / (ymax - ymin);
-            sy0 = static_cast<int>(shigh * y0);
-            graph.line(0, sy0, swid, sy0, color::DARK_GRAY, 2.);
+            sy0 = static_cast<float>(shigh * y0);
+            graph.line(0.f, sy0, swid, sy0, color::DARK_GRAY, 2.);
             ++cnt_visible_axis;
         }
         else if (ymin > 0) {
@@ -169,8 +169,8 @@ public:
         }
         if (xmin <= 0 && xmax >= 0) {
             double x0 = - xmin / (xmax - xmin);
-            sx0 = static_cast<int>(swid * x0);
-            graph.line(sx0,0, sx0, shigh, color::DARK_GRAY, 3.);
+            sx0 = static_cast<float>(swid * x0);
+            graph.line(sx0, 0.f, sx0, shigh, color::DARK_GRAY, 3.);
             ++cnt_visible_axis;
         }
         else if (xmax < 0) {
@@ -212,15 +212,15 @@ public:
         double yb = ybi, xl = xli;
         int idx = 0;
         while (xl <= xr) {
-            int sxi = static_cast<int>(swid * (xl - xmin) / (xmax - xmin));
+            float sxi = static_cast<float>(swid * (xl - xmin) / (xmax - xmin));
             graph.line(sxi,0, sxi, shigh, color::LIGHT_GRAY);
             xl = xstep * idx + xli;
             ++idx;
         }
         idx = 0;
         while (yb <= yt) {
-            int syi = static_cast<int>(shigh * (ymax - yb) / (ymax - ymin));
-            graph.line(0, syi, swid, syi, color::LIGHT_GRAY);
+            float syi = static_cast<float>(shigh * (ymax - yb) / (ymax - ymin));
+            graph.line(0.f, syi, swid, syi, color::LIGHT_GRAY);
             yb = ystep * idx + ybi;
             ++idx;
         }
@@ -232,8 +232,8 @@ public:
         double ymb = ymbi, xml = xmli;
         idx = 0;
         while (xml <= xmr) {
-            int sxi = static_cast<int>(swid * (xml - xmin) / (xmax - xmin));
-            graph.line(sxi,0, sxi, shigh, color::GRAY);
+            float sxi = static_cast<float>(swid * (xml - xmin) / (xmax - xmin));
+            graph.line(sxi, 0.f, sxi, shigh, color::GRAY);
 
             if (xml != 0) {
                 std::stringstream sstm;
@@ -245,7 +245,7 @@ public:
         }
         idx = 0;
         while (ymb <= ymt) {
-            int syi = static_cast<int>(shigh * (ymax - ymb) / (ymax - ymin));
+            float syi = static_cast<float>(shigh * (ymax - ymb) / (ymax - ymin));
             graph.line(0, syi, swid, syi, color::GRAY);
 
             std::stringstream sstm;
@@ -275,7 +275,7 @@ public:
         // Newton's method parameters
         static const double EPS_STEP  = 1e-8;
         static const double EPS_ABS   = 1e-6;
-        static const int    MAX_ITER     = 20;
+        static const int    MAX_ITER  = 30;
         // Shorthand for Newton's method arguments
 #define NEWTON_ARGS x_var, x, env, EPS_STEP, EPS_ABS, MAX_ITER, \
         xmin - NEWTON_SIDE_ALLOW, xmax + NEWTON_SIDE_ALLOW
@@ -295,71 +295,125 @@ public:
         // Asymptote check constants:
         // Assume asymptote at discontinuity if slope between
         // x + ASYMPTOTE_CHECK_DELTA1, x + ASYMPTOTE_CHECK_DELTA2
-        static const double ASYMPTOTE_CHECK_DELTA1 = 1e-8;
-        static const double ASYMPTOTE_CHECK_DELTA2 = 1e-7;
-        static const double ASYMPTOTE_CHECK_EPS    = 1e-9;
+        static const double ASYMPTOTE_CHECK_DELTA1 = xdiff * 1e-9;
+        static const double ASYMPTOTE_CHECK_DELTA2 = xdiff * 1e-8;
+        static const double ASYMPTOTE_CHECK_EPS    = xdiff * 1e-10;
         // Special eps for boundary of domain
-        static const double ASYMPTOTE_CHECK_BOUNDARY_EPS = 1e-2;
+        static const double ASYMPTOTE_CHECK_BOUNDARY_EPS = xdiff * 1e-3;
 
         // x-coordinate after a discontinuity to begin drawing
-        static const double DISCONTINUITY_EPS = 1e-7;
+        static const double DISCONTINUITY_EPS = xdiff * 1e-3;
 
-        // * Draw functions
+        bool prev_loss_detail = loss_detail;
+        loss_detail = false;
+        // * Draw function s
         pt_markers.clear(); pt_markers.reserve(500);
-        grid.clear(); grid.resize(shigh* swid, -1);
+        grid.clear(); grid.resize(shigh * swid, -1);
         for (size_t exprid = 0; exprid < funcs.size(); ++exprid) {
             bool reinit = true;
-            int psx = -1, psy = -1;
             auto& func = funcs[exprid];
             auto& expr = func.expr;
             const color::color& func_color = func.line_color;
             if (func.is_implicit) {
                 // implicit function
-                const int interval = 3;
-                std::vector<double> line(swid / interval + 2);
-                for (int sx = 0; sx < swid; sx += interval) {
-                    int idx = 0;
-                    for (int sy = 0; sy < shigh; sy += interval, ++idx) {
+                int interval = 1;
+                std::vector<double> line(swid + 2);
+                // Increase interval per x pixels
+                static const size_t HIGH_PIX_LIMIT = 25000;
+                // Maximum number of pixels to draw (stops drawing)
+                static const size_t MAX_PIXELS = 300000;
+                // Epsilon for bisection
+                static const double BISECTION_EPS = 1e-5;
+                size_t pix_cnt = 0;
+
+                for (int sy = 0; sy < shigh; sy += interval) {
+                    if (pix_cnt > MAX_PIXELS) break;
+                    const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
+                    for (int sx = 0; sx < swid; sx += interval) {
+                        if (pix_cnt > MAX_PIXELS) break;
+                        // Update interval based on point count
+                        interval = pix_cnt / HIGH_PIX_LIMIT + 1;
+
                         const double x = 1.*sx / swid * xdiff + xmin;
-                        const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
-                        env.vars[x_var] = x; env.vars[y_var] = y;
+                        double precise_x = x, precise_y = y;
+
+                        env.vars[y_var] = y;
+                        env.vars[x_var] = x;
                         double z = expr(env);
-                        if (std::fabs(z) > 10.0) {
-                            line[idx] = line[idx+1] = z;
-                            ++idx; sy += interval;
-                            continue;
-                        }
-                        if (sy > 0) {
-                            double zup = line[idx-1];
-                            if ((zup <= 0 && z >= 0) || (zup >= 0 && z <= 0)) {
-                                graph.set_pixel(sx-1, sy-1, func_color);
-                                graph.set_pixel(sx, sy-1, func_color);
-                                graph.set_pixel(sx+1, sy-1, func_color);
-                                if (curr_func == exprid) {
-                                    // current function, thicken
-                                    graph.set_pixel(sx-1, sy-2, func_color);
-                                    graph.set_pixel(sx, sy-2, func_color);
-                                    graph.set_pixel(sx+1, sy-2, func_color);
+                        int sgn_z = (z < 0 ? -1 : 1);
+                        bool paint_square = false;
+                        if (z == 0) {
+                            paint_square = true;
+                        } else if (sy > 0) {
+                            double zup = line[sx];
+                            if (zup) {
+                                int sgn_zup = (zup < 0 ? -1 : 1);
+                                paint_square = !(sgn_zup + sgn_z);
+                                if (paint_square) {
+                                    // Bisect up
+                                    double lo = y;
+                                    double hi = (shigh - (sy - interval))*1. / shigh * ydiff + ymin;
+                                    while (hi - lo > BISECTION_EPS) {
+                                        double mi = (lo + hi) / 2;
+                                        env.vars[y_var] = mi;
+                                        double zmi = expr(env);
+                                        int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                        if (sgn_z == sgn_zmi) lo = mi;
+                                        else hi = mi;
+                                    }
+                                    precise_y = lo;
                                 }
                             }
                         }
-                        if (sx > 0) {
-                            double zleft = line[idx];
-                            if ((zleft <= 0 && z >= 0) || (zleft >= 0 && z <= 0)) {
-                                graph.set_pixel(sx-2, sy-1, func_color);
-                                graph.set_pixel(sx-2, sy, func_color);
-                                graph.set_pixel(sx-2, sy+1, func_color);
-                                if (curr_func == exprid) {
-                                    // current function, thicken
-                                    graph.set_pixel(sx-1, sy-1, func_color);
-                                    graph.set_pixel(sx-1, sy, func_color);
-                                    graph.set_pixel(sx-1, sy+1, func_color);
+                        if (!paint_square && sx >= interval) {
+                            double zleft = line[sx - interval];
+                            if (zleft) {
+                                int sgn_zleft = (zleft < 0 ? -1 : 1);
+                                paint_square = !(sgn_zleft + sgn_z);
+                                if (paint_square) {
+                                    // Bisect left
+                                    double lo = 1.*(sx - interval) / swid * xdiff + xmin;
+                                    double hi = x;
+                                    while (hi - lo > BISECTION_EPS) {
+                                        double mi = (lo + hi) / 2;
+                                        env.vars[x_var] = mi;
+                                        double zmi = expr(env);
+                                        int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                        if (sgn_zleft == sgn_zmi) lo = mi;
+                                        else hi = mi;
+                                    }
+                                    precise_x = lo;
                                 }
                             }
                         }
-                        line[idx] = z;
+                        if (paint_square) {
+                            int pad = (curr_func == exprid) ? 1 : 0;
+                            graph.rectangle((float)(sx - interval + 1 - pad),
+                                        (float)(sy - interval + 1 - pad),
+                                         (float)(interval + pad), (float)(interval + pad), true,
+                                         func_color);
+                            // Add labels
+                            size_t new_marker_idx = pt_markers.size();
+                            pt_markers.emplace_back();
+                            auto& new_marker = pt_markers.back();
+                            new_marker.x = precise_x; new_marker.y = precise_y;
+                            new_marker.rel_func = exprid;
+                            new_marker.label = PointMarker::LABEL_NONE;
+                            new_marker.passive = true;
+                            int cmin = std::max(sx - interval + 1 - MARKER_MOUSE_RADIUS, 0);
+                            int cmax = std::min(sx + MARKER_MOUSE_RADIUS, swid - 1);
+                            for (int r = std::max(sy - interval + 1 - MARKER_MOUSE_RADIUS, 0);
+                                    r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh - 1); ++ r) {
+                                std::fill(grid.begin() + (r * swid + cmin),
+                                        grid.begin() + (r * swid + cmax + 1),
+                                        new_marker_idx);
+                            }
+                            ++pix_cnt;
+                        }
+                        line[sx] = z;
                     }
                 }
+                if (interval > 1) loss_detail = true;
             } else {
                 // explicit function
                 env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
@@ -406,13 +460,8 @@ public:
                 std::vector<std::array<float, 2> > curr_line;
                 // Draw a line and construct markers along the line
                 // to allow clicking
-                auto draw_line = [&](int psx, int psy, int sx, int sy, double x, double y) {
-                    int miny, maxy, minx, maxx;
-                    if (sy < psy) {
-                        miny = sy; maxy = psy; minx = sx; maxx = psx;
-                    } else {
-                        miny = psy; maxy = sy; minx = psx; maxx = sx;
-                    }
+                auto draw_line = [&](float psx, float psy, float sx, float sy, double x, double y) {
+                    float miny = std::min(sy, psy), maxy = sy + psy - miny;
 
                     // Construct a (passive) point marker for this point,
                     // so that the user can click to see the position
@@ -422,32 +471,31 @@ public:
                     new_marker.x = x; new_marker.y = y;
                     new_marker.rel_func = exprid;
                     new_marker.label = PointMarker::LABEL_NONE;
-                    new_marker.sx = (sx + psx) / 2; new_marker.sy = (sy + psy) / 2;
+                    new_marker.sx = static_cast<int>(sx + psx) / 2;
+                    new_marker.sy = static_cast<int>(sy + psy) / 2;
                     new_marker.passive = true;
 
-                    int dfx = maxx-minx, dfy = maxy-miny;
-                    for (int syp = std::max(miny, 0); syp <= std::min(maxy, shigh-1); syp += 4) {
+                    int sxi = static_cast<int>(sx);
+                    int syi = static_cast<int>(sy);
+                    int minyi = std::max(static_cast<int>(miny) - MARKER_MOUSE_RADIUS, 0);
+                    int maxyi = std::min(static_cast<int>(maxy) + MARKER_MOUSE_RADIUS, shigh-1);
+                    for (int r = minyi; r <= maxyi; ++r) {
+                        int cmin = std::max(sxi - MARKER_MOUSE_RADIUS, 0);
+                        int cmax = std::min(sxi + MARKER_MOUSE_RADIUS, swid-1);
                         // Assign to grid
-                        for (int r = std::max(syp - MARKER_MOUSE_RADIUS, 0);
-                                r <= std::min(syp + MARKER_MOUSE_RADIUS,
-                                             shigh-1); ++r) {
-                            for (int c = std::max(
-                                        sx - MARKER_MOUSE_RADIUS, 0);
-                                    c <= std::min(sx + MARKER_MOUSE_RADIUS,
-                                        swid-1); ++c) {
-                                size_t existing_marker_idx = grid[r * swid + c];
-                                if (~existing_marker_idx) {
-                                    auto& existing_marker = pt_markers[existing_marker_idx];
-                                    if (util::sqr_dist(existing_marker.sx,
-                                                existing_marker.sy, c, r) <=
-                                            util::sqr_dist(new_marker.sx,
-                                                new_marker.sy, c, r)) {
-                                        // If existing marker is closer, do not overwrite it
-                                        continue;
-                                    }
+                        for (int c = cmin; c <= cmax; ++c) {
+                            size_t existing_marker_idx = grid[r * swid + c];
+                            if (~existing_marker_idx) {
+                                auto& existing_marker = pt_markers[existing_marker_idx];
+                                if (util::sqr_dist(existing_marker.sx,
+                                            existing_marker.sy, c, r) <=
+                                        util::sqr_dist(new_marker.sx,
+                                            new_marker.sy, c, r)) {
+                                    // If existing marker is closer, do not overwrite it
+                                    continue;
                                 }
-                                grid[r * swid + c] = new_marker_idx;
                             }
+                            grid[r * swid + c] = new_marker_idx;
                         }
                     }
                     // Draw the line
@@ -457,10 +505,10 @@ public:
                             graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
                         }
                         curr_line.resize(2);
-                        curr_line[0] = {(float)psx, (float)psy};
-                        curr_line[1] = {(float)sx, (float)sy};
+                        curr_line[0] = {psx, psy};
+                        curr_line[1] = {sx, sy};
                     } else {
-                        curr_line.push_back({(float)sx, (float)sy});
+                        curr_line.push_back({sx, sy});
                     }
                 };
                 // Find roots, asymptotes, extrema
@@ -523,27 +571,31 @@ public:
                 // std::cerr << discont.size() << ": ";
                 // for (auto i : discont) std::cerr << i.first << ":" << i.second <<" ";
                 // std::cerr <<  "\n";
-                double prev_discont_x = xmin, prev_asd, asd;
+                double prev_discont_x = xmin;
+                float prev_discont_sx;
                 int prev_discont_type;
                 size_t as_idx = 0;
-                // Draw function from asymptote to asymptote
+
+                float psx = -1.f, psy = -1.f;
+                // Draw function from discont to discont
                 for (const auto& discontinuity : discont) {
                     double discont_x = discontinuity.first;
                     int discont_type = discontinuity.second;
-                    asd = (discont_x - xmin) / xdiff * swid;
+                    float discont_sx = static_cast<float>((discont_x - xmin) / xdiff * swid);
                     if (as_idx > 0) {
                         bool connector = prev_discont_type != DISCONT_SCREEN;
                         // Draw func between asymptotes
-                        for (double sxd = prev_asd + DISCONTINUITY_EPS; sxd < asd;) {
+                        for (float sxd = prev_discont_sx + DISCONTINUITY_EPS;
+                                sxd < discont_sx;) {
                             const double x = sxd / swid * xdiff + xmin;
                             env.vars[x_var] = x;
                             double y = expr(env);
 
                             if (!std::isnan(y)) {
-                                if (y> ymax + ydiff) y = ymax + ydiff;
+                                if (y > ymax + ydiff) y = ymax + ydiff;
                                 else if (y < ymin - ydiff) y = ymin - ydiff;
-                                int sy = static_cast<int>(std::round((ymax - y) * shigh / ydiff));
-                                int sx = static_cast<int>(std::round(sxd));
+                                float sy = static_cast<float>((ymax - y) * shigh / ydiff);
+                                float sx = sxd;
                                 if (reinit) {
                                     if (!(y > ymax || y < ymin)) {
                                         reinit = false;
@@ -560,18 +612,17 @@ public:
                                     double eps = discont_type == DISCONT_ASYMPT ?
                                                 ASYMPTOTE_CHECK_EPS:
                                                 ASYMPTOTE_CHECK_BOUNDARY_EPS;
-                                    if (yp - yp2 > eps && sy > 0) {
-                                        psx = static_cast<int>(std::round(prev_asd));
-                                        psy = 0;
+                                    if (yp - yp2 > eps && sy > 0.f) {
+                                        psx = prev_discont_sx;
+                                        psy = 0.f;
                                         reinit = false;
-                                    }
-                                    if (yp - yp2 < -eps && sy < shigh) {
-                                        psx = static_cast<int>(std::round(prev_asd));
-                                        psy = shigh;
+                                    } else if (yp - yp2 < -eps && sy < (float)shigh) {
+                                        psx = prev_discont_sx;
+                                        psy = static_cast<float>(shigh);
                                         reinit = false;
                                     }
                                 }
-                                if (!reinit && ~psx) {
+                                if (!reinit && psx >= 0) {
                                     draw_line(psx, psy, sx, sy, x, y);
                                     if (y > ymax || y < ymin) {
                                         reinit = true;
@@ -585,11 +636,11 @@ public:
                                 psx = -1;
                             }
                             if (discont.size() > 2 && discont.size() < 100) {
-                                if ((as_idx > 1 && sxd - prev_asd < 1.) ||
-                                        (as_idx < discont.size() - 1 && asd - sxd < 5.)) {
+                                if ((as_idx > 1 && sxd - prev_discont_sx < 1.) ||
+                                        (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
                                     sxd += 0.1;
-                                } else if ((as_idx > 1 && sxd - prev_asd < 5.) ||
-                                        (as_idx < discont.size() - 1 && asd - sxd < 5.)) {
+                                } else if ((as_idx > 1 && sxd - prev_discont_sx < 5.) ||
+                                        (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
                                     sxd += 0.5;
                                 } else {
                                     sxd += 1.0;
@@ -604,29 +655,27 @@ public:
                             double yp = expr(env);
                             env.vars[x_var] = discont_x - ASYMPTOTE_CHECK_DELTA2;
                             double yp2 = expr(env);
-                            int sx = -1, sy;
+                            float sx = -1, sy;
                             double eps = discont_type == DISCONT_ASYMPT ?
                                 ASYMPTOTE_CHECK_EPS:
                                 ASYMPTOTE_CHECK_BOUNDARY_EPS;
-                            if (yp - yp2 > eps) {
-                                sx = static_cast<int>(asd);
-                                sy = 0;
-                                if (psy <= 0) sx = -1;
+                            if (yp - yp2 > eps && psy > 0) {
+                                sx = static_cast<float>(discont_sx);
+                                sy = 0.f;
                             }
-                            if (yp - yp2 < -eps) {
-                                sx = static_cast<int>(asd);
-                                sy = shigh;
-                                if (psy >= shigh) sx = -1;
+                            if (yp - yp2 < -eps && psy < shigh) {
+                                sx = discont_sx;
+                                sy = static_cast<float>(shigh);
                             }
-                            if (~sx) {
-                                draw_line(psx, psy, sx, sy, discont_x - 1e-6, yp);
+                            if (sx >= 0.f) {
+                                draw_line(psx, psy, sx, sy, discont_x - 1e-6f, yp);
                             }
                         }
                     }
                     ++as_idx;
                     prev_discont_x = discont_x;
                     prev_discont_type = discont_type;
-                    prev_asd = asd;
+                    prev_discont_sx = discont_sx;
                 }
 
                 // finish last line, if exists
@@ -661,7 +710,7 @@ public:
                     size_t idx = pt_markers.size();
                     pt_markers.emplace_back();
                     auto& ptm = pt_markers.back();
-                    ptm.label == label;
+                    ptm.label = label;
                     ptm.y = y; ptm.x = x;
                     ptm.sx = sx; ptm.sy = sy;
                     ptm.passive = false;
@@ -714,6 +763,11 @@ public:
                 }
             }
         }
+        if (loss_detail) {
+            be.show_error("Warning: some detail may be lost");
+        } else if (prev_loss_detail) {
+            be.show_error("");
+        }
     }
 
     // Re-parse expression in editor for function 'idx'
@@ -758,6 +812,7 @@ public:
             func.drecip = func.recip.diff(x_var, env);
         } else func.diff.ast[0] = OpCode::null;
         be.show_error(parser.error_msg);
+        loss_detail = false;
         be.update();
     }
 
@@ -989,6 +1044,9 @@ private:
     bool dragdown, draglabel;
     int dragx, dragy;
     double xmaxi, xmini, ymaxi, ymini;
+
+    // whether some detail is lost
+    bool loss_detail = false;
 
     // Discontinuity type
     enum _DiscontType {

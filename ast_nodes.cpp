@@ -121,7 +121,7 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
         if (ri == -1) ri = vi;
         auto* l = &nodes[li], *r = &nodes[ri];
         switch(v.opcode) {
-            case absb: 
+            case absb:
                 // Involution
                 if (l->opcode == absb ||
                         l->opcode == sqrb) v = *l;
@@ -143,8 +143,8 @@ void optim_nodes(Environment& env, std::vector<ASTNode>& nodes, uint32_t vi) {
                     auto* ll = &nodes[lli];
                     if (ll->opcode == val) {
                         ll->val = -ll->val;
+                        v = *l;
                     }
-                    v = *l;
                     break;
                 }
                 break;
