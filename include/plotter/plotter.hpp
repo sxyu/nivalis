@@ -178,30 +178,6 @@ public:
         }
 
         // Draw lines
-        auto round125 = [](double step) {
-            int fa = 1, fan;
-            if (step < 1) {
-                int subdiv = 5;
-                while(1./fa > step) {
-                    fan = fa; fa *= 2; subdiv = 5;
-                    if(1./fa <= step) break;
-                    fan = fa; fa /= 2; fa *= 5; subdiv = 5;
-                    if(1./fa <= step) break;
-                    fan = fa; fa *= 2; subdiv = 4;
-                }
-                return std::pair<double, double>(1./fan/subdiv, 1./fan);
-            } else {
-                int subdiv = 5;
-                while(fa < step) {
-                    fa *= 2; subdiv = 4;
-                    if(fa >= step) break;
-                    fa /= 2; fa *= 5; subdiv = 5;
-                    if(fa >= step) break;
-                    fa *= 2; subdiv = 5;
-                }
-                return std::pair<double, double>(fa * 1. / subdiv, fa);
-            }
-        };
         double ystep, xstep, ymstep, xmstep;
         std::tie(ystep, ymstep) = round125((ymax - ymin) / shigh * 600 / 10.8);
         std::tie(xstep, xmstep) = round125((xmax - xmin) / swid * 1000 / 18.);
@@ -734,7 +710,7 @@ public:
                         if (diff_sub_expr.is_null()) continue;
                         std::set<double> st;
                         for (int sxd = 0; sxd < swid; sxd += 2) {
-                            const double x = sxd*1. * xdiff / swid + xmin;
+                            const double x = sxd * xdiff / swid + xmin;
                             double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
                             push_if_valid(root, st);
                         }
@@ -1034,6 +1010,34 @@ public:
 
     Environment env;
 private:
+    // Helper for finding grid line sizes fo a given step size
+    // rounds to increments of 1,2,5
+    // e.g. 0.1, 0.2, 0.5, 1, 2, 5 (used for grid lines)
+    // returns (small gridline size, big gridline size)
+    std::pair<double, double> round125(double step) {
+        double fa = 1., fan;
+        if (step < 1) {
+            int subdiv = 5;
+            while(1./fa > step) {
+                fan = fa; fa *= 2; subdiv = 5;
+                if(1./fa <= step) break;
+                fan = fa; fa /= 2; fa *= 5; subdiv = 5;
+                if(1./fa <= step) break;
+                fan = fa; fa *= 2; subdiv = 4;
+            }
+            return std::pair<double, double>(1./fan/subdiv, 1./fan);
+        } else {
+            double subdiv = 5.;
+            while(fa < step) {
+                fa *= 2; subdiv = 4;
+                if(fa >= step) break;
+                fa /= 2; fa *= 5; subdiv = 5;
+                if(fa >= step) break;
+                fa *= 2; subdiv = 5;
+            }
+            return std::pair<double, double>(fa * 1. / subdiv, fa);
+        }
+    }
     Backend& be;
     Parser parser;
 
