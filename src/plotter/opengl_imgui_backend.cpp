@@ -595,7 +595,7 @@ struct OpenGLPlotBackend {
                             ImGui::BulletText("%s", "Implicit functions: Enter an equation with x, y in the textbox, e.g. cos(x*y)=0");
                             ImGui::BulletText("%s", "'Polylines' (points and lines)");
                             ImGui::Indent();
-                                ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>) e.g. (1, 2).\nCoords can have variables.");
+                                ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>)\ne.g. (1, 2). Coords can have variables.");
                                 ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>)(<x2>,<y2>)... e.g. (1, 1)(2,2)(3,2)");
                             ImGui::Unindent();
                         ImGui::Unindent();
