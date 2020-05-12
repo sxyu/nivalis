@@ -454,6 +454,7 @@ struct OpenGLPlotBackend {
                                 slider_error.clear();
                                 for (size_t t = 0; t < plot.funcs.size(); ++t)
                                     plot.reparse_expr(t);
+                                update();
                             }
                         }
                     }
@@ -475,6 +476,8 @@ struct OpenGLPlotBackend {
                                 &sl.var_val, sl.lo, sl.hi)) {
                         if (~sl.var_addr) {
                             plot.env.vars[sl.var_addr] = sl.var_val;
+                            update();
+                            make_active();
                         }
                     }
                 }

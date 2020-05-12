@@ -51,11 +51,11 @@ The evaluator parses expressions into custom bytecode, which is optimized before
         - If using Nana: you may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
           and library path: `cmake .. -DNANA_LIBRARY='nana_output_lib_name'`
 - Built project: `cmake --build . --config Release`, or open the solution in VS and build in "Release" configuration manually
-- Optionally: install by `cmake --build . --config Release --target INSTALL`
 
 ### Testing
 - Tests are built by default. To disable, add `-DBUILD_TESTS=OFF` to cmake command line
-- `make test` to run tests (with ctest), or just manually run test/test_*
+- Linux: `make test` to run tests (with ctest), or just manually run test/test_*
+- Alternatively, Windows/Linux: `ctest` to run tests
 - `ctest --verbose` to get more information (error line number etc.)
 
 ## Usage 
