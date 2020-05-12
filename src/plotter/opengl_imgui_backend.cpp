@@ -583,17 +583,49 @@ struct OpenGLPlotBackend {
                 ImGui::SetNextWindowSize(ImVec2(600, 400));
                 if (ImGui::BeginPopupModal("Reference", NULL,
                             ImGuiWindowFlags_NoResize)) {
+                    // Reference popup
                     if (ImGui::Button("Close##refclose", ImVec2(100.f, 0.0f))) {
                         ImGui::CloseCurrentPopup();
                     }
-                    ImGui::TextUnformatted("Operators");
+                    ImGui::TextUnformatted("GUI: Function editor");
+                    ImGui::Indent();
+                        ImGui::BulletText("%s", "The function editor is the window initially on top-left with\ntextboxes. You can enter expressions here to draw:");
+                        ImGui::Indent();
+                            ImGui::BulletText("%s", "Explicit functions: Simply enter an expression with x in the textbox\ne.g. x^2");
+                            ImGui::BulletText("%s", "Implicit functions: Enter an equation with x, y in the textbox, e.g. cos(x*y)=0");
+                            ImGui::BulletText("%s", "'Polylines' (points and lines)");
+                            ImGui::Indent();
+                                ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>) e.g. (1, 2).\nCoords can have variables.");
+                                ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>)(<x2>,<y2>)... e.g. (1, 1)(2,2)(3,2)");
+                            ImGui::Unindent();
+                        ImGui::Unindent();
+                        ImGui::BulletText("%s", "Press '+ New function' to add more functions.\nPress 'x' to delete a function.\nPress the colored button to the left to change line color.");
+                    ImGui::Unindent();
+
+                    ImGui::TextUnformatted("GUI: Keyboard shortcuts");
+                    ImGui::Indent();
+                        ImGui::BulletText("On background\n");
+                        ImGui::Indent();
+                            ImGui::BulletText("%s", "Ctrl + E to focus on functions editor");
+                            ImGui::BulletText("%s", "-= keys to zoom, arrow keys to move");
+                            ImGui::BulletText("%s", "Ctrl/Alt + -= keys to zoom asymmetrically");
+                            ImGui::BulletText("%s", "q to close window\n");
+                        ImGui::Unindent();
+                        ImGui::BulletText("On function editor\n");
+                        ImGui::Indent();
+                            ImGui::BulletText("%s", "Up/down arrow to move between functions\n"
+                                    "Down from the bottomost function to create new function");
+                        ImGui::Unindent();
+                    ImGui::Unindent();
+
+                    ImGui::TextUnformatted("Expressions: Operators");
                     ImGui::Indent();
                     ImGui::BulletText("%s", "+- */% ^\nWhere ^ is exponentiation (right-assoc)");
                     ImGui::BulletText("%s", "Parentheses: () and [] are equivalent (but match separately)");
                     ImGui::BulletText("%s", "Comparison: < > <= >= == output 0,1\n(= equivalent to == except in assignment/equality statement)");
                     ImGui::Unindent();
 
-                    ImGui::TextUnformatted("Special Forms");
+                    ImGui::TextUnformatted("Expressions: Special Forms");
                     ImGui::Indent();
                     ImGui::BulletText("%s", "Conditional special form (piecewise function):\n"
                             "{<predicate>: <expr>[, <elif-pred>: "
@@ -610,7 +642,7 @@ struct OpenGLPlotBackend {
                                 "ex. prdo(x: 0, 100)[1/x]");
                     ImGui::Unindent();
 
-                    ImGui::TextUnformatted("Functions");
+                    ImGui::TextUnformatted("Expressions: Functions");
                     ImGui::Indent();
                     ImGui::BulletText("%s", "<func_name>(<args>) to call a function");
                     ImGui::BulletText("%s", "Most function names are self-explanatory; some hints:\n"

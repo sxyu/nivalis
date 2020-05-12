@@ -80,8 +80,11 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - `Ctrl`+`E` to edit function expressions (or click the textbox)
         - Function expressions can be:
             - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`
-            - Implicit function (slower, less detail):
+            - Implicit function (less detail, no subpixel render):
               e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
+            - *Polylines*: draws a series of points and lines e.g. (1,1) e.g. (1,1) (2,2) (3,2) 
+                - If size 1, like (a,b), it draws a single
+                - If size >1, like (a,b)(c,d), draws all points and connects them in order
         - Updates plot automatically
     - Click `+ New function` to add a function. Click textbox to highlight functions. Alternatively, use `Up`/`Down` arrow keys in textbox to switch between functions or add a new one (by going beyond the bottomost existing function)
     - Click the x button to delete the current function
@@ -103,8 +106,11 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 - After launch, `Ctrl`+`E` to edit function expression (or click the textbox)
     - Function expressions can be:
         - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`
-        - Implicit function (slower, less detail):
+        - Implicit function ( less detail):
           e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
+        - *Polylines*: draws a series of points and lines e.g. (1,1) e.g. (1,1) (2,2) (3,2) 
+            - If size 1, like (a,b), it draws a single
+            - If size >1, like (a,b)(c,d), draws all points and connects them in order
     - Updates plot automatically
 - `Up`/`Down` arrow keys in textbox (or use `<` `>` buttons below textbox) to switch functions or add new functions (by going past last defined function)
 - Click the x button or press `Ctrl`+`Del` to delete current function
