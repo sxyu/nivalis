@@ -35,6 +35,8 @@ Expr wrap_expr(uint32_t opcode, const Expr& a) {
 
 Expr::Expr() { ast.resize(2); }
 double Expr::operator()(Environment& env) const {
+    if (ast_pad.size())
+        return detail::eval_padded_ast(env, ast_pad);
     const uint32_t* astptr = &ast[0];
     return detail::eval_ast(env, &astptr);
 }
@@ -126,6 +128,13 @@ double Expr::newton(uint32_t var_addr, double x0, Environment& env,
         }
     }
     return std::numeric_limits<double>::quiet_NaN(); // Fail
+}
+
+void Expr::precompute_pad_ast() {
+    const uint32_t* astptr = &ast[0];
+    if (!detail::to_padded_ast(&astptr, ast_pad)) {
+        ast_pad.clear();
+    }
 }
 
 std::ostream& operator<<(std::ostream& os, const Expr& expr) {

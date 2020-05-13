@@ -3,6 +3,7 @@
 #define _EVAL_EXPR_H_1CD819C2_4DB3_4032_84F0_E1336A80D90C
 #include <cstdint>
 #include <ostream>
+#include <vector>
 #include "env.hpp"
 
 namespace nivalis {
@@ -24,6 +25,15 @@ void eval_ast_sub_var(const uint32_t** ast, uint32_t var_id,
 
 // Evaluate AST from node (main operator implementations)
 double eval_ast(Environment& env, const uint32_t** ast);
+
+// Convert AST to padded AST; returns false if not supported
+// currently not supported: sums/prods/bnz
+bool to_padded_ast(const uint32_t** ast, std::vector<uint32_t>& out);
+
+// Evaluate AST in 'padded' form,
+// without special handling for conditionals
+double eval_padded_ast(Environment& env,
+        const std::vector<uint32_t>& ast);
 
 }  // namespace detail
 }  // namespace nivalis

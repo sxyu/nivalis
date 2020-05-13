@@ -42,7 +42,8 @@
 } while(0);
 
 #define BEGIN_PROFILE auto start = std::chrono::high_resolution_clock::now()
-#define PROFILE(x) do{printf("%s: %f ms\n", #x, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count()); start = std::chrono::high_resolution_clock::now(); }while(false)
+#define PROFILE(x) do{printf("%s: %f ns\n", #x, std::chrono::duration<double, std::nano>(std::chrono::high_resolution_clock::now() - start).count()); start = std::chrono::high_resolution_clock::now(); }while(false)
+#define PROFILE_STEPS(x,stp) do{printf("%s: %f ns / step\n", #x, std::chrono::duration<double, std::nano>(std::chrono::high_resolution_clock::now() - start).count()/(stp)); start = std::chrono::high_resolution_clock::now(); }while(false)
 
 #define WAT(x) cerr<<(#x)<<"="<<(x)<<endl
 #define WAT2(x,y) cerr<<(#x)<<"="<<(x)<<" "<<(#y)<<"="<<(y)<<endl

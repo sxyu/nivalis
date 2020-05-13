@@ -770,6 +770,7 @@ public:
                                 Expr sub_expr = expr - func2.expr;
                                 Expr diff_sub_expr = func.diff - func2.diff;
                                 diff_sub_expr.optimize();
+                                diff_sub_expr.precompute_pad_ast();
                                 if (diff_sub_expr.is_null()) continue;
                                 std::set<double> st;
                                 for (int sxd = 0; sxd < swid; sxd += 2) {
@@ -935,13 +936,21 @@ public:
             if (!expr.is_null()) {
                 // Compute derivatives
                 expr.optimize();
-                func.diff = expr.diff(x_var, env);
-                if (!func.diff.is_null())
-                    func.ddiff = func.diff.diff(x_var, env);
-                else func.ddiff.ast[0] = OpCode::null;
-                func.recip = Expr::constant(1.) / func.expr;
-                func.recip.optimize();
-                func.drecip = func.recip.diff(x_var, env);
+                expr.precompute_pad_ast();
+                if (func.type == Function::FUNC_TYPE_EXPLICIT) {
+                    func.diff = expr.diff(x_var, env);
+                    func.diff.precompute_pad_ast();
+                    if (!func.diff.is_null()) {
+                        func.ddiff = func.diff.diff(x_var, env);
+                        func.ddiff.precompute_pad_ast();
+                    }
+                    else func.ddiff.ast[0] = OpCode::null;
+                    func.recip = Expr::constant(1.) / func.expr;
+                    func.recip.optimize();
+                    func.recip.precompute_pad_ast();
+                    func.drecip = func.recip.diff(x_var, env);
+                    func.drecip.precompute_pad_ast();
+                }
             } else func.diff.ast[0] = OpCode::null;
             be.show_error(parser.error_msg);
         }

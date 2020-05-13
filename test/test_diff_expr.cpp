@@ -10,7 +10,7 @@ using namespace nivalis;
 namespace {
     Parser parse;
     Environment env;
-    std::default_random_engine reng;
+    std::default_random_engine reng{std::random_device{}()};
 
     // Automatically test if derivative equals expected derivative
     bool test_derivative_random(

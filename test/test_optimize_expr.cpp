@@ -9,7 +9,7 @@
 using namespace nivalis;
 namespace {
     Parser parse;
-    std::default_random_engine reng;
+    std::default_random_engine reng{std::random_device{}()};
 
     // Automatically test if optimization leaves expression intact
     bool test_optim_equiv_random(const std::string& str,

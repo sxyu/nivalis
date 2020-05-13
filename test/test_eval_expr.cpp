@@ -10,25 +10,37 @@ using namespace nivalis;
 using namespace nivalis::detail;
 
 namespace {
+std::default_random_engine reng{std::random_device{}()};
 using AST = std::vector<uint32_t>;
 double test_eval_ast(Environment& env, AST& ast) {
     const uint32_t* ast_ptr = &ast[0];
     return eval_ast(env, &ast_ptr);
 }
+double test_eval_ast_pad(Environment& env, AST& ast) {
+    const uint32_t* ast_ptr = &ast[0];
+    std::vector<uint32_t> pad_ast;
+    to_padded_ast(&ast_ptr, pad_ast);
+    return eval_padded_ast(env, pad_ast);
+}
 }  // namespace
 
 int main() {
     BEGIN_TEST(test_eval_expr);
+
     using namespace OpCode;
+    std::uniform_real_distribution<double> unif(-100.0, 100.0);
+    Environment env; env.addr_of("x",false);
     Environment dummy_env;
     {
         AST ast; ast.push_back(OpCode::null);
         ASSERT(std::isnan(test_eval_ast(dummy_env, ast)));
+        ASSERT(std::isnan(test_eval_ast_pad(dummy_env, ast)));
     }
     {
         AST ast; ast.push_back(add);
         util::push_dbl(ast, 2.); util::push_dbl(ast, 1001.);
         ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 1003.);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 1003.);
     }
     {
         AST ast; ast.push_back(sub); ast.push_back(add);
@@ -37,6 +49,7 @@ int main() {
         util::push_dbl(ast, -52.);
         util::push_dbl(ast, 10.);
         ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), -107.8);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), -107.8);
     }
     {
         AST ast; ast.push_back(mul);
@@ -47,6 +60,7 @@ int main() {
         ASSERT_EQ(env.addr_of("x"), 0);
         ASSERT_EQ(ast.size(), 6);
         ASSERT_FLOAT_EQ(test_eval_ast(env, ast), -3.);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), -3.);
     }
     {
         AST ast;
@@ -54,6 +68,7 @@ int main() {
         util::push_dbl(ast, -13.); util::push_dbl(ast, -16.);
         util::push_dbl(ast, 9.5);
         ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), pow(3, 9.5));
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), pow(3, 9.5));
     }
     {
         AST ast;
@@ -62,6 +77,7 @@ int main() {
         util::push_dbl(ast, -19.5);
         util::push_dbl(ast, 2.9);
         ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 57.);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 57.);
     }
     {
         AST ast; ast.push_back(absb);
@@ -69,6 +85,7 @@ int main() {
         util::push_dbl(ast, 13.);
         util::push_dbl(ast, 14.);
         ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 182.);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 182.);
     }
     {
         AST ast; ast.push_back(OpCode::eq); ast.push_back(sqrb);
@@ -77,6 +94,7 @@ int main() {
         util::push_dbl(ast, -5.5);
         util::push_dbl(ast, 2.);
         ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 1.);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 1.);
     }
     {
         AST ast; ast.push_back(OpCode::lt); ast.push_back(sqrb);
@@ -85,6 +103,7 @@ int main() {
         util::push_dbl(ast, -5.5);
         util::push_dbl(ast, -5.5);
         ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 0.);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 0.);
     }
     {
         Environment env; env.set("_", -1.5); env.set("x", 2.65);
@@ -94,8 +113,10 @@ int main() {
         ast.push_back(tgammab);
         util::push_dbl(ast, 3.29);
         ASSERT_FLOAT_EQ(test_eval_ast(env, ast), tgamma(3.29));
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), tgamma(3.29));
         env.set("x", M_PI);
         ASSERT_FLOAT_EQ(test_eval_ast(env, ast), M_PI);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), M_PI);
     }
     {
         Environment env; env.set("y", 1.5); env.set("x", 2.65);
@@ -105,10 +126,13 @@ int main() {
         ast.push_back(digammab);
         util::push_dbl(ast, -1.5);
         ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 0.09368671870951362);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), 0.09368671870951362);
         env.set("x", 9.0);
         ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 0.09368671870951362);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), 0.09368671870951362);
         env.set("y", 10.0);
         ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 0.15580703096659532);
+        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), 0.15580703096659532);
     }
 
     {

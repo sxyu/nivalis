@@ -62,8 +62,16 @@ struct Expr {
                   double fx0 = std::numeric_limits<double>::max(),
                   double dfx0 = std::numeric_limits<double>::max()) const;
 
+    // Precompute padded version of AST to potentially
+    // speed up devaluation (advanced)
+    void precompute_pad_ast();
+
     // Abstract syntax tree
     std::vector<uint32_t> ast;
+
+private:
+    // Padded AST, for performance enhancement
+    std::vector<uint32_t> ast_pad;
 };
 
 // Display as string

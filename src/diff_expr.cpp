@@ -11,7 +11,6 @@ namespace detail {
 
 namespace {
 
-#define EV_NEXT eval_ast(env, ast)
 #define DIFF_NEXT if (!diff_ast_recursive(ast, env, var_addr, out)) \
                         return false
 #define PUSH_OP(op) out.push_back(op)
@@ -23,10 +22,6 @@ namespace {
                                copy_to_derivative(tmp, out); \
                                derivop2; \
                             }
-#define let_ab_i64 int64_t a = static_cast<int64_t>(EV_NEXT), \
-                           b = static_cast<int64_t>(EV_NEXT)
-#define let_ab_u32 unsigned a = static_cast<unsigned>(std::max(EV_NEXT,0.)), \
-                            b = static_cast<unsigned>(std::max(EV_NEXT,0.))
 
 const uint32_t* copy_to_derivative(const uint32_t* ast, std::vector<uint32_t>& out) {
     const auto* init_pos = ast;
@@ -136,7 +131,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                   if (eval_ast_find_var(ast, var_addr)) return false;
                   break;
 
-        case power: 
+        case power:
                   {
                       const uint32_t* tmp1 = *ast;
                       skip_ast(&tmp1);
@@ -145,11 +140,11 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                       if (expo_nonconst) {
                            const uint32_t* base_pos = *ast;
                            std::vector<uint32_t> elnb;
-                           elnb.push_back(mul); copy_to_derivative(expon_pos, elnb); 
-                           elnb.push_back(logb); copy_to_derivative(base_pos, elnb); 
+                           elnb.push_back(mul); copy_to_derivative(expon_pos, elnb);
+                           elnb.push_back(logb); copy_to_derivative(base_pos, elnb);
                            skip_ast(ast); skip_ast(ast);
                            const uint32_t* elnbptr = &elnb[0];
-                           PUSH_OP(mul); PUSH_OP(expb); copy_to_derivative(elnbptr, out); 
+                           PUSH_OP(mul); PUSH_OP(expb); copy_to_derivative(elnbptr, out);
                            diff_ast_recursive(&elnbptr, env, var_addr, out);
                       } else {
                           CHAIN_RULE(PUSH_OP(mul);
@@ -160,7 +155,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                       }
                   }
                   break;
-        case logbase: 
+        case logbase:
                   {
                       const uint32_t* tmp = *ast;
                       skip_ast(&tmp);
@@ -176,7 +171,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                   break;
         case max: case min:
         {
-            PUSH_OP(bnz); PUSH_OP(opcode == max ? ge : le); 
+            PUSH_OP(bnz); PUSH_OP(opcode == max ? ge : le);
             const uint32_t* tmp = *ast;
             copy_to_derivative(tmp, out); skip_ast(&tmp);
             copy_to_derivative(tmp, out);
@@ -218,7 +213,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
                       if (idx_nonconst) return false; // Can't differentiate wrt polygamma index
                       tmp1 = *ast;
                       skip_ast(ast);
-                      CHAIN_RULE(PUSH_OP(polygammab); 
+                      CHAIN_RULE(PUSH_OP(polygammab);
                               PUSH_OP(add);
                               copy_to_derivative(tmp1, out);
                               PUSH_CONST(1),);
@@ -248,7 +243,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case cosb:  CHAIN_RULE(PUSH_OP(unaryminus); PUSH_OP(sinb),); break;
         case tanb:  CHAIN_RULE(PUSH_OP(power); PUSH_OP(cosb);
                             ,PUSH_CONST(-2)); break;
-        case asinb: case acosb: 
+        case asinb: case acosb:
             CHAIN_RULE(if (opcode == acosb) PUSH_OP(unaryminus);
                     PUSH_OP(div); PUSH_CONST(1);
                      PUSH_OP(sqrtb); PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb),); break;
@@ -256,7 +251,7 @@ bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_add
         case sinhb: CHAIN_RULE(PUSH_OP(coshb),); break;
         case coshb: CHAIN_RULE(PUSH_OP(sinhb),); break;
         case tanhb: CHAIN_RULE(PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(tanhb),); break;
-        case tgammab:  
+        case tgammab:
                     {
                         // diff(x)[1/fact(x)]
                         const uint32_t* tmp = *ast;

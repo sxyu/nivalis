@@ -260,6 +260,170 @@ double eval_ast(Environment& env, const uint32_t** ast) {
     return ret;
 }
 
+bool to_padded_ast(const uint32_t** ast, std::vector<uint32_t>& out) {
+    uint32_t opcode = **ast;
+    std::string_view repr = subexpr_repr(opcode); ++*ast;
+    if (opcode == OpCode::sums || opcode == OpCode::prods ||
+            opcode == OpCode::bnz) return false;
+    out.push_back(0); out.push_back(0);
+    out.push_back(opcode);
+    for (char c : repr) {
+        switch(c) {
+            case '@': if(!to_padded_ast(ast, out)) return false;
+                          break; // subexpr
+            case '#':
+                      out[out.size() - 3] = **ast; ++*ast;
+                      out[out.size() - 2] = **ast; ++*ast;
+                      break; // value
+            case '&':
+                      out[out.size() - 2] = **ast; ++*ast; break; // ref
+        }
+    }
+    return true;
+}
+
+double eval_padded_ast(Environment& env, const std::vector<uint32_t>& ast) {
+    thread_local std::vector<double> stk;
+    stk.resize(ast.size());
+    size_t top = -1;
+    using namespace boost;
+    using namespace boost::math;
+    using namespace nivalis::OpCode;
+
+#define ARG3 stk[top-2]
+#define ARG2 stk[top-1]
+#define ARG1 stk[top]
+#define COMBINE --top; break
+#define EV_UNARYP(func) ARG1 = func(ARG1); break
+
+    for (size_t cidx = ast.size() - 1; ~cidx; cidx -= 3) {
+        auto opcode = ast[cidx];
+        switch(opcode) {
+            case null: stk[++top] = NONE; break;
+            case val:
+                stk[++top] = util::as_double(&ast[cidx-2]);  break;
+            case ref:
+                stk[++top] = env.vars[ast[cidx-1]]; break;
+            case bnz:
+                if (ARG1 != 0.) ARG3 = ARG2; top -= 2; break;
+
+            case bsel: COMBINE;
+            case add: ARG2 += ARG1; COMBINE;
+            case sub: ARG2 = ARG1 - ARG2; COMBINE;
+            case mul: ARG2 *= ARG1;  COMBINE;
+            case div: ARG2 = ARG1 / ARG2; COMBINE;
+            case mod: ARG2 = std::fmod(ARG1, ARG2); COMBINE;
+            case power: ARG2 = std::pow(ARG1, ARG2); COMBINE;
+            case logbase: ARG2 = log(ARG1) / log(ARG2); COMBINE;
+            case max: ARG2 = std::max(ARG1, ARG2); COMBINE;
+            case min: ARG2 = std::min(ARG1, ARG2); COMBINE;
+            case land: ARG2 = static_cast<double>(ARG1 && ARG2); COMBINE;
+            case lor: ARG2 = static_cast<double>(ARG1 || ARG2); COMBINE;
+            case lxor: ARG2 = static_cast<double>(
+                               (ARG1 != 0.) ^ (ARG2 != 0.)); COMBINE;
+            case gcd: ARG2 = static_cast<double>(
+                              std::gcd((int64_t) ARG1,
+                                       (int64_t) ARG2)); COMBINE;
+            case lcm: ARG2 = ARG1 * ARG2 /
+                      static_cast<double>(std::gcd(
+                          (int64_t) ARG1, (int64_t) ARG2)); COMBINE;
+#ifdef ENABLE_NIVALIS_BOOST_MATH
+            case choose: ARG2 = binomial_coefficient<double>(
+                            (uint32_t)ARG1, (uint32_t)ARG2); COMBINE;
+            case fafact: ARG2 = falling_factorial<double>(
+                            (uint32_t)ARG1, (uint32_t)ARG2); COMBINE;
+            case rifact: ARG2 = rising_factorial<double>(
+                            (uint32_t)ARG1, (uint32_t)ARG2); COMBINE;
+            case betab: ARG2 = beta<double>(ARG1, ARG2); COMBINE;
+            case polygammab: ARG2 = beta<double>((int)ARG1, ARG2); COMBINE;
+#else
+            case choose: {
+                             double ad = std::round(ARG1);
+                             double bd = std::round(ARG2);
+                             if (ad < 0 || bd < 0) {
+                                 ret = std::numeric_limits<double>::quiet_NaN(); break;
+                             }
+                             size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
+                             b = std::min(b, a-b);
+                             ARG2 = fa_fact(a, a-b) / fa_fact(b);
+                             COMBINE;
+                         }
+            case fafact: {
+                             double ad = std::round(ARG1);
+                             double bd = std::round(ARG2);
+                             if (ad < 0 || bd < 0) {
+                                 ret = std::numeric_limits<double>::quiet_NaN(); break;
+                             }
+                             size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
+                             ARG2 = fa_fact(a, a-b);
+                             COMBINE;
+                         }
+            case rifact: {
+                             double ad = std::round(ARG1);
+                             double bd = std::round(ARG2);
+                             if (ad < 0 || bd < 0) {
+                                 ret = std::numeric_limits<double>::quiet_NaN(); break;
+                             }
+                             size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
+                             ARG2 = fa_fact(a+b-1, a-1);
+                             COMBINE;
+                         }
+            case betab: case polygammab:
+                ARG1 = NONE; print_boost_warning(opcode); break;
+#endif
+            case lt: ARG2 = static_cast<double>(ARG1 < ARG2); COMBINE;
+            case le: ARG2 = static_cast<double>(ARG1 <= ARG2); COMBINE;
+            case eq: ARG2 = static_cast<double>(ARG1 == ARG2); COMBINE;
+            case ne: ARG2 = static_cast<double>(ARG1 != ARG2); COMBINE;
+            case ge: ARG2 = static_cast<double>(ARG1 >= ARG2); COMBINE;
+            case gt: ARG2 = static_cast<double>(ARG1 > ARG2); COMBINE;
+
+            case unaryminus: ARG1 = -ARG1; break;
+            case lnot: ARG1 = static_cast<double>(!(ARG1)); break;
+            case absb: EV_UNARYP(std::fabs);
+            case sqrtb: EV_UNARYP(std::sqrt);
+            case sqrb: ARG1 *= ARG1; break;
+            case sgn: ARG1 = ARG1 > 0 ? 1 : (ARG1 == 0 ? 0 : -1); break;
+            case floorb: EV_UNARYP(floor);
+            case ceilb:  EV_UNARYP(ceil); case roundb: EV_UNARYP(round);
+
+            case expb:   EV_UNARYP(exp); case exp2b:  EV_UNARYP(exp2);
+            case logb:   EV_UNARYP(log);
+            case factb:
+                        {
+                            unsigned n = static_cast<unsigned>(std::max(
+                                        ARG1, 0.));
+#ifdef ENABLE_NIVALIS_BOOST_MATH
+                            ARG1 = factorial<double>(n);
+#else
+                            ARG1 = fa_fact(n, 1);
+#endif
+                        }
+                        break;
+            case log2b: EV_UNARYP(log2);  case log10b: EV_UNARYP(log10);
+            case sinb:  EV_UNARYP(sin);   case cosb:   EV_UNARYP(cos);
+            case tanb:  EV_UNARYP(tan);   case asinb:  EV_UNARYP(asin);
+            case acosb: EV_UNARYP(acos);  case atanb:  EV_UNARYP(atan);
+            case sinhb: EV_UNARYP(sinh);  case coshb:  EV_UNARYP(cosh);
+            case tanhb: EV_UNARYP(tanh);
+            case tgammab:  EV_UNARYP(std::tgamma);
+            case lgammab:  EV_UNARYP(std::lgamma);
+#ifdef ENABLE_NIVALIS_BOOST_MATH
+            case digammab:  EV_UNARYP(digamma<double>);
+            case trigammab:  EV_UNARYP(trigamma<double>);
+            case zetab:  EV_UNARYP(zeta<double>);
+#else
+           // The following functions are unavailable without Boost
+            case digammab: case trigammab: case zetab:
+                ARG1 = NONE; print_boost_warning(opcode); break;
+#endif
+            case erfb:  EV_UNARYP(erf); break;
+            default:  break;
+        }
+    }
+    return stk[0];
+}
+
 void print_ast(std::ostream& os, const uint32_t** ast, const Environment* env) {
     std::string_view reprs = repr(**ast); ++*ast;
     for (char c : reprs) {
