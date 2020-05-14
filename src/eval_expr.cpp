@@ -62,9 +62,8 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
     // Thunk system helpers
     // For each command that calls thunks, we need to use the
     // following block ON_THUNK_RET(do on ret, do else)
-#define ON_THUNK_RET(retdo, elsedo) do{if (_is_thunk_ret) {\
-    --top; \
-    _is_thunk_ret = false; \
+#define ON_THUNK_RET(retdo, elsedo) do{\
+if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
     retdo \
 } else { \
     elsedo \
@@ -80,10 +79,8 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
         switch(node.opcode) {
             case null: stk[++top] = NONE; break;
             case thunk_jmp:
-                {
-                   thunks.push_back(cidx);
-                   cidx = ast[cidx].ref;
-                }
+                thunks.push_back(cidx);
+                cidx = ast[cidx].ref;
                 break;
             case thunk_ret:
                 cidx = thunks_stk.back() + 1;

@@ -15,20 +15,18 @@ namespace {
 // assumes opcode is binary
 Expr combine_expr(uint32_t opcode, const Expr& a, const Expr& b) {
     Expr new_expr;
-    new_expr.ast.clear();
-    new_expr.ast.reserve(a.ast.size() + b.ast.size() + 1);
-    new_expr.ast.push_back(opcode);
-    std::copy(a.ast.begin(), a.ast.end(), std::back_inserter(new_expr.ast));
-    std::copy(b.ast.begin(), b.ast.end(), std::back_inserter(new_expr.ast));
+    new_expr.ast.resize(a.ast.size() + b.ast.size() + 1);
+    new_expr.ast[0] = opcode;
+    std::copy(a.ast.begin(), a.ast.end(), new_expr.ast.begin() + 1);
+    std::copy(b.ast.begin(), b.ast.end(), new_expr.ast.begin() + a.ast.size() + 1);
     return new_expr;
 }
 // Apply unary operator to expression
 Expr wrap_expr(uint32_t opcode, const Expr& a) {
     Expr new_expr;
-    new_expr.ast.clear();
-    new_expr.ast.reserve(a.ast.size() + 1);
-    new_expr.ast.push_back(opcode);
-    std::copy(a.ast.begin(), a.ast.end(), std::back_inserter(new_expr.ast));
+    new_expr.ast.resize(a.ast.size() + 1);
+    new_expr.ast[0] = opcode;
+    std::copy(a.ast.begin(), a.ast.end(), new_expr.ast.begin() + 1);
     return new_expr;
 }
 
@@ -42,11 +40,12 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
             case '@': n_idx = print_ast(os, ast, env, n_idx); break; // subexpr
             case '#': os << ast[idx].val; break; // value
             case '&':
-                  if (ast[idx].ref >= env->vars.size()) {
-                      os << "&NULL";
-                      break;
+                  if (env != nullptr) {
+                      if (ast[idx].ref >= env->vars.size()) {
+                          os << "&NULL";
+                          break;
+                      } os << env->varname.at(ast[idx].ref);
                   }
-                  if (env != nullptr) os << env->varname.at(ast[idx].ref);
                   else os << "&" << ast[idx].ref;
                   break; // ref
             case '%':
@@ -84,7 +83,10 @@ void Expr::sub_var(uint32_t addr, double value) {
 Expr Expr::null() { return Expr(); }
 Expr Expr::zero() { return constant(0); }
 Expr Expr::constant(double val) {
-    Expr z; z.ast.resize(1, val); return z;
+    Expr z;
+    z.ast[0].opcode = OpCode::val;
+    z.ast[0].val = val;
+    return z;
 }
 
 std::string Expr::repr(const Environment& env) const {

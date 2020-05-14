@@ -390,6 +390,17 @@ void optim_link_nodes(Environment& env,
                     v.nonconst_flag = false;
                     optim_link_nodes(env, nodes, vi);
                     break;
+                } else if (l->opcode == val && r->opcode == divi) {
+                    auto rli = r->c[0]; auto* rl = &nodes[rli];
+                    if (rl->opcode == val) {
+                        l->val /= rl->val;
+                        v.opcode = mul;
+                        auto rri = r->c[1]; auto* rr = &nodes[rri];
+                        *r = *rr;
+                        v.nonconst_flag = false;
+                        optim_link_nodes(env, nodes, vi);
+                        break;
+                    }
                 }
                 if (l->opcode == mul) {
                     auto lli = l->c[0], lri = l->c[1];
@@ -452,6 +463,37 @@ void optim_link_nodes(Environment& env,
                     } else if (r->val == boost::math::double_constants::e) {
                         v.opcode = OpCode::logb;
                         v.c.pop_back(); break;
+                    }
+                }
+                break;
+            case bnz:
+                if (l->opcode == val) {
+                    if (l->val) {
+                        v = *r; // Left
+                    } else {
+                        v = nodes[v.c[2]]; // Right
+                    }
+                    if (v.opcode == OpCode::thunk_ret) {
+                        v = nodes[v.c[0]];
+                    }
+                    break;
+                } else {
+                    auto* r2 = &nodes[v.c[2]];
+                    if (r->opcode == OpCode::thunk_ret &&
+                        r2->opcode == OpCode::thunk_ret) {
+                        auto* rl = &nodes[r->c[0]];
+                        auto* r2l = &nodes[r2->c[0]];
+                        if (rl->opcode == OpCode::val &&
+                                r2l->opcode == OpCode::val &&
+                                rl->val == r2l->val) {
+                            v = *rl;
+                            break;
+                        } else if (rl->opcode == OpCode::ref &&
+                                r2l->opcode == OpCode::ref &&
+                                rl->ref == r2l->ref) {
+                            v = *rl;
+                            break;
+                        }
                     }
                 }
                 break;

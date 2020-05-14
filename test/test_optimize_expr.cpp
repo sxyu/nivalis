@@ -78,6 +78,9 @@ int main() {
     ASSERT(test_optim_equiv_random("-fact(x+1)^1", 0));
     ASSERT(test_optim_equiv_random("{x<32.5: 9, 4}", 0));
     ASSERT(test_optim_equiv_random("{x<32.5: x, x}", 0));
+    ASSERT(test_optim_equiv_random("{1: x, x^2}", 0));
+    ASSERT(test_optim_equiv_random("{0: x, 2*x^2}", 0));
+    ASSERT(test_optim_equiv_random("{x<3: {x<4:3}, {x<4:3}}", 0));
     ASSERT(test_optim_equiv_random("{x<0: {x<=3: 5}, 4}", 0));
     ASSERT(test_optim_equiv_random("{x<0: abs(x)}", 0));
     ASSERT(test_optim_equiv_random("max(x,min(x^2,x))", 0));
@@ -86,6 +89,8 @@ int main() {
     ASSERT(test_optim_equiv_random("prod(x:1,3)[{x<2:a*x^2,3}]", 0));
 
     ASSERT(test_optim_equiv_random("10*(sin(x)^2 + cos(x)^2)", 0));
+    ASSERT(test_optim_equiv_random("1/(2/x)", 0));
+    ASSERT(test_optim_equiv_random("3+1/(1/x)", 0));
 
     END_TEST;
 }
