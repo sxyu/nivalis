@@ -16,16 +16,22 @@ enum _OpCode {
     null = 0, // returns NaN
     val,      // stores value in 8 bytes after
     ref,      // stores address of var in env in 4 bytes after
-    bsel = 8, // evaluate first and ignore; evaluate and return second
+    arg,      // function argument (placeholder)
+
+    // thunk system
+    thunk_ret = 8,     // beginning of thunk (unevaluated segment)
+    thunk_jmp,            // end of thunk
 
     // control and special forms
     bnz = 16, // if first is not zero, second, else third (short-circuiting)
     sums,
     prods,
 
+    bsel = 24, // evaluate first and ignore; evaluate and return second
+
     // binary arithmetic operators
     add = 32, sub,
-    mul = 48, div, mod,
+    mul = 48, divi, mod,
     power = 64, logbase,
     max = 80, min,
     land, lor, lxor,
@@ -54,20 +60,20 @@ enum _OpCode {
     erfb, zetab,
 };
 
-// Check if the operator is binary
-bool is_binary(uint32_t opcode);
+// Get # args the operator takes
+size_t n_args(uint32_t opcode);
+
+// Check if the operator has a reference (node.ref)
+constexpr bool has_ref(uint32_t opcode) {
+    return opcode == ref || opcode == sums ||
+        opcode == prods;
+}
 
 // Representations of expressions for printing purposes
 // @: replace with subexpression
 // &: replace with ref in next 4 bytes
 // #: replace with value in next 8 bytes (double)
 const char* repr(uint32_t opcode); 
-
-// Concise representations of expressions for parsing
-// @: replace with subexpression
-// &: replace with ref in next 4 bytes
-// #: replace with value in next 8 bytes (double)
-const char* subexpr_repr(uint32_t opcode); 
 
 // Get opcode of operator from char e.g. '+' -> 32
 // If not a valid operator, returns bsel

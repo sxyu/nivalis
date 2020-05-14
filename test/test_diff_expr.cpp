@@ -1,6 +1,4 @@
-#include "diff_expr.hpp"
 #include "parser.hpp"
-#include "expr.hpp"
 #include "test_common.hpp"
 // This test file assumes parser, expr works
 // it is quite high-level; the goal is to assure
@@ -10,7 +8,6 @@ using namespace nivalis;
 namespace {
     Parser parse;
     Environment env;
-    std::default_random_engine reng{std::random_device{}()};
 
     // Automatically test if derivative equals expected derivative
     bool test_derivative_random(
@@ -25,7 +22,7 @@ namespace {
         static const int N_ITER = 1000;
         std::uniform_real_distribution<double> unif(xmin, xmax);
         for (int i = 0; i < N_ITER; ++i) {
-            double x = unif(reng);
+            double x = unif(test::reng);
             env.vars[var_id] = x;
             double dfx = diff(env);
             double dfx_expect = expect(env);

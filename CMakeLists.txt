@@ -9,7 +9,7 @@ endif (POLICY CMP0048)
 
 project( nivalis )
 
-set( _VERSION_ "0.0.4a-3 (alpha)" )
+set( _VERSION_ "0.0.5 (dev)" )
 set( _COPYRIGHT_ "Alex Yu 2020" )
 
 set( CMAKE_CXX_STACK_SIZE "10000000" )
@@ -65,9 +65,6 @@ set(
   expr.hpp
   util.hpp
   opcodes.hpp
-  eval_expr.hpp
-  optimize_expr.hpp
-  diff_expr.hpp
   plotter/plotter.hpp
   plotter/plot_gui.hpp
 )

@@ -10,19 +10,14 @@
 #include "util.hpp"
 namespace nivalis {
 
-namespace {
-    // Constants, lookup tables
-    char lb[] = "([{", rb[] = ")]}";
-
-#define RETURN_IF_FALSE(todo) if(!todo) return false;
-#define PARSE_ERR(toprint) do { \
+    // Set error message and return false
+#define PARSE_ERR(errmsg) do { \
      error_msg_stream.str("");\
-     error_msg_stream << toprint;\
+     error_msg_stream << errmsg;\
      error_msg = error_msg_stream.str(); \
      if(!quiet) std::cout << error_msg; \
      return false; \
    } while(false)
-}  // namespace
 
 struct ParseSession {
     enum Priority {
@@ -49,7 +44,7 @@ struct ParseSession {
         if (!_mk_tok_link() ||
             !_parse(0, static_cast<int64_t>(expr.size()), _PRI_LOWEST)) {
             result.ast.clear();
-            result.ast.resize(1, OpCode::null);
+            result.ast.resize(1);
         }
         return result;
     }
@@ -57,6 +52,8 @@ struct ParseSession {
 private:
     // Make token link table
     bool _mk_tok_link() {
+        // Parenthesis matching
+        static const char lb[] = "([{", rb[] = ")]}";
         std::vector<int64_t> starts[3];
         int64_t lit_start = -1;
         for (int64_t pos = 0; pos < static_cast<int64_t>(expr.size()); ++pos) {
@@ -153,7 +150,7 @@ private:
                     const char c = expr[i];
                     if (c == '*' || c == '/' || c == '%') {
                         result.ast.push_back(c == '*' ? OpCode::mul : (
-                                    c == '/' ? OpCode::div : OpCode::mod));
+                                    c == '/' ? OpCode::divi : OpCode::mod));
                         return _parse(left, i, pri) && _parse(i + 1, right, pri + 1);
                     }
                     else if (~tok_link[i] && tok_link[i] < i) {
@@ -204,6 +201,8 @@ private:
                     // Conditional clause
                     int64_t stkh = 0, last_begin = left+1;
                     bool last_colon = false;
+                    size_t thunk_beg;
+                    size_t nest_depth = 0;
                     for (int64_t i = left + 1; i < right - 1; ++i) {
                         const char cc = expr[i];
                         if (util::is_open_bracket(cc)) {
@@ -219,26 +218,38 @@ private:
                                               "in conditional clause\n");
                                 }
                                 result.ast.push_back(OpCode::bnz);
-                                RETURN_IF_FALSE(_parse(last_begin, i, _PRI_LOWEST));
+                                if (!_parse(last_begin, i, _PRI_LOWEST)) return false;
                                 last_begin = i+1;
-                                while(std::isspace(expr[last_begin])) ++last_begin;
+                                while(std::isspace(expr[last_begin]))
+                                    ++last_begin;
                                 last_colon = true;
+                                begin_thunk();
                             }
                             else if (cc == ',') {
                                 if (!last_colon && i > left+1) {
                                     PARSE_ERR("Syntax error: consecutive , "
                                               "in conditional clause\n");
                                 }
-                                RETURN_IF_FALSE(_parse(last_begin, i, _PRI_LOWEST));
+                                if (!_parse(last_begin, i, _PRI_LOWEST)) return false;
+                                end_thunk();
+                                begin_thunk();
+                                ++nest_depth;
                                 last_begin = i+1;
                                 while(std::isspace(expr[last_begin])) ++last_begin;
                                 last_colon = false;
                             }
                         }
                     }
-                    RETURN_IF_FALSE(_parse(last_begin, right - 1, _PRI_LOWEST));
+                    if (!_parse(last_begin, right - 1, _PRI_LOWEST)) return false;
                     if (last_colon) {
+                        thunk_beg = result.ast.size();
+                        end_thunk();
+                        begin_thunk();
                         result.ast.push_back(OpCode::null);
+                        end_thunk();
+                    }
+                    for (size_t t = 0; t < nest_depth; ++t) {
+                        end_thunk();
                     }
                     return true;
                 }
@@ -273,12 +284,14 @@ private:
                         std::string varname =
                             expr.substr(funname_end + 1, var_end -
                                    funname_end-1);
-                        result.ast.push_back(env.addr_of(varname, false));
-                        RETURN_IF_FALSE(
-                                _parse(var_end+1, comma_pos, _PRI_LOWEST));
-                        RETURN_IF_FALSE(
-                                _parse(comma_pos+1, arg_end-1, _PRI_LOWEST));
-                        return _parse(arg_end + 1, right - 1, _PRI_LOWEST);
+                        result.ast.back().ref = env.addr_of(varname, false);
+                        if (!_parse(var_end+1, comma_pos, _PRI_LOWEST)) return false;
+
+                        if (!_parse(comma_pos+1, arg_end-1, _PRI_LOWEST)) return false;
+                        begin_thunk();
+                        if (!_parse(arg_end + 1, right - 1, _PRI_LOWEST)) return false;
+                        end_thunk();
+                        return true;
                     } else if (func_name == "diff") {
                         // Derivative special form
                         std::string varname =
@@ -288,13 +301,14 @@ private:
                                        "(<var>)\n");
                         }
                         auto addr = env.addr_of(varname, false);
-                        std::vector<uint32_t> tmp;
+                        decltype(result.ast) tmp;
                         tmp.swap(result.ast);
-                        RETURN_IF_FALSE(_parse(arg_end + 1, right - 1, _PRI_LOWEST));
+                        if (!_parse(arg_end + 1, right - 1, _PRI_LOWEST)) return false;
                         Expr diff = result.diff(addr, env);
                         diff.optimize();
                         tmp.swap(result.ast);
-                        std::copy(diff.ast.begin(), diff.ast.end(), std::back_inserter(result.ast));
+                        std::copy(diff.ast.begin(), diff.ast.end(),
+                                std::back_inserter(result.ast));
                         return true;
                     } else {
                         PARSE_ERR("Unrecognized special form '" << func_name << "'\n");
@@ -317,13 +331,13 @@ private:
                             if (func_name[0] == 'f') {
                                 result.ast.push_back(OpCode::tgammab);
                                 result.ast.push_back(OpCode::add);
-                                util::push_dbl(result.ast, 1.0);
+                                result.ast.push_back(1.0);
                             } else if (func_name[0] == 'N') {
                                 result.ast.push_back(OpCode::mul);
-                                util::push_dbl(result.ast, 1 / sqrt(2* M_PI));
+                                result.ast.push_back(1. / sqrt(2* M_PI));
                                 result.ast.push_back(OpCode::expb);
                                 result.ast.push_back(OpCode::mul);
-                                util::push_dbl(result.ast, -0.5);
+                                result.ast.push_back(-0.5);
                                 result.ast.push_back(OpCode::sqrb);
                             }
                         } else {
@@ -339,21 +353,19 @@ private:
                                 --stkh;
                             } else if (cc == ',') {
                                 if (stkh == 0) {
-                                    RETURN_IF_FALSE(
-                                            _parse(last_begin, i, _PRI_LOWEST));
+                                    if (!_parse(last_begin, i, _PRI_LOWEST)) return false;
                                     last_begin = i+1;
                                     ++argcount;
                                 }
                             }
                         }
-                        RETURN_IF_FALSE(
-                                _parse(last_begin, right-1, _PRI_LOWEST));
-                        int expect_argcount =
-                            OpCode::is_binary(func_opcode) ? 2 : 1;
+                        if (!_parse(last_begin, right-1, _PRI_LOWEST)) return false;
+                        size_t expect_argcount = OpCode::n_args(func_opcode);
                         if (argcount != expect_argcount) {
-                            if (func_opcode == OpCode::logbase) {
-                                // log: use ln (HACK)
-                                util::push_dbl(result.ast, M_E);
+                            if (func_opcode == OpCode::logbase &&
+                                    argcount == 1) {
+                                // log: use ln if only 1 arg (HACK)
+                                result.ast.push_back(M_E);
                             } else {
                                 PARSE_ERR(func_name << ": wrong number of "
                                         "arguments (expecting " <<
@@ -370,8 +382,8 @@ private:
                     // Number
                     std::string tmp = expr.substr(left, right - left);
                     char* endptr;
-                    util::push_dbl(result.ast, std::strtod(
-                                tmp.c_str(), &endptr));
+                    result.ast.push_back( // val
+                            std::strtod(tmp.c_str(), &endptr));
                     if (endptr != tmp.c_str() + (right-left)) {
                         PARSE_ERR("Numeric parsing failed on '"
                                   << tmp << "'\n");
@@ -381,31 +393,32 @@ private:
                             (c=='&' && left < right - 1)) &&
                            util::is_literal(cr)) {
                     // Variable name
-                    result.ast.resize(result.ast.size() + 2, OpCode::ref);
                     const std::string varname =
                         expr.substr(left, right - left);
-                    if ((result.ast.back()
-                                = env.addr_of(varname, mode_explicit)) == -1) {
-                        const auto& constant_values = OpCode::constant_value_map();
+                    auto addr = env.addr_of(varname, mode_explicit);
+                    if (addr == -1) {
+                        const auto& constant_values =
+                            OpCode::constant_value_map();
                         auto it = constant_values.find(varname);
-                        result.ast.pop_back(); result.ast.pop_back();
                         if (it != constant_values.end()) {
                             // Fixed constant value (e.g. pi)
                             if (std::isnan(it->second)) {
                                 result.ast.push_back(OpCode::null);
                             } else {
-                                util::push_dbl(result.ast, it->second);
+                                result.ast.push_back(// val
+                                        it->second);
                             }
                             return true;
                         }
                         PARSE_ERR("Undefined variable \"" << varname + "\"\n");
+                    } else {
+                        result.ast.push_back(Expr::ASTNode(OpCode::ref, addr));
                     }
-                    if (result.ast.back() >= env.vars.size()) {
+                    if (result.ast.back().ref >= env.vars.size()) {
                         PARSE_ERR("Variable address of bounds \"" <<
-                                result.ast.back() <<
+                                result.ast.back().ref <<
                                 "\"\n");
-                        result.ast.pop_back();
-                        result.ast.back() = OpCode::null;
+                        result.ast.back().opcode = OpCode::null;
                     }
                     return true;
                 } else if (c == '#' &&
@@ -415,7 +428,7 @@ private:
                         expr.substr(left + 1, right - left - 1);
                     auto idx = env.addr_of(varname, true);
                     if (~idx) {
-                        util::push_dbl(result.ast, env.vars[idx]);
+                        result.ast.push_back(env.vars[idx]);
                         return true;
                     } else {
                         PARSE_ERR("Undefined variable \"" << varname <<
@@ -435,6 +448,20 @@ private:
     Expr result;
     bool mode_explicit, quiet;
 
+    // Thunk management helpers
+    void begin_thunk() {
+        thunks.push_back(result.ast.size());
+        result.ast.emplace_back(OpCode::thunk_ret);
+    }
+    void end_thunk() {
+        result.ast.emplace_back(OpCode::thunk_jmp,
+                    thunks.back());
+        thunks.pop_back();
+    }
+
+    // Beginnings of thunks
+    std::vector<size_t> thunks;
+
     // 'Token links':
     // Pos. of last char in token if at first char
     // Pos. of first char in token if at last char
@@ -442,6 +469,7 @@ private:
     std::vector<int64_t> tok_link;
 };
 
+// Parse an expression
 Expr Parser::operator()(const std::string& expr, Environment& env,
                         bool mode_explicit, bool quiet) const {
     error_msg.clear();

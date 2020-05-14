@@ -1,4 +1,4 @@
-#include "eval_expr.hpp"
+#include "expr.hpp"
 #include "env.hpp"
 #include "opcodes.hpp"
 #include "util.hpp"
@@ -8,21 +8,7 @@
 
 using namespace nivalis;
 using namespace nivalis::detail;
-
-namespace {
-std::default_random_engine reng{std::random_device{}()};
-using AST = std::vector<uint32_t>;
-double test_eval_ast(Environment& env, AST& ast) {
-    const uint32_t* ast_ptr = &ast[0];
-    return eval_ast(env, &ast_ptr);
-}
-double test_eval_ast_pad(Environment& env, AST& ast) {
-    const uint32_t* ast_ptr = &ast[0];
-    std::vector<uint32_t> pad_ast;
-    to_padded_ast(&ast_ptr, pad_ast);
-    return eval_padded_ast(env, pad_ast);
-}
-}  // namespace
+using namespace nivalis::test;
 
 int main() {
     BEGIN_TEST(test_eval_expr);
@@ -31,201 +17,119 @@ int main() {
     std::uniform_real_distribution<double> unif(-100.0, 100.0);
     Environment env; env.addr_of("x",false);
     Environment dummy_env;
+    ASSERT(std::isnan(eval_ast(dummy_env, { null })));
+    ASSERT_FLOAT_EQ(eval_ast(dummy_env, { add, 2., 1001. }), 1003.);
+    ASSERT_FLOAT_EQ(eval_ast(dummy_env,
+                { sub, add, -13., -100., divi, -52., -10. }), -118.2);
     {
-        AST ast; ast.push_back(OpCode::null);
-        ASSERT(std::isnan(test_eval_ast(dummy_env, ast)));
-        ASSERT(std::isnan(test_eval_ast_pad(dummy_env, ast)));
-    }
-    {
-        AST ast; ast.push_back(add);
-        util::push_dbl(ast, 2.); util::push_dbl(ast, 1001.);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 1003.);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 1003.);
-    }
-    {
-        AST ast; ast.push_back(sub); ast.push_back(add);
-        util::push_dbl(ast, -13.); util::push_dbl(ast, -100.);
-        ast.push_back(OpCode::div);
-        util::push_dbl(ast, -52.);
-        util::push_dbl(ast, 10.);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), -107.8);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), -107.8);
-    }
-    {
-        AST ast; ast.push_back(mul);
-        util::push_dbl(ast, 2.);
-        ast.push_back(ref); ast.push_back(0);
-
+        AST ast = { mul, 2., Ref(0) };
         Environment env; env.set("x", -1.5);
         ASSERT_EQ(env.addr_of("x"), 0);
-        ASSERT_EQ(ast.size(), 6);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), -3.);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), -3.);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), -3.);
     }
-    {
-        AST ast;
-        ast.push_back(power); ast.push_back(sub);
-        util::push_dbl(ast, -13.); util::push_dbl(ast, -16.);
-        util::push_dbl(ast, 9.5);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), pow(3, 9.5));
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), pow(3, 9.5));
-    }
-    {
-        AST ast;
-        ast.push_back(roundb);
-        ast.push_back(mul); ast.push_back(absb);
-        util::push_dbl(ast, -19.5);
-        util::push_dbl(ast, 2.9);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 57.);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 57.);
-    }
-    {
-        AST ast; ast.push_back(absb);
-        ast.push_back(mul);
-        util::push_dbl(ast, 13.);
-        util::push_dbl(ast, 14.);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 182.);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 182.);
-    }
-    {
-        AST ast; ast.push_back(OpCode::eq); ast.push_back(sqrb);
-        util::push_dbl(ast, -5.5);
-        ast.push_back(power);
-        util::push_dbl(ast, -5.5);
-        util::push_dbl(ast, 2.);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 1.);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 1.);
-    }
-    {
-        AST ast; ast.push_back(OpCode::lt); ast.push_back(sqrb);
-        util::push_dbl(ast, -5.5);
-        ast.push_back(mul);
-        util::push_dbl(ast, -5.5);
-        util::push_dbl(ast, -5.5);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 0.);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(dummy_env, ast), 0.);
-    }
+    ASSERT_FLOAT_EQ(eval_ast(dummy_env,
+                { power , sub, -13., -16., 9.5 }), pow(3, 9.5));
+    ASSERT_FLOAT_EQ(eval_ast(dummy_env,
+                { roundb, mul, absb, -19.5, 2.9 }), 57.);
+    ASSERT_FLOAT_EQ(eval_ast(dummy_env, { absb, mul, 13., 14. }), 182.);
+    ASSERT_FLOAT_EQ(eval_ast(dummy_env,
+                { eq, sqrb, -5.5, power, -5.5, 2. }), 1.);
+    ASSERT_FLOAT_EQ(eval_ast(dummy_env,
+                { lt, sqrb, -5.5, mul, -5.5, -5.5 }), 0.);
     {
         Environment env; env.set("_", -1.5); env.set("x", 2.65);
-
-        AST ast; ast.push_back(OpCode::max);
-        ast.push_back(ref); ast.push_back(env.addr_of("x"));
-        ast.push_back(tgammab);
-        util::push_dbl(ast, 3.29);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), tgamma(3.29));
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), tgamma(3.29));
+        AST ast = { OpCode::max, Ref(env.addr_of("x")),
+                    tgammab, 3.29 };
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), tgamma(3.29));
         env.set("x", M_PI);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), M_PI);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), M_PI);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), M_PI);
     }
     {
         Environment env; env.set("y", 1.5); env.set("x", 2.65);
 
-        AST ast; ast.push_back(OpCode::mod);
-        ast.push_back(ref); ast.push_back(env.addr_of("y"));
-        ast.push_back(digammab);
-        util::push_dbl(ast, -1.5);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 0.09368671870951362);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), 0.09368671870951362);
+        AST ast = { mod, Ref(env.addr_of("y")),
+                    digammab, -1.5 };
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), 0.09368671870951362);
         env.set("x", 9.0);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 0.09368671870951362);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), 0.09368671870951362);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), 0.09368671870951362);
         env.set("y", 10.0);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 0.15580703096659532);
-        ASSERT_FLOAT_EQ(test_eval_ast_pad(env, ast), 0.15580703096659532);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), 0.15580703096659532);
     }
 
     {
-        AST ast;
-        ast.push_back(OpCode::land);
-        ast.push_back(OpCode::lxor);
-        util::push_dbl(ast, 0.0); util::push_dbl(ast, 1.0);
-        util::push_dbl(ast, 0.0);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 0.0);
+        AST ast = { land, lxor, 0.0, 1.0, 0.0 };
+        ASSERT_FLOAT_EQ(eval_ast(dummy_env, ast), 0.0);
         ast.pop_back(); ast.pop_back(); ast.pop_back();
-        util::push_dbl(ast, 1.0);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 1.0);
+        ast.push_back(1.0);
     }
 
     {
-        AST ast; ast.push_back(OpCode::bnz);
-        util::push_dbl(ast, 1.0); util::push_dbl(ast, 2.0);
-        util::push_dbl(ast, 3.0);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 2.0);
-        ast.clear(); ast.push_back(OpCode::bnz);
-        util::push_dbl(ast, 0.0); util::push_dbl(ast, 2.0);
-        util::push_dbl(ast, 3.0);
-        ASSERT_FLOAT_EQ(test_eval_ast(dummy_env, ast), 3.0);
+        AST ast; ast.push_back(bnz);
+        ThunkManager thunk(ast);
+        ast.push_back(1.0);
+        thunk.begin(); ast.push_back(2.0); thunk.end();
+        thunk.begin(); ast.push_back(3.0); thunk.end();
+        ASSERT_FLOAT_EQ(eval_ast(dummy_env, ast), 2.0);
+        ast.clear(); ast.push_back(bnz);
+        ast.push_back(0.0);
+        thunk.begin(); ast.push_back(2.0); thunk.end();
+        thunk.begin(); ast.push_back(3.0); thunk.end();
+        ASSERT_FLOAT_EQ(eval_ast(dummy_env, ast), 3.0);
     }
 
     {
         Environment env; env.set("y", 1.5); env.set("x", 0.0);
-        AST ast; ast.push_back(OpCode::bnz);
-        ast.push_back(OpCode::ge);
-        ast.push_back(ref); ast.push_back(0);
-        util::push_dbl(ast, 0.0);
+        AST ast = { bnz, ge, Ref(0), 0.0 };
+        ThunkManager thunk(ast);
 
-        ast.push_back(OpCode::bnz);
-        ast.push_back(OpCode::le);
-        ast.push_back(ref); ast.push_back(1);
-        util::push_dbl(ast, 0.0);
+        thunk.begin();
+            ast.insert(ast.end(), {bnz, le, Ref(1), 0.});
+            thunk.begin(); ast.push_back(-1.); thunk.end();
+            thunk.begin(); ast.insert(ast.end(), {absb, -9.}); thunk.end();
+        thunk.end();
+        thunk.begin(); ast.emplace_back(ref, 0); thunk.end();
 
-        util::push_dbl(ast, -1.0);
-        ast.push_back(OpCode::absb);
-        util::push_dbl(ast, -9.0);
-        ast.push_back(ref); ast.push_back(0);
-
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), -1.0);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), -1.0);
         env.set("x", 1.5);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 9.0);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), 9.0);
         env.set("y", -9999.312);
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), -9999.312);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), -9999.312);
     }
 
     {
         Environment env; env.set("i", 0);
-        AST ast; ast.push_back(OpCode::sums);
-        ast.push_back(0); // ref
-        util::push_dbl(ast, -1.0);
-        util::push_dbl(ast, 100.0);
-        ast.push_back(mul);
-        ast.push_back(ref); ast.push_back(0);
-        util::push_dbl(ast, -2.);
+        AST ast = { SumOver(0), -1., 100.};
+        ThunkManager thunk(ast);
+        thunk.begin();
+        ast.insert(ast.end(), {mul, Ref(0), -2.});
+        thunk.end();
 
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), -10098.);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), -10098.);
     }
 
     {
         Environment env; env.addr_of("j", false);
-        AST ast; ast.push_back(OpCode::prods);
-        ast.push_back(0); // ref
-        util::push_dbl(ast, 3.0);
-        util::push_dbl(ast, 7.0);
-        ast.push_back(unaryminus);
-        ast.push_back(ref); ast.push_back(0);
+        AST ast = { ProdOver(0), 3., 7. };
+        ThunkManager thunk(ast);
+        thunk.begin();
+        ast.insert(ast.end(), {unaryminus, Ref(0)});
+        thunk.end();
 
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), -2520.);
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), -2520.);
     }
 
     {
         Environment env; env.set("j", 2.0); env.addr_of("k", false);
         env.set("lb", 2.0);
-        AST ast; ast.push_back(OpCode::prods);
-        ast.push_back(1); // ref
-        util::push_dbl(ast, 5.0);
-        ast.push_back(ref); ast.push_back(2);
-
-        ast.push_back(OpCode::sums);
-        ast.push_back(0); // ref
-        util::push_dbl(ast, 2.0);
-        util::push_dbl(ast, 6.0);
-
-        ast.push_back(add); ast.push_back(add);
-        ast.push_back(ref); ast.push_back(0);
-        ast.push_back(ref); ast.push_back(1);
-        ast.push_back(ref); ast.push_back(2);
-
-        ASSERT_FLOAT_EQ(test_eval_ast(env, ast), 4950000.);
+        AST ast = { ProdOver(1), 5., Ref(2) };
+        ThunkManager thunk(ast);
+        thunk.begin();
+            ast.insert(ast.end(), {SumOver(0), 2., 6.} );
+            thunk.begin();
+                ast.insert(ast.end(), { add, add, Ref(0), Ref(1), Ref(2) } );
+            thunk.end();
+        thunk.end();
+        ASSERT_FLOAT_EQ(eval_ast(env, ast), 4950000.);
     }
     END_TEST;
 }

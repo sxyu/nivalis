@@ -8,6 +8,7 @@
 #include <vector>
 #include <chrono>
 #include <utility>
+#include "expr.hpp"
 #define BEGIN_TEST(tname) int _fail = 0; const char* _tname = #tname;
 #define ASSERT(x) do { \
     auto tx = x; \
@@ -66,6 +67,30 @@ template <class Float> Float absrelerr(Float x, Float y) {
 
 namespace nivalis {
 namespace test {
+
+namespace {
+std::default_random_engine reng{std::random_device{}()};
+using AST = Expr::AST;
+using ASTNode = nivalis::Expr::ASTNode;
+
+struct ThunkManager {
+    ThunkManager (AST& ast) : ast(ast) {}
+    AST& ast;
+    std::vector<size_t> thunks;
+    void begin() {
+        thunks.push_back(ast.size());
+        ast.push_back(OpCode::thunk_ret);
+    }
+    void end() {
+        ast.emplace_back(OpCode::thunk_jmp, thunks.back());
+        thunks.pop_back();
+    }
+};
+// AST node shorthands
+ASTNode Ref(uint32_t addr) { return ASTNode(OpCode::ref, addr); }
+ASTNode SumOver(uint32_t addr) { return ASTNode(OpCode::sums, addr); }
+ASTNode ProdOver(uint32_t addr) { return ASTNode(OpCode::prods, addr); }
+}  // namespace
 
 }  // namespace test
 }  // namespace nivalis

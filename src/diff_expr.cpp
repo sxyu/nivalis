@@ -1,29 +1,66 @@
-#include "diff_expr.hpp"
+#include "expr.hpp"
 
 #include <cmath>
 #include <iostream>
 #include "opcodes.hpp"
 #include "util.hpp"
-#include "eval_expr.hpp"
+#include "env.hpp"
 
 namespace nivalis {
-namespace detail {
-
 namespace {
 
-#define DIFF_NEXT if (!diff_ast_recursive(ast, env, var_addr, out)) \
-                        return false
-#define PUSH_OP(op) out.push_back(op)
-#define PUSH_CONST(dbl) util::push_dbl(out, dbl)
+#define DIFF_NEXT if (!diff(ast)) return false
+#define PUSH(v) out.push_back(v)
 #define CHAIN_RULE(derivop1, derivop2) { \
-                               const uint32_t* tmp = *ast; \
+                               const Expr::ASTNode* tmp = *ast; \
                                out.push_back(mul); DIFF_NEXT; \
                                derivop1; \
-                               copy_to_derivative(tmp, out); \
+                               copy_ast(tmp, out); \
                                derivop2; \
                             }
 
-const uint32_t* copy_to_derivative(const uint32_t* ast, std::vector<uint32_t>& out) {
+void skip_ast(const Expr::ASTNode** ast) {
+    const auto* init_pos = ast;
+    auto n_args = OpCode::n_args((*ast)->opcode);
+    ++*ast;
+    for (size_t i = 0; i < n_args; ++i) skip_ast(ast);
+}
+
+// Versions of has_var/sub_var that only applies to subtree
+bool ast_has_var(const Expr::ASTNode** ast, uint64_t var_id) {
+    const auto* init_pos = ast;
+    auto opcode = (*ast)->opcode;
+    auto n_args = OpCode::n_args(opcode);
+    if (OpCode::has_ref(opcode) &&
+        (*ast)->ref == var_id) {
+        return true;
+    }
+
+    ++*ast;
+    for (size_t i = 0; i < n_args; ++i) {
+        if (ast_has_var(ast, var_id)) return true;
+    }
+    return false;
+}
+
+void ast_sub_var(const Expr::ASTNode** ast, uint64_t var_id, double value, Expr::AST& out) {
+    const auto* init_pos = ast;
+    auto opcode = (*ast)->opcode;
+    out.push_back(**ast);
+    if (opcode == OpCode::ref &&
+        (*ast)->ref == var_id) {
+        out.back().opcode = OpCode::val;
+        out.back().val = value;
+    }
+
+    ++*ast;
+    for (size_t i = 0; i < OpCode::n_args(opcode); ++i) {
+        ast_sub_var(ast, var_id, value, out);
+    }
+}
+
+const Expr::ASTNode* copy_ast(const Expr::ASTNode* ast,
+        std::vector<Expr::ASTNode>& out) {
     const auto* init_pos = ast;
     skip_ast(&ast);
     std::copy(init_pos, ast, std::back_inserter(out));
@@ -31,263 +68,333 @@ const uint32_t* copy_to_derivative(const uint32_t* ast, std::vector<uint32_t>& o
 }
 
 // Implementation
-bool diff_ast_recursive(const uint32_t** ast, Environment& env, uint32_t var_addr, std::vector<uint32_t>& out) {
-    using namespace OpCode;
-    uint32_t opcode = **ast;
-    ++*ast;
-    switch(opcode) {
-        case null: PUSH_OP(null); break;
-        case val: PUSH_CONST(0.); *ast += 2; break;
-        case ref: PUSH_CONST(**ast == var_addr ? 1. : 0.); ++*ast; break;
-        case bnz:
-            {
-                PUSH_OP(bnz);
-                *ast = copy_to_derivative(*ast, out);
-                DIFF_NEXT; DIFF_NEXT;
-            }
-            break;
-        case sums:
-            {
-                uint32_t var_id = **ast; ++*ast;
-                if (var_id == var_addr) return false; // Can't diff wrt index
-                if (**ast != val) return false; // Index must be constant for derivative
-                ++*ast;
-                int64_t a = static_cast<int64_t>(util::as_double(*ast)); *ast += 2;
-                if (**ast != val) {
-                    return false; // Index must be constant for derivative
-                }
-                ++*ast;
-                int64_t b = static_cast<int64_t>(util::as_double(*ast)); *ast += 2;
-                int64_t step = (a <= b) ? 1 : -1; b += step;
-                for (int64_t i = a; i != b; i += step) {
-                    const uint32_t* tmp = *ast;
-                    if (i + step != b) PUSH_OP(OpCode::add);
-                    env.vars[var_id] = static_cast<double>(i);
-                    diff_ast_recursive(&tmp, env, var_addr, out);
-                }
-                skip_ast(ast);
-            }
-            break;
-        case prods:
-            {
-                uint32_t var_id = **ast; ++*ast;
-                if (var_id == var_addr) return false; // Can't diff wrt index
-                if (**ast != val) return false; // Index must be constant for derivative
-                ++*ast;
-                int64_t a = static_cast<int64_t>(util::as_double(*ast)); *ast += 2;
-                if (**ast != val) return false; // Index must be constant for derivative
-                ++*ast;
-                int64_t b = static_cast<int64_t>(util::as_double(*ast));
-                *ast += 2;
-                int64_t step = (a <= b) ? 1 : -1; b += step;
-                std::vector<uint32_t> diff_tmp;
-                for (int64_t i = a; i != b; i += step) {
-                    if (i + step != b) PUSH_OP(OpCode::add);
-                    for (int64_t j = a; j != b; j += step) {
-                        if (j + step != b) PUSH_OP(OpCode::mul);
-                        if (j == i) {
-                            env.vars[var_id] = static_cast<double>(i);
-                            diff_tmp.clear();
-                            const uint32_t* tmp = *ast;
-                            eval_ast_sub_var(&tmp, var_id, static_cast<double>(i), diff_tmp);
-                            tmp = &diff_tmp[0];
-                            diff_ast_recursive(&tmp, env, var_addr, out);
-                        } else {
-                            const uint32_t* tmp2 = *ast;
-                            eval_ast_sub_var(&tmp2, var_id, static_cast<double>(j), out);
-                        }
-                    }
-                }
-                skip_ast(ast);
-            }
-            break;
+struct Differentiator {
+    Differentiator(const Expr::AST& ast,
+            Environment& env, uint64_t var_addr,
+            std::vector<Expr::ASTNode>& out)
+        : ast_root(&ast[0]), env(env), var_addr(var_addr), out(out) {
+    }
+    bool diff(const Expr::ASTNode** ast = nullptr) {
+        if (ast == nullptr) ast = &ast_root;
+        using namespace OpCode;
+        uint32_t opcode = (*ast)->opcode;
+        ++*ast;
+        switch(opcode) {
+            case null: PUSH(null); break;
+            case val: PUSH(0.); break;
+            case ref: PUSH(((*ast)-1)->ref == var_addr ? 1. : 0.); break;
+            case bnz:
+                      {
+                          PUSH(bnz);
+                          *ast = copy_ast(*ast, out);
+                          DIFF_NEXT; DIFF_NEXT;
+                      }
+                      break;
+            case sums:
+                      {
+                          uint64_t var_id = ((*ast)-1)->ref;
+                          // Can't diff wrt index
+                          if (var_id == var_addr) return false;
+                          // Index must be constant for derivative
+                          if ((*ast)->opcode != val) return false;
+                          int64_t a = static_cast<int64_t>((*ast)->val); ++*ast;
+                          // Index must be constant for derivative
+                          if ((*ast)->opcode != val) return false;
+                          int64_t b = static_cast<int64_t>((*ast)->val); ++*ast;
+                          int64_t step = (a <= b) ? 1 : -1; b += step;
+                          if ((*ast)->opcode != thunk_ret) return false; ++*ast;
+                          Expr::AST diff_tmp;
+                          for (int64_t i = a; i != b; i += step) {
+                              const Expr::ASTNode* tmp = *ast;
+                              if (i + step != b) PUSH(OpCode::add);
+                              env.vars[var_id] = static_cast<double>(i);
+                              diff_tmp.clear();
+                              ast_sub_var(&tmp, var_id, static_cast<double>(i), diff_tmp);
+                              tmp = &diff_tmp[0];
+                              diff(&tmp);
+                          }
+                          skip_ast(ast);
+                          if ((*ast)->opcode != thunk_jmp) return false; ++*ast;
+                      }
+                      break;
+            case prods:
+                      {
+                          uint64_t var_id = ((*ast)-1)->ref;
+                          // Can't diff wrt index
+                          if (var_id == var_addr) return false;
+                          // Index must be constant for derivative
+                          if ((*ast)->opcode != val) return false;
+                          int64_t a = static_cast<int64_t>((*ast)->val); ++*ast;
+                          // Index must be constant for derivative
+                          if ((*ast)->opcode != val) return false;
+                          int64_t b = static_cast<int64_t>((*ast)->val); ++*ast;
+                          int64_t step = (a <= b) ? 1 : -1; b += step;
+                          Expr::AST diff_tmp;
+                          if ((*ast)->opcode != thunk_ret) return false; ++*ast;
+                          for (int64_t i = a; i != b; i += step) {
+                              if (i + step != b) PUSH(OpCode::add);
+                              for (int64_t j = a; j != b; j += step) {
+                                  if (j + step != b) PUSH(OpCode::mul);
+                                  if (j == i) {
+                                      env.vars[var_id] = static_cast<double>(i);
+                                      diff_tmp.clear();
+                                      const Expr::ASTNode* tmp = *ast;
+                                      ast_sub_var(&tmp, var_id, static_cast<double>(j), diff_tmp);
+                                      tmp = &diff_tmp[0];
+                                      diff(&tmp);
+                                  } else {
+                                      const Expr::ASTNode* tmp2 = *ast;
+                                      ast_sub_var(&tmp2, var_id, static_cast<double>(j), out);
+                                  }
+                              }
+                          }
+                          skip_ast(ast);
+                          if ((*ast)->opcode != thunk_jmp) return false; ++*ast;
+                      }
+                      break;
 
-        case bsel: skip_ast(ast); DIFF_NEXT; break;
-        case add: case sub: PUSH_OP(opcode); DIFF_NEXT; DIFF_NEXT; break;
-        case mul: {
-                      // Product rule
-                      PUSH_OP(add);
-                      const uint32_t* tmp1 = *ast;
-                      PUSH_OP(mul); DIFF_NEXT; // df *
-                      copy_to_derivative(*ast, out); // g
-                      PUSH_OP(mul); DIFF_NEXT; copy_to_derivative(tmp1, out); // + dg * f
-                  }
-                  break;
-        case div: {
-                      // Quotient rule
-                      PUSH_OP(div); PUSH_OP(sub);
-                      const uint32_t* tmp1 = *ast, *tmp1b = *ast;
-                      PUSH_OP(mul); DIFF_NEXT;  // df *
-                      const uint32_t* tmp2 = *ast;
-                      copy_to_derivative(tmp2, out);  // g
-                      PUSH_OP(mul); DIFF_NEXT; copy_to_derivative(tmp1, out); // - dg * f
-                      tmp1 = tmp1b;
-                      PUSH_OP(sqrb); copy_to_derivative(tmp2, out); // / g^2
-                  }
-                  break;
-        case mod:
-                  DIFF_NEXT;
-                  // Cannot take derivative wrt modulus
-                  if (eval_ast_find_var(ast, var_addr)) return false;
-                  break;
+            case bsel: skip_ast(ast); DIFF_NEXT; break;
+            case add: case sub: PUSH(opcode); DIFF_NEXT; DIFF_NEXT; break;
+            case mul: {
+                          // Product rule
+                          PUSH(add);
+                          const Expr::ASTNode* tmp1 = *ast;
+                          PUSH(mul); DIFF_NEXT; // df *
+                          copy_ast(*ast, out); // g
+                          PUSH(mul); DIFF_NEXT; copy_ast(tmp1, out); // + dg * f
+                      }
+                break;
+            case divi: {
+                          // Quotient rule
+                          PUSH(divi); PUSH(sub);
+                          const Expr::ASTNode* tmp1 = *ast, *tmp1b = *ast;
+                          PUSH(mul); DIFF_NEXT;  // df *
+                          const Expr::ASTNode* tmp2 = *ast;
+                          copy_ast(tmp2, out);  // g
+                          PUSH(mul); DIFF_NEXT; copy_ast(tmp1, out); // - dg * f
+                          tmp1 = tmp1b;
+                          PUSH(sqrb); copy_ast(tmp2, out); // / g^2
+                      }
+                      break;
+            case mod:
+                      DIFF_NEXT;
+                      // Cannot take derivative wrt modulus
+                      if (ast_has_var(ast, var_addr)) return false;
+                      break;
 
-        case power:
-                  {
-                      const uint32_t* tmp1 = *ast;
-                      skip_ast(&tmp1);
-                      const uint32_t* expon_pos = tmp1;
-                      bool expo_nonconst = eval_ast_find_var(&tmp1, var_addr);
-                      if (expo_nonconst) {
-                           const uint32_t* base_pos = *ast;
-                           std::vector<uint32_t> elnb;
-                           elnb.push_back(mul); copy_to_derivative(expon_pos, elnb);
-                           elnb.push_back(logb); copy_to_derivative(base_pos, elnb);
-                           skip_ast(ast); skip_ast(ast);
-                           const uint32_t* elnbptr = &elnb[0];
-                           PUSH_OP(mul); PUSH_OP(expb); copy_to_derivative(elnbptr, out);
-                           diff_ast_recursive(&elnbptr, env, var_addr, out);
-                      } else {
-                          CHAIN_RULE(PUSH_OP(mul);
-                                  copy_to_derivative(*ast, out);
-                                  PUSH_OP(power), // g(x) goes here
-                                  PUSH_OP(sub); copy_to_derivative(*ast, out); PUSH_CONST(1));
+            case power:
+                      {
+                          const Expr::ASTNode* tmp1 = *ast;
+                          skip_ast(&tmp1);
+                          const Expr::ASTNode* expon_pos = tmp1;
+                          bool expo_nonconst = ast_has_var(&tmp1, var_addr);
+                          if (expo_nonconst) {
+                              const Expr::ASTNode* base_pos = *ast;
+                              Expr::AST elnb;
+                              elnb.push_back(mul);
+                              copy_ast(expon_pos, elnb);
+                              elnb.push_back(logb);
+                              copy_ast(base_pos, elnb);
+                              skip_ast(ast); skip_ast(ast);
+                              const Expr::ASTNode* elnbptr = &elnb[0];
+                              PUSH(mul); PUSH(expb);
+                              copy_ast(elnbptr, out);
+                              diff(&elnbptr);
+                          } else {
+                              CHAIN_RULE(PUSH(mul);
+                                      copy_ast(*ast, out);
+                                      PUSH(power), // g(x) goes here
+                                      PUSH(sub); copy_ast(*ast, out); PUSH(1.));
+                              skip_ast(ast);
+                          }
+                      }
+                      break;
+            case logbase:
+                      {
+                          const Expr::ASTNode* tmp = *ast;
+                          skip_ast(&tmp);
+                          bool base_nonconst = ast_has_var(&tmp, var_addr);
+                          // Cannot take derivative wrt base
+                          if (base_nonconst) return false;
+                          CHAIN_RULE(PUSH(divi);
+                                  PUSH(1.0);PUSH(mul);
+                                  PUSH(logb);
+                                  copy_ast(*ast, out),);
                           skip_ast(ast);
                       }
-                  }
-                  break;
-        case logbase:
-                  {
-                      const uint32_t* tmp = *ast;
-                      skip_ast(&tmp);
-                      bool base_nonconst = eval_ast_find_var(&tmp, var_addr);
-                      // Cannot take derivative wrt base
-                      if (base_nonconst) return false;
-                      CHAIN_RULE(PUSH_OP(div);
-                              PUSH_CONST(1.0);PUSH_OP(mul);
-                              PUSH_OP(logb);
-                              copy_to_derivative(*ast, out),);
-                      skip_ast(ast);
-                  }
-                  break;
-        case max: case min:
-        {
-            PUSH_OP(bnz); PUSH_OP(opcode == max ? ge : le);
-            const uint32_t* tmp = *ast;
-            copy_to_derivative(tmp, out); skip_ast(&tmp);
-            copy_to_derivative(tmp, out);
-            DIFF_NEXT; DIFF_NEXT;
-            break;
-        }
-        case land: case lor: case lxor: case gcd: case lcm: case choose: case fafact: case rifact:
-        case lt: case le: case eq: case ne: case ge: case gt:
-                  PUSH_CONST(0.0); skip_ast(ast); skip_ast(ast); // Integer functions: 0 derivative
-                  break;
-        case betab:
-                  {
-                      const uint32_t* tmp = *ast, *x_pos = *ast;
-                      skip_ast(&tmp);
-                      const uint32_t* y_pos = tmp;
-                      PUSH_OP(add);
-                          PUSH_OP(mul);
-                              PUSH_OP(mul);
-                                  PUSH_OP(betab);
-                                      copy_to_derivative(x_pos,out); copy_to_derivative(y_pos,out);
-                                  PUSH_OP(sub);
-                                      PUSH_OP(digammab); copy_to_derivative(x_pos,out);
-                                      PUSH_OP(digammab); PUSH_OP(add); copy_to_derivative(x_pos,out); copy_to_derivative(y_pos,out);
-                          DIFF_NEXT;
-                          PUSH_OP(mul);
-                              PUSH_OP(mul);
-                                  PUSH_OP(betab);
-                                      copy_to_derivative(x_pos,out); copy_to_derivative(y_pos,out);
-                                  PUSH_OP(sub);
-                                      PUSH_OP(digammab); copy_to_derivative(y_pos,out);
-                                      PUSH_OP(digammab); PUSH_OP(add); copy_to_derivative(x_pos,out); copy_to_derivative(y_pos,out);
-                          DIFF_NEXT;
-                  }
-                  break;
-        case polygammab:
-                  {
-                      const uint32_t* tmp1 = *ast;
-                      bool idx_nonconst = eval_ast_find_var(&tmp1, var_addr);
-                      if (idx_nonconst) return false; // Can't differentiate wrt polygamma index
-                      tmp1 = *ast;
-                      skip_ast(ast);
-                      CHAIN_RULE(PUSH_OP(polygammab);
-                              PUSH_OP(add);
-                              copy_to_derivative(tmp1, out);
-                              PUSH_CONST(1),);
-                  }
-                break;
-        case unaryminus: PUSH_OP(unaryminus); DIFF_NEXT; break;
-        case absb: {
-                       PUSH_OP(mul); PUSH_OP(sgn);
-                       copy_to_derivative(*ast, out);
-                       DIFF_NEXT;
-                   }
-                   break;
-        case sqrtb: CHAIN_RULE(
-                            PUSH_OP(mul);
-                            PUSH_CONST(0.5);
-                            PUSH_OP(power), // g(x) goes here
-                            PUSH_CONST(-0.5)); break;
-        case sqrb: CHAIN_RULE(PUSH_OP(mul); PUSH_CONST(2.),); break;
-        case lnot: case sgn: case floorb: case ceilb: case roundb: case factb:
-                   PUSH_CONST(0.0); skip_ast(ast); break; // Integer functions; 0 derivative
-        case expb: CHAIN_RULE(PUSH_OP(expb),); break;
-        case exp2b: CHAIN_RULE( PUSH_OP(mul); PUSH_CONST(log(2)); PUSH_OP(exp2b),); break;
-        case logb:  CHAIN_RULE(PUSH_OP(div);PUSH_CONST(1.0),); break;
-        case log2b:  CHAIN_RULE(PUSH_OP(div);PUSH_CONST(1.0);PUSH_OP(mul);PUSH_CONST(log(2));,); break;
-        case log10b: CHAIN_RULE(PUSH_OP(div);PUSH_CONST(1.0);PUSH_OP(mul);PUSH_CONST(log(10));,); break;
-        case sinb:  CHAIN_RULE(PUSH_OP(cosb),); break;
-        case cosb:  CHAIN_RULE(PUSH_OP(unaryminus); PUSH_OP(sinb),); break;
-        case tanb:  CHAIN_RULE(PUSH_OP(power); PUSH_OP(cosb);
-                            ,PUSH_CONST(-2)); break;
-        case asinb: case acosb:
-            CHAIN_RULE(if (opcode == acosb) PUSH_OP(unaryminus);
-                    PUSH_OP(div); PUSH_CONST(1);
-                     PUSH_OP(sqrtb); PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb),); break;
-        case atanb:  CHAIN_RULE(PUSH_OP(div); PUSH_CONST(1); PUSH_OP(add); PUSH_CONST(1); PUSH_OP(sqrb),); break;
-        case sinhb: CHAIN_RULE(PUSH_OP(coshb),); break;
-        case coshb: CHAIN_RULE(PUSH_OP(sinhb),); break;
-        case tanhb: CHAIN_RULE(PUSH_OP(sub); PUSH_CONST(1); PUSH_OP(sqrb); PUSH_OP(tanhb),); break;
-        case tgammab:
-                    {
-                        // diff(x)[1/fact(x)]
-                        const uint32_t* tmp = *ast;
-                        out.push_back(mul); DIFF_NEXT;
-                        PUSH_OP(mul); PUSH_OP(tgammab);
-                        copy_to_derivative(tmp, out);
-                        PUSH_OP(digammab);
-                        copy_to_derivative(tmp, out);
-                    }
                       break;
-        case digammab: CHAIN_RULE(PUSH_OP(trigammab),); break;
-        case trigammab: CHAIN_RULE(PUSH_OP(polygammab); PUSH_CONST(2),); break;
-        case lgammab: CHAIN_RULE(PUSH_OP(digammab),); break;
-        case erfb:   CHAIN_RULE(
-                              PUSH_OP(mul); PUSH_CONST(2.0 / sqrt(M_PI));
-                              PUSH_OP(expb); PUSH_OP(unaryminus); PUSH_OP(sqrb),);
-                     break;
+            case max: case min:
+                      {
+                          PUSH(bnz); PUSH(opcode == max ? ge : le);
+                          const Expr::ASTNode* tmp = *ast;
+                          copy_ast(tmp, out); skip_ast(&tmp);
+                          copy_ast(tmp, out);
+                          DIFF_NEXT; DIFF_NEXT;
+                          break;
+                      }
+            case land: case lor: case lxor: case gcd: case lcm: case choose: case fafact: case rifact:
+            case lt: case le: case eq: case ne: case ge: case gt:
+                      PUSH(0.0); skip_ast(ast); skip_ast(ast); // Integer functions: 0 derivative
+                      break;
+            case betab:
+                      {
+                          const Expr::ASTNode* tmp = *ast, *x_pos = *ast;
+                          skip_ast(&tmp);
+                          const Expr::ASTNode* y_pos = tmp;
+                          PUSH(add);
+                          PUSH(mul);
+                          PUSH(mul);
+                          PUSH(betab);
+                          copy_ast(x_pos,out);
+                          copy_ast(y_pos,out);
+                          PUSH(sub);
+                          PUSH(digammab); copy_ast(x_pos,out);
+                          PUSH(digammab); PUSH(add);
+                          copy_ast(x_pos,out); copy_ast(y_pos,out);
+                          DIFF_NEXT;
+                          PUSH(mul);
+                          PUSH(mul);
+                          PUSH(betab);
+                          copy_ast(x_pos,out);
+                          copy_ast(y_pos,out);
+                          PUSH(sub);
+                          PUSH(digammab); copy_ast(y_pos,out);
+                          PUSH(digammab); PUSH(add); copy_ast(x_pos,out); copy_ast(y_pos,out);
+                          DIFF_NEXT;
+                      }
+                      break;
+            case polygammab:
+                      {
+                          const Expr::ASTNode* tmp1 = *ast;
+                          bool idx_nonconst = ast_has_var(&tmp1, var_addr);
+                          if (idx_nonconst) return false; // Can't differentiate wrt polygamma index
+                          tmp1 = *ast;
+                          skip_ast(ast);
+                          CHAIN_RULE(PUSH(polygammab);
+                                  PUSH(add);
+                                  copy_ast(tmp1, out);
+                                  PUSH(1.),);
+                      }
+                      break;
+            case unaryminus: PUSH(unaryminus); DIFF_NEXT; break;
+            case absb: {
+                           PUSH(mul); PUSH(sgn);
+                           copy_ast(*ast, out);
+                           DIFF_NEXT;
+                       }
+                             break;
+            case sqrtb: CHAIN_RULE(
+                                PUSH(mul);
+                                PUSH(0.5);
+                                PUSH(power), // g(x) goes here
+                                PUSH(-0.5)); break;
+            case sqrb: CHAIN_RULE(PUSH(mul); PUSH(2.),); break;
+            case lnot: case sgn: case floorb: case ceilb: case roundb: case factb:
+                       PUSH(0.0); skip_ast(ast); break; // Integer functions; 0 derivative
+            case expb: CHAIN_RULE(PUSH(expb),); break;
+            case exp2b: CHAIN_RULE( PUSH(mul); PUSH(log(2.)); PUSH(exp2b),); break;
+            case logb:  CHAIN_RULE(PUSH(divi);PUSH(1.0),); break;
+            case log2b:  CHAIN_RULE(PUSH(divi);PUSH(1.0);PUSH(mul);PUSH(log(2));,); break;
+            case log10b: CHAIN_RULE(PUSH(divi);PUSH(1.0);PUSH(mul);PUSH(log(10));,); break;
+            case sinb:  CHAIN_RULE(PUSH(cosb),); break;
+            case cosb:  CHAIN_RULE(PUSH(unaryminus); PUSH(sinb),); break;
+            case tanb:  CHAIN_RULE(PUSH(power); PUSH(cosb);
+                                ,PUSH(-2.)); break;
+            case asinb: case acosb:
+                        CHAIN_RULE(if (opcode == acosb) PUSH(unaryminus);
+                                PUSH(divi); PUSH(1.);
+                                PUSH(sqrtb); PUSH(sub); PUSH(1.); PUSH(sqrb),); break;
+            case atanb:  CHAIN_RULE(PUSH(divi); PUSH(1.); PUSH(add); PUSH(1.); PUSH(sqrb),); break;
+            case sinhb: CHAIN_RULE(PUSH(coshb),); break;
+            case coshb: CHAIN_RULE(PUSH(sinhb),); break;
+            case tanhb: CHAIN_RULE(PUSH(sub); PUSH(1.); PUSH(sqrb); PUSH(tanhb),); break;
+            case tgammab:
+                        {
+                            // diff(x)[1/fact(x)]
+                            const Expr::ASTNode* tmp = *ast;
+                            out.push_back(mul); DIFF_NEXT;
+                            PUSH(mul); PUSH(tgammab); copy_ast(tmp, out);
+                            PUSH(digammab); copy_ast(tmp, out);
+                        }
+                        break;
+            case digammab: CHAIN_RULE(PUSH(trigammab),); break;
+            case trigammab: CHAIN_RULE(PUSH(polygammab); PUSH(2.),); break;
+            case lgammab: CHAIN_RULE(PUSH(digammab),); break;
+            case erfb:   CHAIN_RULE(
+                                 PUSH(mul); PUSH(2.0 / sqrt(M_PI));
+                                 PUSH(expb); PUSH(unaryminus); PUSH(sqrb),);
+                         break;
 
-        case zetab:  return false; // Derivative not available
-        default: return false;
+            case zetab:  return false; // Derivative not available
+        }
+        return true;
     }
-    return true;
-}
+private:
+    const Expr::ASTNode* ast_root;
+    Environment env;
+    uint64_t var_addr;
+    std::vector<Expr::ASTNode>& out;
+};
 
 }  // namespace
 
 
-std::vector<uint32_t> diff_ast(const std::vector<uint32_t>& ast, uint32_t var_addr, Environment& env) {
-    std::vector<uint32_t> dast;
-    const uint32_t* astptr = &ast[0];
-    if (!diff_ast_recursive(&astptr, env, var_addr, dast)) {
+std::vector<Expr::ASTNode> diff_ast(const Expr::AST& ast,
+        uint64_t var_addr, Environment& env) {
+    std::vector<Expr::ASTNode> dast;
+    Differentiator diff(ast, env, var_addr, dast);
+    if (!diff.diff()) {
         dast.resize(1);
         dast[0] = OpCode::null;
     }
     return dast;
 }
 
-}  // namespace detail
+// Interface for differentiating expr
+Expr Expr::diff(uint64_t var_addr, Environment& env) const {
+    Expr dexpr;
+    dexpr.ast.clear();
+
+    Differentiator diff(ast, env, var_addr, dexpr.ast);
+    if (!diff.diff()) {
+        dexpr.ast.resize(1);
+        dexpr.ast[0].opcode = OpCode::null;
+    } else {
+        dexpr.optimize();
+    }
+    return dexpr;
+}
+
+// Newton's method implementation
+double Expr::newton(uint64_t var_addr, double x0, Environment& env,
+        double eps_step, double eps_abs, int max_iter,
+        double xmin, double xmax, const Expr* deriv,
+        double fx0, double dfx0) const {
+    if (deriv == nullptr) {
+        Expr deriv_expr = diff(var_addr, env);
+        return newton(var_addr, x0, env, eps_step,
+                eps_abs, max_iter, xmin, xmax, &deriv_expr, fx0, dfx0);
+    }
+    for (int i = 0; i < max_iter; ++i) {
+        if (i || dfx0 == std::numeric_limits<double>::max()) {
+            env.vars[var_addr] = x0;
+            if (i || fx0 == std::numeric_limits<double>::max()) {
+                fx0 = (*this)(env);
+                if(std::isnan(fx0)) return std::numeric_limits<double>::quiet_NaN(); // Fail
+            }
+            dfx0 = (*deriv)(env);
+            if(std::isnan(dfx0) || dfx0 == 0.) return std::numeric_limits<double>::quiet_NaN(); // Fail
+        }
+        double delta = fx0 / dfx0;
+        x0 -= delta;
+        if (std::fabs(delta) < eps_step && std::fabs(fx0) < eps_abs) {
+            // Found root
+            return x0;
+        }
+        if (x0 < xmin || x0 > xmax) {
+            return std::numeric_limits<double>::quiet_NaN(); // Fail
+        }
+    }
+    return std::numeric_limits<double>::quiet_NaN(); // Fail
+}
 }  // namespace nivalis

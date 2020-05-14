@@ -1,4 +1,5 @@
 #include "expr.hpp"
+
 #include <numeric>
 #include <iostream>
 #include <iomanip>
@@ -6,13 +7,12 @@
 #include <cmath>
 #include <algorithm>
 #include "util.hpp"
-#include "eval_expr.hpp"
-#include "diff_expr.hpp"
-#include "optimize_expr.hpp"
 namespace nivalis {
 
 namespace {
-// Combine/wrap utils
+// * Combine/wrap utils
+// Combine two expressions by applying binary operator
+// assumes opcode is binary
 Expr combine_expr(uint32_t opcode, const Expr& a, const Expr& b) {
     Expr new_expr;
     new_expr.ast.clear();
@@ -22,7 +22,7 @@ Expr combine_expr(uint32_t opcode, const Expr& a, const Expr& b) {
     std::copy(b.ast.begin(), b.ast.end(), std::back_inserter(new_expr.ast));
     return new_expr;
 }
-#define COMBINE_EXPR(op) return combine_expr(op, *this, other)
+// Apply unary operator to expression
 Expr wrap_expr(uint32_t opcode, const Expr& a) {
     Expr new_expr;
     new_expr.ast.clear();
@@ -31,118 +31,128 @@ Expr wrap_expr(uint32_t opcode, const Expr& a) {
     std::copy(a.ast.begin(), a.ast.end(), std::back_inserter(new_expr.ast));
     return new_expr;
 }
+
+size_t print_ast(std::ostream& os, const Expr::AST& ast,
+               const Environment* env = nullptr,
+               size_t idx = 0) {
+    std::string_view reprs = OpCode::repr(ast[idx].opcode);
+    size_t n_idx = idx + 1;
+    for (char c : reprs) {
+        switch(c) {
+            case '@': n_idx = print_ast(os, ast, env, n_idx); break; // subexpr
+            case '#': os << ast[idx].val; break; // value
+            case '&':
+                  if (ast[idx].ref >= env->vars.size()) {
+                      os << "&NULL";
+                      break;
+                  }
+                  if (env != nullptr) os << env->varname.at(ast[idx].ref);
+                  else os << "&" << ast[idx].ref;
+                  break; // ref
+            case '%':
+                  os << "&" << ast[idx].ref;
+                  break;
+            default: os << c;
+        }
+    }
+    return n_idx;
+}
 }  // namespace
 
-Expr::Expr() { ast.resize(2); }
-double Expr::operator()(Environment& env) const {
-    if (ast_pad.size())
-        return detail::eval_padded_ast(env, ast_pad);
-    const uint32_t* astptr = &ast[0];
-    return detail::eval_ast(env, &astptr);
-}
+Expr::Expr() { ast.resize(1); }
 
-Expr Expr::operator+(const Expr& other) const { COMBINE_EXPR(OpCode::add); }
-Expr Expr::operator-(const Expr& other) const { COMBINE_EXPR(OpCode::sub); }
-Expr Expr::operator*(const Expr& other) const { COMBINE_EXPR(OpCode::mul); }
-Expr Expr::operator/(const Expr& other) const { COMBINE_EXPR(OpCode::div); }
-Expr Expr::operator%(const Expr& other) const { COMBINE_EXPR(OpCode::mod); }
-Expr Expr::operator^(const Expr& other) const { COMBINE_EXPR(OpCode::power); }
-Expr Expr::combine(uint32_t opcode, const Expr& other) const { COMBINE_EXPR(opcode); }
+Expr Expr::operator+(const Expr& other) const {
+    return combine_expr(OpCode::add, *this, other); }
+Expr Expr::operator-(const Expr& other) const {
+    return combine_expr(OpCode::sub, *this, other); }
+Expr Expr::operator*(const Expr& other) const {
+    return combine_expr(OpCode::mul, *this, other); }
+Expr Expr::operator/(const Expr& other) const {
+    return combine_expr(OpCode::divi, *this, other); }
+Expr Expr::combine(uint32_t opcode, const Expr& other) const {
+    return combine_expr(opcode, *this, other); }
 Expr Expr::operator-() const { return wrap_expr(OpCode::unaryminus, *this); }
 Expr Expr::wrap(uint32_t opcode) const { return wrap_expr(opcode, *this); }
 
 bool Expr::has_var(uint32_t addr) const {
-    const uint32_t* astptr = &ast[0];
-    return detail::eval_ast_find_var(&astptr, addr);
+    return detail::has_var_ast(ast, addr);
+}
+void Expr::sub_var(uint32_t addr, double value) {
+    return detail::sub_var_ast(ast, addr, value);
 }
 
 Expr Expr::null() { return Expr(); }
 Expr Expr::zero() { return constant(0); }
 Expr Expr::constant(double val) {
-    Expr z; z.ast.clear();
-    util::push_dbl(z.ast, val);
-    return z;
-}
-
-void Expr::optimize() {
-    const uint32_t* astptr = &ast[0];
-    std::vector<detail::ASTNode> nodes;
-    detail::ast_to_nodes(&astptr, nodes);
-
-    Environment dummy_env;
-    detail::optim_nodes(dummy_env, nodes);
-
-    ast.clear();
-    detail::ast_from_nodes(nodes, ast);
+    Expr z; z.ast.resize(1, val); return z;
 }
 
 std::string Expr::repr(const Environment& env) const {
     std::stringstream ss;
-    const uint32_t* astptr = &ast[0];
-    detail::print_ast(ss, &astptr, &env);
+    print_ast(ss, ast, &env);
     auto s = ss.str();
     if (s.size() >= 2 &&
         s[0] == '(' && s.back() == ')') s = s.substr(1, s.size()-2);
     return s;
 }
 
-Expr Expr::diff(uint32_t var_addr, Environment& env) const {
-    Expr dexpr;
-    dexpr.ast = detail::diff_ast(ast, var_addr, env);
-    dexpr.optimize();
-    return dexpr;
-}
-
 bool Expr::is_null() const {
-    return ast.empty() || ast[0] == OpCode::null ||
-           (ast[0] == OpCode::val && std::isnan(util::as_double(&ast[1])));
+    return ast.empty() || ast[0].opcode == OpCode::null ||
+           (ast[0].opcode == OpCode::val && std::isnan(ast[0].val));
 }
 
-double Expr::newton(uint32_t var_addr, double x0, Environment& env,
-        double eps_step, double eps_abs, int max_iter,
-        double xmin, double xmax, const Expr* deriv,
-        double fx0, double dfx0) const {
-    if (deriv == nullptr) {
-        Expr deriv_expr = diff(var_addr, env);
-        return newton(var_addr, x0, env, eps_step,
-                eps_abs, max_iter, xmin, xmax, &deriv_expr, fx0, dfx0);
-    }
-    for (int i = 0; i < max_iter; ++i) {
-        if (i || dfx0 == std::numeric_limits<double>::max()) {
-            env.vars[var_addr] = x0;
-            if (i || fx0 == std::numeric_limits<double>::max()) {
-                fx0 = (*this)(env);
-                if(std::isnan(fx0)) return std::numeric_limits<double>::quiet_NaN(); // Fail
-            }
-            dfx0 = (*deriv)(env);
-            if(std::isnan(dfx0) || dfx0 == 0.) return std::numeric_limits<double>::quiet_NaN(); // Fail
-        }
-        double delta = fx0 / dfx0;
-        x0 -= delta;
-        if (std::fabs(delta) < eps_step && std::fabs(fx0) < eps_abs) {
-            // Found root
-            return x0;
-        }
-        if (x0 < xmin || x0 > xmax) {
-            return std::numeric_limits<double>::quiet_NaN(); // Fail
-        }
-    }
-    return std::numeric_limits<double>::quiet_NaN(); // Fail
-}
+Expr::ASTNode::ASTNode() : opcode(OpCode::null) {}
+Expr::ASTNode::ASTNode(uint32_t opcode, uint64_t ref)
+    : opcode(opcode), ref(ref) { }
+Expr::ASTNode::ASTNode(OpCode::_OpCode opcode) : opcode(opcode) {}
+Expr::ASTNode::ASTNode(double val)
+    : opcode(OpCode::val), val(val) { }
 
-void Expr::precompute_pad_ast() {
-    const uint32_t* astptr = &ast[0];
-    if (!detail::to_padded_ast(&astptr, ast_pad)) {
-        ast_pad.clear();
-    }
+bool Expr::ASTNode::operator==(const ASTNode& other) const {
+    if (other.opcode != opcode) return false;
+    if ((OpCode::has_ref(opcode) || opcode == OpCode::val ||
+            opcode == OpCode::thunk_jmp) &&
+        ref != other.ref) return false;
+    return true;
+}
+bool Expr::ASTNode::operator!=(const ASTNode& other) const {
+    return !(*this == other);
 }
 
 std::ostream& operator<<(std::ostream& os, const Expr& expr) {
     os << "nivalis::Expr[";
-    const uint32_t* astptr = &expr.ast[0];
-    detail::print_ast(os, &astptr);
+    print_ast(os, expr.ast);
     os << "]";
     return os;
 }
+std::ostream& operator<<(std::ostream& os, const Expr::ASTNode& node) {
+    os << node.opcode;
+    if (node.opcode == OpCode::val) os << "#" << node.val;
+    if (OpCode::has_ref(node.opcode)) os << "&" << node.ref;
+    return os;
+}
+
+
+namespace detail {
+void sub_var_ast(Expr::AST& ast, int64_t addr, double value) {
+    for (size_t i = 0; i < ast.size(); ++i) {
+        if (ast[i].opcode == OpCode::ref &&
+            ast[i].ref == addr) {
+            ast[i].opcode = OpCode::val;
+            ast[i].val = value;
+        }
+    }
+}
+
+bool has_var_ast(const Expr::AST& ast, uint32_t addr) {
+    for (size_t i = 0; i < ast.size(); ++i) {
+        if (OpCode::has_ref(ast[i].opcode) &&
+            ast[i].ref == addr) {
+            return true;
+        }
+    }
+    return false;
+}
+}  // namespace detail
 
 }  // namespace nivalis

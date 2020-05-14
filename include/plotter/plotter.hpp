@@ -354,16 +354,17 @@ public:
                         // Maximum number of pixels to draw (stops drawing)
                         static const size_t MAX_PIXELS = 300000;
                         // Epsilon for bisection
-                        static const double BISECTION_EPS = 1e-5;
+                        static const double BISECTION_EPS = 1e-4;
                         size_t pix_cnt = 0;
 
                         for (int sy = 0; sy < shigh; sy += interval) {
                             if (pix_cnt > MAX_PIXELS) break;
                             const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
                             for (int sx = 0; sx < swid; sx += interval) {
-                                if (pix_cnt > MAX_PIXELS) break;
                                 // Update interval based on point count
-                                interval = static_cast<int>(pix_cnt / HIGH_PIX_LIMIT + 1);
+                                if (pix_cnt > MAX_PIXELS) break;
+                                interval= static_cast<int>(pix_cnt /
+                                        HIGH_PIX_LIMIT) + 2;
 
                                 const double x = 1.*sx / swid * xdiff + xmin;
                                 double precise_x = x, precise_y = y;
@@ -419,9 +420,16 @@ public:
                                 }
                                 if (paint_square) {
                                     int pad = (curr_func == exprid) ? 1 : 0;
-                                    graph.rectangle((float)(sx - interval + 1 - pad),
-                                            (float)(sy - interval + 1 - pad),
-                                            (float)(interval + pad), (float)(interval + pad), true,
+                                    float precise_sy =
+                                        static_cast<float>(
+                                                (ymax - y) / ydiff * shigh);
+                                    float precise_sx = static_cast<float>(
+                                            (x - xmin) / xdiff * swid);
+                                    graph.rectangle(
+                                            precise_sx + (float)( - interval + 1 - pad),
+                                            precise_sy + (float)(- interval + 1 - pad),
+                                            (float)(interval + pad),
+                                            (float)(interval + pad), true,
                                             func_color);
                                     // Add labels
                                     size_t new_marker_idx = pt_markers.size();
@@ -447,7 +455,7 @@ public:
                             }
                         }
                         // Show detail lost warning
-                        if (interval > 1) loss_detail = true;
+                        if (interval > 2) loss_detail = true;
                     }
                     break;
                 case Function::FUNC_TYPE_EXPLICIT:
@@ -770,7 +778,6 @@ public:
                                 Expr sub_expr = expr - func2.expr;
                                 Expr diff_sub_expr = func.diff - func2.diff;
                                 diff_sub_expr.optimize();
-                                diff_sub_expr.precompute_pad_ast();
                                 if (diff_sub_expr.is_null()) continue;
                                 std::set<double> st;
                                 for (int sxd = 0; sxd < swid; sxd += 2) {
@@ -936,20 +943,15 @@ public:
             if (!expr.is_null()) {
                 // Compute derivatives
                 expr.optimize();
-                expr.precompute_pad_ast();
                 if (func.type == Function::FUNC_TYPE_EXPLICIT) {
                     func.diff = expr.diff(x_var, env);
-                    func.diff.precompute_pad_ast();
                     if (!func.diff.is_null()) {
                         func.ddiff = func.diff.diff(x_var, env);
-                        func.ddiff.precompute_pad_ast();
                     }
                     else func.ddiff.ast[0] = OpCode::null;
                     func.recip = Expr::constant(1.) / func.expr;
                     func.recip.optimize();
-                    func.recip.precompute_pad_ast();
                     func.drecip = func.recip.diff(x_var, env);
-                    func.drecip.precompute_pad_ast();
                 }
             } else func.diff.ast[0] = OpCode::null;
             be.show_error(parser.error_msg);

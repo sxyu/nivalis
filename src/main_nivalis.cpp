@@ -93,7 +93,7 @@ int main(int argc, char ** argv) {
                 }
             }
 
-            auto expr = parse(line, env, !do_diff);
+            auto expr = parse(line, env, !(do_diff || do_optim));
             if (do_optim) {
                 expr.optimize();
                 std::cout << expr.repr(env) << "\n";

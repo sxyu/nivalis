@@ -1,6 +1,5 @@
-#include "optimize_expr.hpp"
-#include "parser.hpp"
 #include "expr.hpp"
+#include "parser.hpp"
 #include "test_common.hpp"
 // This test file assumes parser, expr works
 // it is quite high-level; the goal is to assure
@@ -9,7 +8,6 @@
 using namespace nivalis;
 namespace {
     Parser parse;
-    std::default_random_engine reng{std::random_device{}()};
 
     // Automatically test if optimization leaves expression intact
     bool test_optim_equiv_random(const std::string& str,
@@ -25,15 +23,12 @@ namespace {
         static const int N_ITER = 1000;
         std::uniform_real_distribution<double> unif(xmin, xmax);
         for (int i = 0; i < N_ITER; ++i) {
-            double x = unif(reng);
+            double x = unif(test::reng);
             env.vars[var_id] = x;
             double fx = expr(env);
             double ofx = orig(env);
             if (std::isnan(fx) && std::isnan(ofx)) ++cnt;
             else cnt += (absrelerr(fx, ofx) < FLOAT_EPS);
-            if (absrelerr(fx, ofx) > FLOAT_EPS) {
-                std::cerr << x << ":"<<fx << "," << ofx << "\n";
-            }
         }
         if (cnt != N_ITER) {
             std::cerr << "Optimization equiv test fail\nopti " << expr <<

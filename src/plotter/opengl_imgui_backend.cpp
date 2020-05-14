@@ -653,13 +653,17 @@ struct OpenGLPlotBackend {
                     ImGui::Indent();
                     const auto& mp = OpCode::funcname_to_opcode_map();
                     for (const auto& pr : mp) {
-                        std::string fnmane = pr.first;
-                        if (pr.second == -1 ||
-                                ! OpCode::is_binary(pr.second)) {
-                            ImGui::BulletText("%s(_)", fnmane.c_str());
+                        std::string fnrepr = pr.first + "(";
+                        if (pr.second == -1) {
+                            fnrepr.push_back('_');
                         } else {
-                            ImGui::BulletText("%s(_, _)", fnmane.c_str());
+                            for (size_t i = 0; i < OpCode::n_args(
+                                        pr.second); ++i) {
+                                if (i) fnrepr.append(", ");
+                                fnrepr.push_back('_');
+                            }
                         }
+                        ImGui::BulletText("%s)", fnrepr.c_str());
                     }
 
                     ImGui::Unindent();

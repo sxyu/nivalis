@@ -6,18 +6,24 @@ namespace nivalis {
 namespace OpCode {
 
 // Add the operator here if it is binary
-bool is_binary(uint32_t opcode) {
+size_t n_args(uint32_t opcode) {
     using namespace nivalis::OpCode;
     switch(opcode) {
-        case bsel: case add: case sub: case mul: case div: case mod:
+        case OpCode::null: case val: case ref:
+        case thunk_jmp:
+            return 0;
+        case bsel: case add: case sub: case mul: case divi: case mod:
         case power: case logbase: case max: case min:
         case land: case lor: case lxor:
         case gcd: case lcm:
         case choose: case fafact: case rifact: case betab: case polygammab:
         case lt: case le: case eq: case ne: case ge: case gt:
-            return true;
+        case thunk_ret:
+            return 2;
+        case sums: case prods: case bnz:
+            return 3;
     }
-    return false;
+    return 1;
 }
 
 // Design format of operator expression here
@@ -34,7 +40,7 @@ const char* repr(uint32_t opcode) {
         case add:   return "(@ + @)";
         case sub:   return "(@ - @)";
         case mul:   return "(@ * @)";
-        case div:   return "(@ / @)";
+        case divi:   return "(@ / @)";
         case mod:   return "(@ % @)";
         case power: return "(@ ^ @)";
         case logbase:  return "log(@, @)";
@@ -86,24 +92,11 @@ const char* repr(uint32_t opcode) {
         case trigammab: return "trigamma(@)";
         case erfb:      return "erf(@)";
         case zetab:     return "zeta(@)";
+        // case thunk_jmp: return ":%>";
+        case thunk_jmp: return "]";
+        case thunk_ret: return "[@@";
         default: return "";
     };
-}
-
-// Typically don't need to change this
-// (related to the above by removing all chars except @#&)
-const char* subexpr_repr(uint32_t opcode) {
-    using namespace OpCode;
-    switch (opcode) {
-        case OpCode::null:  return "";
-        case val:   return "#";
-        case ref:   return "&";
-        case sums: case prods:
-                    return "&@@@";
-        case bnz:   return "@@@";
-    };
-    if (is_binary(opcode)) return "@@";
-    else return "@";
 }
 
 // Used only for operator assignment (not important)
@@ -112,7 +105,7 @@ uint32_t from_char(char c) {
         case '+': return OpCode::add;
         case '-': return OpCode::sub;
         case '*': return OpCode::mul;
-        case '/': return OpCode::div;
+        case '/': return OpCode::divi;
         case '%': return OpCode::mod;
         case '^': return OpCode::power;
         case '<': return OpCode::lt;
