@@ -395,7 +395,7 @@ private:
                     // Variable name
                     const std::string varname =
                         expr.substr(left, right - left);
-                    auto addr = env.addr_of(varname, mode_explicit);
+                    auto addr = env.addr_of(varname, true);
                     if (addr == -1) {
                         const auto& constant_values =
                             OpCode::constant_value_map();
@@ -410,7 +410,12 @@ private:
                             }
                             return true;
                         }
-                        PARSE_ERR("Undefined variable \"" << varname + "\"\n");
+                        if (!mode_explicit) {
+                            result.ast.push_back(Expr::ASTNode(OpCode::ref,
+                                        env.addr_of(varname, false)));
+                        } else {
+                            PARSE_ERR("Undefined variable \"" << varname + "\"\n");
+                        }
                     } else {
                         result.ast.push_back(Expr::ASTNode(OpCode::ref, addr));
                     }
