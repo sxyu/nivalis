@@ -55,11 +55,13 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
 
     bool _is_thunk_ret = false;
 
-    // Shorthands for first, 2nd, 3rd arguments
+    // Shorthands for first, 2nd, 3rd arguments to operator
 #define ARG3 stk[top-2]
 #define ARG2 stk[top-1]
 #define ARG1 stk[top]
-#define THUNK_RET_VAL stk[top+1]
+    // Thunk system helpers
+    // For each command that calls thunks, we need to use the
+    // following block ON_THUNK_RET(do on ret, do else)
 #define ON_THUNK_RET(retdo, elsedo) do{if (_is_thunk_ret) {\
     --top; \
     _is_thunk_ret = false; \
@@ -67,9 +69,11 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
 } else { \
     elsedo \
 }}while(0)
-#define CALL_TOP_THUNK(id) do{thunks_stk.push_back(cidx); \
+    // Return value from thunk, usable in retdo part of ON_THUNK_RET
+#define THUNK_RET_VAL stk[top+1]
+    // "Call" a thunk immediately after the current operator
+#define CALL_THUNK_AT(id) do{thunks_stk.push_back(cidx); \
                         cidx = thunks[thunks.size() - (id) - 1]; }while(0)
-#define EV_UNARYP(func) ARG1 = func(ARG1); break
 
     for (size_t cidx = ast.size() - 1; ~cidx; --cidx) {
         const auto& node = ast[cidx];
@@ -94,8 +98,8 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
                 ON_THUNK_RET(
                     ARG1 = THUNK_RET_VAL;
                 ,
-                    CALL_TOP_THUNK(ARG1 == 0.);
-                    thunks.pop_back(); thunks.pop_back();
+                    CALL_THUNK_AT(ARG1 == 0.);
+                    thunks.resize(thunks.size() - 2);
                 );
                 break;
 
@@ -124,7 +128,7 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
                         a += step;
                         if (a == b + step) ARG1 = NONE;
                         else ARG1 = static_cast<double>(a);
-                        CALL_TOP_THUNK(0);
+                        CALL_THUNK_AT(0);
                     }
                 }
                 break;
@@ -202,15 +206,15 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
 
             case unaryminus: ARG1 = -ARG1; break;
             case lnot: ARG1 = static_cast<double>(!(ARG1)); break;
-            case absb: EV_UNARYP(std::fabs);
-            case sqrtb: EV_UNARYP(std::sqrt);
+            case absb: ARG1 = std::fabs(ARG1); break;
+            case sqrtb: ARG1 = std::sqrt(ARG1); break;
             case sqrb: ARG1 *= ARG1; break;
             case sgn: ARG1 = ARG1 > 0 ? 1 : (ARG1 == 0 ? 0 : -1); break;
-            case floorb: EV_UNARYP(floor);
-            case ceilb:  EV_UNARYP(ceil); case roundb: EV_UNARYP(round);
+            case floorb: ARG1 = floor(ARG1); break;
+            case ceilb: ARG1 = ceil(ARG1); break; case roundb: ARG1 = round(ARG1); break;
 
-            case expb:   EV_UNARYP(exp); case exp2b:  EV_UNARYP(exp2);
-            case logb:   EV_UNARYP(log);
+            case expb:   ARG1 = exp(ARG1); break; case exp2b: ARG1 = exp2(ARG1); break;
+            case logb:   ARG1 = log(ARG1); break;
             case factb:
                         {
                             unsigned n = static_cast<unsigned>(std::max(
@@ -222,24 +226,24 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
 #endif
                         }
                         break;
-            case log2b: EV_UNARYP(log2);  case log10b: EV_UNARYP(log10);
-            case sinb:  EV_UNARYP(sin);   case cosb:   EV_UNARYP(cos);
-            case tanb:  EV_UNARYP(tan);   case asinb:  EV_UNARYP(asin);
-            case acosb: EV_UNARYP(acos);  case atanb:  EV_UNARYP(atan);
-            case sinhb: EV_UNARYP(sinh);  case coshb:  EV_UNARYP(cosh);
-            case tanhb: EV_UNARYP(tanh);
-            case tgammab:  EV_UNARYP(std::tgamma);
-            case lgammab:  EV_UNARYP(std::lgamma);
+            case log2b: ARG1 = log2(ARG1); break;  case log10b: ARG1 = log10(ARG1); break;
+            case sinb: ARG1 = sin(ARG1); break;   case cosb:   ARG1 = cos(ARG1); break;
+            case tanb: ARG1 = tan(ARG1); break;   case asinb: ARG1 = asin(ARG1); break;
+            case acosb: ARG1 = acos(ARG1); break;  case atanb: ARG1 = atan(ARG1); break;
+            case sinhb: ARG1 = sinh(ARG1); break;  case coshb: ARG1 = cosh(ARG1); break;
+            case tanhb: ARG1 = tanh(ARG1); break;
+            case tgammab: ARG1 = std::tgamma(ARG1); break;
+            case lgammab: ARG1 = std::lgamma(ARG1); break;
 #ifdef ENABLE_NIVALIS_BOOST_MATH
-            case digammab:  EV_UNARYP(digamma<double>);
-            case trigammab:  EV_UNARYP(trigamma<double>);
-            case zetab:  EV_UNARYP(zeta<double>);
+            case digammab: ARG1 = digamma<double>(ARG1); break;
+            case trigammab: ARG1 = trigamma<double>(ARG1); break;
+            case zetab: ARG1 = zeta<double>(ARG1); break;
 #else
            // The following functions are unavailable without Boost
             case digammab: case trigammab: case zetab:
                 ARG1 = NONE; print_boost_warning(opcode); break;
 #endif
-            case erfb:  EV_UNARYP(erf); break;
+            case erfb: ARG1 = erf(ARG1); break; break;
         }
     }
     return stk[top--];
