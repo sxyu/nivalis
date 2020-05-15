@@ -295,6 +295,7 @@ struct OpenGLPlotBackend {
             double frame_time;
             bool init = true;
             OpenGLGraphicsAdaptor adaptor(window);
+            size_t del_fun = -1;
 
             // Main GLFW loop
             while (!glfwWindowShouldClose(window)) {
@@ -339,6 +340,23 @@ struct OpenGLPlotBackend {
                         1000000 / RESTING_FPS
                     ));
                 }
+                if (~del_fun) {
+                    for (size_t i = del_fun; i < plot.funcs.size()-1; ++i) {
+                        strcpy(editor_strs[i], editor_strs[i+1]);
+                        memcpy(edit_colors[i], edit_colors[i+1],
+                                4*sizeof(float));
+                    }
+                    plot.delete_func(del_fun);
+                    del_fun = -1;
+                    focus_idx = plot.curr_func;
+                }
+
+                if (seek_dir != 0) {
+                    plot.set_curr_func(plot.curr_func + seek_dir);
+                    update_func_color(plot.curr_func);
+                    focus_idx = plot.curr_func;
+                    seek_dir = 0;
+                }
 
                 // Render GUI
                 if (init) {
@@ -354,26 +372,22 @@ struct OpenGLPlotBackend {
                         focus_idx = -1;
                         ImGui::SetKeyboardFocusHere(0);
                     }
-                    const std::string fid = std::to_string(func_idx);
-                    ImGui::PushItemWidth(300.);
-                    if (ImGui::InputText(("f" + fid).c_str(),
+                    const std::string fid = plot.funcs[func_idx].name;
+                    ImGui::PushItemWidth(ImGui::GetWindowWidth() - 100);
+                    if (ImGui::InputText((fid +
+                                    "##funcedit-" + fid).c_str(),
                             editor_strs[func_idx], EDITOR_BUF_SZ,
                             ImGuiInputTextFlags_CallbackHistory,
                             [](ImGuiTextEditCallbackData* data) -> int {
                                 // Handle up/down arrow keys in textboxes
                                 OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
                                         data->UserData);
-                                GLPlotter& plot = be->plot;
-                                plot.set_curr_func(plot.curr_func +
-                                        (data->EventKey == 3 ? -1 : 1));
-                                be->update_func_color(plot.curr_func);
-                                be->focus_idx = plot.curr_func;
+                                be->seek_dir = data->EventKey == 3 ? -1 : 1;
                                 return 0;
                         }, this)) {
                         plot.reparse_expr(func_idx);
                     }
-                    if (ImGui::IsItemHovered() ||
-                            ImGui::IsItemActive()) {
+                    if (ImGui::IsItemActive()) {
                         if (func_idx != plot.curr_func)
                             plot.set_curr_func(func_idx);
                     }
@@ -386,13 +400,7 @@ struct OpenGLPlotBackend {
                     }
                     ImGui::SameLine();
                     if (ImGui::Button(("x##delfun-" + fid).c_str())) {
-                        for (size_t i = func_idx; i < plot.funcs.size()-1; ++i) {
-                            strcpy(editor_strs[i], editor_strs[i+1]);
-                            memcpy(edit_colors[i], edit_colors[i+1],
-                                    4*sizeof(float));
-                        }
-                        plot.delete_func(func_idx);
-                        --func_idx;
+                        del_fun = func_idx;
                     }
                 }
                 if (plot.funcs.size() <= EDITOR_MAX_FUNCS) {
@@ -403,8 +411,7 @@ struct OpenGLPlotBackend {
                             plot.set_curr_func(plot.funcs.size());
                             update_func_color(plot.funcs.size()-1);
                             focus_idx = plot.funcs.size() - 1;
-                        }
-                        ImGui::SameLine();
+                        } ImGui::SameLine();
                     }
                 }
                 if (ImGui::Button("? Help")) {
@@ -730,9 +737,6 @@ struct OpenGLPlotBackend {
         error_text = txt;
     }
 
-    // Set func name label (not used)
-    void set_func_name(const std::string& txt) { }
-
     // Show marker at position
     void show_marker_at(const PointMarker& ptm, int px, int py) {
         marker_posx = px; marker_posy = py + 20;
@@ -790,6 +794,7 @@ private:
 
     // Set to focus an editor
     size_t focus_idx = 0;
+    int seek_dir = 0;
 
     // Require update?
     bool require_update = false;

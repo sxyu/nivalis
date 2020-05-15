@@ -14,8 +14,10 @@ struct Parser {
     // If mode_explicit is true, errors when undefined variable used (normal)
     // If mode_explicit is false, defined the variable implicitly
     // If quiet is true, does not print anything on error
+    // max_args specifies max number of explicit function arguments (like $1) to allow
     Expr operator()(const std::string& expr, Environment& env,
-                    bool mode_explicit = true, bool quiet = false) const;
+                    bool mode_explicit = true, bool quiet = false,
+                    size_t max_args = 0) const;
 
     // Error message; empty if no error
     mutable std::string error_msg;

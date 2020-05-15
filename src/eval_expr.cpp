@@ -49,7 +49,8 @@ double eval_ast(Environment& env, const Expr::AST& ast,
     thread_local std::vector<size_t> thunks;
     thread_local std::vector<size_t> thunks_stk;
     stk.resize(stk.size() + ast.size());
-    size_t top = -1;
+    thread_local size_t top = -1;
+    size_t init_top = top;
     using namespace boost;
     using namespace boost::math;
     using namespace nivalis::OpCode;
@@ -74,6 +75,8 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
     // "Call" a thunk immediately after the current operator
 #define CALL_THUNK_AT(id) do{thunks_stk.push_back(cidx); \
                         cidx = thunks[thunks.size() - (id) - 1]; }while(0)
+    // Quit without messing up stack
+#define FAIL_AND_QUIT do {top = init_top; return NONE; } while(0)
 
     for (size_t cidx = ast.size() - 1; ~cidx; --cidx) {
         const auto& node = ast[cidx];
@@ -98,14 +101,12 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                 {
                     size_t n_args = node.call_info[1];
                     auto& func = env.funcs[node.call_info[0]];
-                    if (n_args != func.n_args) {
-                        // Should not happen
-                        break;
-                    }
-                    std::vector<double> f_args(func.n_args);
+                    std::vector<double> f_args(n_args);
                     for (size_t i = 0; i < n_args; ++i) {
                         f_args[i] = stk[top--];
                     }
+                    if (n_args != func.n_args) FAIL_AND_QUIT; // Should not happen
+                    if (&func.expr.ast[0] == &ast[0]) FAIL_AND_QUIT; // Ban recursion
                     eval_ast(env, func.expr.ast, f_args);
                     ++top;
                 }

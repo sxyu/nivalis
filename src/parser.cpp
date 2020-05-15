@@ -35,8 +35,9 @@ struct ParseSession {
     // mode_explicit: if true, errors when encounters undefined variable;
     //                else defines it
     ParseSession(const std::string& expr, Environment& env, std::string& error_msg,
-                 bool mode_explicit, bool quiet)
-        : env(env), expr(expr), error_msg(error_msg), mode_explicit(mode_explicit), quiet(quiet) { }
+                 bool mode_explicit, bool quiet, size_t max_args)
+        : env(env), expr(expr), error_msg(error_msg),
+            mode_explicit(mode_explicit), quiet(quiet), max_args(max_args) { }
 
     Expr parse() {
         tok_link.resize(expr.size(), -1);
@@ -414,6 +415,7 @@ private:
                         expr.substr(left, right - left);
                     auto addr = env.addr_of(varname, true);
                     if (addr == -1) {
+                        // Parse-time constant
                         const auto& constant_values =
                             OpCode::constant_value_map();
                         auto it = constant_values.find(varname);
@@ -443,6 +445,16 @@ private:
                         result.ast.back().opcode = OpCode::null;
                     }
                     return true;
+                } else if (c == '$' && cr >= '0' && cr <= '9' &&
+                           util::is_whole_number(
+                               expr.substr(left + 1, right - left - 1))) {
+                    // Explicit function argument
+                    int64_t idx = std::atoll(expr.substr(left + 1, right - left - 1).c_str());
+                    if (idx < 0 || idx >= max_args) {
+                        PARSE_ERR("Invalid explicit function argument $" << idx << "\n");
+                    }
+                    result.ast.emplace_back(OpCode::arg, idx);
+                    return true;
                 } else if (c == '#' &&
                            util::is_varname_first(expr[left + 1])) {
                     // Embed variable value as constant
@@ -469,6 +481,7 @@ private:
     std::stringstream error_msg_stream;
     Expr result;
     bool mode_explicit, quiet;
+    size_t max_args;
 
     // Thunk management helpers
     void begin_thunk() {
@@ -493,10 +506,10 @@ private:
 
 // Parse an expression
 Expr Parser::operator()(const std::string& expr, Environment& env,
-                        bool mode_explicit, bool quiet) const {
+                        bool mode_explicit, bool quiet, size_t max_args) const {
     error_msg.clear();
     if (expr.empty()) return Expr();
-    ParseSession sess(expr, env, error_msg, mode_explicit, quiet);
+    ParseSession sess(expr, env, error_msg, mode_explicit, quiet, max_args);
     return sess.parse();
 }
 

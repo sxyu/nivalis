@@ -1,6 +1,5 @@
 #include "env.hpp"
 #include <cmath>
-#include <iostream>
 namespace nivalis {
 Environment::Environment() { }
 
@@ -84,10 +83,9 @@ uint64_t Environment::def_func(const std::string& func_name,
         idx = it->second;
     }
     UserFunction& func = funcs[idx];
-    func.expr = expr;
-    func.expr.optimize();
-    func.n_args = arg_bindings.size();
-    auto& ast = func.expr.ast;
+    Expr func_expr = expr;
+    func_expr.optimize();
+    auto& ast = func_expr.ast;
     std::vector<uint64_t> arg_vars(vars.size(), -1);
     for (size_t i = 0; i < arg_bindings.size(); ++i) {
         arg_vars[arg_bindings[i]] = i;
@@ -95,11 +93,20 @@ uint64_t Environment::def_func(const std::string& func_name,
     for (size_t i = 0; i < ast.size(); ++i) {
         auto& nd = ast[i];
         if (OpCode::has_ref(nd.opcode) &&
+            nd.opcode != OpCode::arg &&
             ~arg_vars[nd.ref]) {
+            // Set argument
             nd.opcode = OpCode::arg;
             nd.ref = arg_vars[nd.ref];
         }
+        if (nd.opcode == OpCode::call &&
+                nd.call_info[i] == idx) {
+            // Recursive functions are not supported
+            return -1;
+        }
     }
+    func.n_args = arg_bindings.size();
+    func.expr = std::move(func_expr);
     return idx;
 }
 

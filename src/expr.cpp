@@ -140,7 +140,9 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
                   else os << "&" << ast[idx].ref;
                   break; // ref
             case '%':
-                  os << "ufun" << ast[idx].ref;
+                  if (env != nullptr) {
+                      os << env->funcnames[ast[idx].call_info[0]];
+                  } os << "<function id=" << ast[idx].call_info[0] << ", " << ast[idx].call_info[0] << " args>";
                   break;
             case '$':
                   os << "$" << ast[idx].ref;
@@ -163,6 +165,7 @@ void sub_var_ast(Expr::AST& ast, int64_t addr, double value) {
 bool has_var_ast(const Expr::AST& ast, uint32_t addr) {
     for (size_t i = 0; i < ast.size(); ++i) {
         if (OpCode::has_ref(ast[i].opcode) &&
+            ast[i].opcode != OpCode::arg &&
             ast[i].ref == addr) {
             return true;
         }

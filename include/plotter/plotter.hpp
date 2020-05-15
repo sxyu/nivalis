@@ -50,6 +50,8 @@ namespace color {
 
 // Represents function in plotter
 struct Function {
+    // Function name
+    std::string name;
     // Function expression
     Expr expr;
     // Derivative, 2nd derivative
@@ -122,7 +124,6 @@ struct PointMarker {
  * std::string read_editor(size_t func_id);                                get text in the editor for given function
 
  * void show_error(std::string error_msg);                              show error message (empty = clear)
- * void set_func_name(std::string name);                                set the 'function name' label if available
 
  * void show_marker_at(const PointMarker& marker, int px, int py);     show the marker (point label) at the position, with given marker data
  * void hide_marker();                                                 hide the marker
@@ -144,11 +145,14 @@ public:
             env(expr_env), be(backend),
             swid(win_width), shigh(win_height) {
         curr_func = 0;
-        funcs.emplace_back();
-        auto& f = funcs.back();
-        f.expr_str = init_expr;
-        f.line_color = color::from_int(last_expr_color++);
-        f.type = Function::FUNC_TYPE_EXPLICIT;
+        {
+            Function f;
+            f.name = "f" + std::to_string(next_func_name++);
+            f.expr_str = init_expr;
+            f.line_color = color::from_int(last_expr_color++);
+            f.type = Function::FUNC_TYPE_EXPLICIT;
+            funcs.push_back(f);
+        }
         draglabel = dragdown = false;
 
         x_var = env.addr_of("x", false);
@@ -956,6 +960,13 @@ public:
             } else func.diff.ast[0] = OpCode::null;
             be.show_error(parser.error_msg);
         }
+
+        if (func.type == Function::FUNC_TYPE_EXPLICIT) {
+            // Register a function in env
+            env.def_func(func.name, func.expr, { x_var });
+        } else {
+            env.def_func(func.name, Expr({ OpCode::null }), { x_var });
+        }
         loss_detail = false;
         be.update();
     }
@@ -965,25 +976,26 @@ public:
             be.show_error("");
         reparse_expr(curr_func);
         curr_func = func_id;
-        std::string suffix;
         if (curr_func == -1) {
             curr_func = 0;
             return;
         }
         else if (curr_func >= funcs.size()) {
+            // New function
             std::string tmp = funcs.back().expr_str;
             util::trim(tmp);
             if (!tmp.empty()) {
-                funcs.emplace_back();
-                funcs.back().type = Function::FUNC_TYPE_EXPLICIT;
+                Function f;
+                f.type = Function::FUNC_TYPE_EXPLICIT;
                 if (reuse_colors.empty()) {
-                    funcs.back().line_color =
+                    f.line_color =
                         color::from_int(last_expr_color++);
                 } else {
-                    funcs.back().line_color = reuse_colors.front();
+                    f.line_color = reuse_colors.front();
                     reuse_colors.pop();
                 }
-                suffix = " [new]";
+                f.name = "f" + std::to_string(next_func_name++);
+                funcs.push_back(std::move(f));
             } else {
                 // If last function is empty,
                 // then stay on it and do not create a new function
@@ -991,17 +1003,17 @@ public:
                 return;
             }
         }
-        be.set_func_name("Function " + std::to_string(curr_func) + suffix);
         be.update_editor(func_id, funcs[func_id].expr_str);
         be.update(true);
     }
 
     void delete_func(size_t idx = -1) {
         if (idx == -1) idx = curr_func;
+        env.def_func(funcs[idx].name, Expr({ OpCode::null }), { x_var });
         if (funcs.size() > 1) {
             reuse_colors.push(funcs[idx].line_color);
             funcs.erase(funcs.begin() + idx);
-            if (curr_func >= funcs.size()) {
+            if (curr_func > idx) {
                 curr_func--;
             }
         } else {
@@ -1209,13 +1221,15 @@ private:
     Backend& be;
     Parser parser;
 
-    std::queue<color::color> reuse_colors;   // Reusable colors
+    std::queue<color::color> reuse_colors;    // Reusable colors
     size_t last_expr_color = 0;               // Next available color index if no reusable
                                               // one present(by color::from_int)
     uint32_t x_var, y_var;                    // x,y variable addresses
     bool dragdown, draglabel;
     int dragx, dragy;
     double xmaxi, xmini, ymaxi, ymini;
+
+    size_t next_func_name = 0;                // Next available function name
 
     // whether some detail is lost
     bool loss_detail = false;

@@ -120,7 +120,10 @@ int main(int argc, char ** argv) {
                 // Pre-register variables
                 env.addr_of(def_fn_args[i], false);
             }
-            auto expr = parse(line, env, !(do_diff || do_optim));
+            auto expr = parse(line, env, !(do_diff || do_optim), // expicit
+                                         false, // quiet
+                                         def_fn_args.size() // max args
+                            );
             if (do_optim) {
                 expr.optimize();
                 std::cout << expr.repr(env) << "\n";
@@ -130,46 +133,50 @@ int main(int argc, char ** argv) {
                 std::cout << diff.repr(env) << "\n";
             } else {
                 double output;
-                // Assignment statement
-                if (var.size()) {
-                    if (def_fn) {
-                        // Define function
-                        std::vector<uint64_t> bindings;
-                        for (size_t i = 0; i < def_fn_args.size(); ++i) {
-                            bindings.push_back(env.addr_of(def_fn_args[i]));
-                        }
-                        auto addr = env.def_func(var, expr, bindings);
-                        std::cout << var << "(";
-                        for (size_t i = 0; i < def_fn_args.size(); ++i) {
-                            if (i) std::cout << ", ";
-                            std::cout << "$" << i;
-                        }
-                        std::cout << ") = "  <<
-                            env.funcs[addr].expr.repr(env) << std::endl;
-
-                    } else {
-                        // Define variable
-                        double var_val;
-                        if (assn_opcode != OpCode::bsel) {
-                            // Operator assignment
-                            auto addr = env.addr_of(var, true);
-                            if (addr == -1) {
-                                std::cout << "Undefined variable \"" << var
-                                    << "\" (operator assignment)\n";
-                                continue;
+                if (def_fn || !std::isnan(output = expr(env))) {
+                    // Assignment statement
+                    if (var.size() && parse.error_msg.empty()) {
+                        if (def_fn) {
+                            // Define function
+                            std::vector<uint64_t> bindings;
+                            for (size_t i = 0; i < def_fn_args.size(); ++i) {
+                                bindings.push_back(env.addr_of(def_fn_args[i]));
                             }
-                            var_val = Expr::constant(env.vars[addr])
-                                .combine(assn_opcode,
-                                        Expr::constant(output))(env);
+                            auto addr = env.def_func(var, expr, bindings);
+                            if (~addr) {
+                                std::cout << var << "(";
+                                for (size_t i = 0; i < def_fn_args.size(); ++i) {
+                                    if (i) std::cout << ", ";
+                                    std::cout << "$" << i;
+                                }
+                                std::cout << ") = "  <<
+                                    env.funcs[addr].expr.repr(env) << std::endl;
+                            }
+
                         } else {
-                            // Usual assignment
-                            var_val = output;
+                            // Define variable
+                            double var_val;
+                            if (assn_opcode != OpCode::bsel) {
+                                // Operator assignment
+                                auto addr = env.addr_of(var, true);
+                                if (addr == -1) {
+                                    std::cout << "Undefined variable \"" << var
+                                        << "\" (operator assignment)\n";
+                                    continue;
+                                }
+                                var_val = Expr::constant(env.vars[addr])
+                                    .combine(assn_opcode,
+                                            Expr::constant(output))(env);
+                            } else {
+                                // Usual assignment
+                                var_val = output;
+                            }
+                            env.set(var, var_val);
+                            std::cout << var << " = " << var_val << std::endl;
                         }
-                        env.set(var, var_val);
-                        std::cout << var << " = " << var_val << std::endl;
+                    } else {
+                        std::cout << output << std::endl;
                     }
-                } else if (!std::isnan(output = expr(env))) {
-                    std::cout << output << std::endl;
                 }
             }
         }

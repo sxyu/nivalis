@@ -94,7 +94,7 @@ struct NanaPlotBackend {
 
         /* Editor UI */
         // Func label
-        label_func.caption("Function 0");
+        label_func.caption("Function");
         label_func.bgcolor(colors::white);
         // Error label
         label_err.transparent(true);
@@ -209,9 +209,6 @@ struct NanaPlotBackend {
 
     // Set error label
     void show_error(const std::string& txt) { label_err.caption(txt); }
-
-    // Set func name label
-    void set_func_name(const std::string& txt) { label_func.caption(txt); }
 
     // Show marker at position
     void show_marker_at(const PointMarker& ptm, int px, int py) {

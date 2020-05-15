@@ -94,7 +94,7 @@ const char* repr(uint32_t opcode) {
         case erfb:      return "erf(@)";
         case zetab:     return "zeta(@)";
         case thunk_jmp: return "]";
-        case thunk_ret: return "[@<@>";
+        case thunk_ret: return "[@@";
         case arg: return "$";
         case call: return "%(@)";
         default: return "";

@@ -6,14 +6,15 @@
 namespace nivalis {
 namespace util {
 
-// true if is literal char (a-zA-Z0-9_$'#&)
+// true if is literal char (a-zA-Z0-9_$'#&$)
 constexpr bool is_literal(char c) {
     return
         (c >= 'a' && c <= 'z') ||
         (c >= 'A' && c <= 'Z') ||
         (c >= '0' && c <= '9') ||
         c == '_' || c == '$' ||
-        c == '\'' || c == '.' || c == '#' || c == '&';
+        c == '\'' || c == '.' || c == '#' ||
+        c == '&';
 }
 
 // true if can be first char of a variable name
@@ -21,7 +22,7 @@ constexpr bool is_varname_first(char c) {
     return
         (c >= 'a' && c <= 'z') ||
         (c >= 'A' && c <= 'Z') ||
-        c == '_' || c == '$' || c == '\'';
+        c == '_' || c == '\'';
 }
 
 // true if is comparison operator character
@@ -55,6 +56,8 @@ constexpr bool is_bracket(char c) {
 
 // checks if string is valid variable name
 bool is_varname(const std::string& expr);
+// checks if string is a nonnegative integer (only 0-9)
+bool is_whole_number(const std::string& expr);
 // returns position of = in equality, or -1 else
 // where = must:
 // 1. not be at index 0 or expr.size()-1

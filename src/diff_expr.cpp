@@ -1,7 +1,6 @@
 #include "expr.hpp"
 
 #include <cmath>
-#include <iostream>
 #include "opcodes.hpp"
 #include "util.hpp"
 #include "env.hpp"
@@ -33,6 +32,7 @@ bool ast_has_var(const Expr::ASTNode** ast, uint64_t var_id) {
     auto opcode = (*ast)->opcode;
     auto n_args = OpCode::n_args(opcode);
     if (OpCode::has_ref(opcode) &&
+        opcode != OpCode::arg &&
         (*ast)->ref == var_id) {
         return true;
     }
@@ -99,6 +99,8 @@ struct Differentiator {
                           auto& call_args = argv.back();
                           call_args.resize(n_args);
                           const auto& fexpr = env.funcs[fid].expr;
+                          if (&nodes[0] == &fexpr.ast[0]) // Ban recursion
+                              return false;
                           const Expr::ASTNode* tmp = *ast;
                           for (size_t i = 0; i < n_args; ++i) {
                               call_args[i] = tmp;

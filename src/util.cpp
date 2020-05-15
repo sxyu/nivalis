@@ -15,6 +15,13 @@ bool is_varname(const std::string& expr) {
     return true;
 }
 
+bool is_whole_number(const std::string& expr) {
+    for (size_t k = 0; k < expr.size(); ++k) {
+        if (expr[k] < '0' || expr[k] > '9') return false;
+    }
+    return true;
+}
+
 size_t find_equality(const std::string& expr, char eqn_chr) {
     size_t stkh = 0;
     for (size_t i = 0; i < expr.size(); ++i) {
