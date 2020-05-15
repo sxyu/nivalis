@@ -111,7 +111,10 @@ struct Differentiator {
                               out.push_back(mul);
                               DIFF_NEXT;
                               const Expr::ASTNode* f_astptr = &fexpr.ast[0];
+                              if(call_stk_height > MAX_CALL_STK_HEIGHT) return false;
+                              ++call_stk_height;
                               if (!diff(&f_astptr, i)) return false;
+                              --call_stk_height;
                           }
                           argv.pop_back();
                       }
@@ -368,6 +371,9 @@ private:
     std::vector<std::vector<const Expr::ASTNode*> > argv;
     Environment env;
     std::vector<Expr::ASTNode>& out;
+
+    static const size_t MAX_CALL_STK_HEIGHT = 128;
+    size_t call_stk_height = 0;
 };
 
 }  // namespace

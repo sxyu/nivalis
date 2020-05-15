@@ -48,6 +48,8 @@ double eval_ast(Environment& env, const Expr::AST& ast,
     thread_local std::vector<double> stk;
     thread_local std::vector<size_t> thunks;
     thread_local std::vector<size_t> thunks_stk;
+    static const size_t MAX_CALL_STK_HEIGHT = 128;
+    thread_local size_t call_stk_height = 0;
     stk.resize(stk.size() + ast.size());
     thread_local size_t top = -1;
     size_t init_top = top;
@@ -107,7 +109,10 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                     }
                     if (n_args != func.n_args) FAIL_AND_QUIT; // Should not happen
                     if (&func.expr.ast[0] == &ast[0]) FAIL_AND_QUIT; // Ban recursion
+                    if (call_stk_height > MAX_CALL_STK_HEIGHT) FAIL_AND_QUIT; // Too deep
+                    ++call_stk_height;
                     eval_ast(env, func.expr.ast, f_args);
+                    --call_stk_height;
                     ++top;
                 }
                 break;
