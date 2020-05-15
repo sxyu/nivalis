@@ -1,12 +1,35 @@
 #include "env.hpp"
 #include <cmath>
+#include <unordered_set>
+#include <iostream>
+#include <algorithm>
 namespace nivalis {
+namespace {
+bool check_for_cycle(const std::vector<Environment::UserFunction>& funcs,
+                     uint64_t fid) {
+    thread_local std::unordered_set<uint64_t> seen;
+    if (seen.count(fid)) return true;
+    seen.insert(fid);
+    for (uint64_t dep_fid : funcs[fid].deps) {
+        if (check_for_cycle(funcs, dep_fid)) {
+            seen.erase(fid);
+            return true;
+        }
+    }
+    seen.erase(fid);
+    return false;
+}
+
+}  // namespace
+
 Environment::Environment() { }
 
 bool Environment::is_set(const std::string& var_name) {
+    error_msg.clear();
     return vreg.count(var_name);
 }
 uint64_t Environment::addr_of(const std::string& var_name, bool mode_explicit) {
+    error_msg.clear();
     if (var_name[0] == '&') {
         // Address
         int64_t addr = std::atoll(var_name.substr(1).c_str());
@@ -32,6 +55,7 @@ uint64_t Environment::addr_of(const std::string& var_name, bool mode_explicit) {
 }
 uint64_t Environment::addr_of(const std::string& var_name,
         bool mode_explicit) const {
+    error_msg.clear();
     if (var_name[0] == '&') {
         // Address
         int64_t addr = std::atoll(var_name.substr(1).c_str());
@@ -73,23 +97,28 @@ bool Environment::del(const std::string& var_name) {
 uint64_t Environment::def_func(const std::string& func_name,
                   const Expr& expr,
                   const std::vector<uint64_t>& arg_bindings) {
+    error_msg.clear();
     size_t idx = 0;
     auto it = freg.find(func_name);
     if (it == freg.end()) {
+        // New function
         idx = freg[func_name] = funcs.size();
         funcs.emplace_back();
-        funcnames.push_back(func_name);
+        funcs.back().name = func_name;
     } else {
         idx = it->second;
     }
     UserFunction& func = funcs[idx];
+    func.deps.clear();
     Expr func_expr = expr;
-    func_expr.optimize();
+    func_expr.optimize(); // Optimize function expression
     auto& ast = func_expr.ast;
+    // Invert argument mapping
     std::vector<uint64_t> arg_vars(vars.size(), -1);
     for (size_t i = 0; i < arg_bindings.size(); ++i) {
         arg_vars[arg_bindings[i]] = i;
     }
+    // Sub arguments
     for (size_t i = 0; i < ast.size(); ++i) {
         auto& nd = ast[i];
         if (OpCode::has_ref(nd.opcode) &&
@@ -99,22 +128,48 @@ uint64_t Environment::def_func(const std::string& func_name,
             nd.opcode = OpCode::arg;
             nd.ref = arg_vars[nd.ref];
         }
-        if (nd.opcode == OpCode::call &&
-                nd.call_info[i] == idx) {
-            // Recursive functions are not supported
-            return -1;
+        if (nd.opcode == OpCode::call) {
+            // Set dependency on other function
+            func.deps.push_back(nd.call_info[0]);
         }
     }
+    std::sort(func.deps.begin(), func.deps.end());
+    func.deps.resize(std::unique(func.deps.begin(), func.deps.end()) - func.deps.begin());
     func.n_args = arg_bindings.size();
     func.expr = std::move(func_expr);
+
+    // Check for recursion
+    if (check_for_cycle(funcs, idx)) {
+        // Found cycle
+        func.expr.ast = { OpCode::null };
+        func.deps.clear();
+        error_msg = "Cycle found in definition of " + func_name + "(...)\n";
+        return -1;
+    }
     return idx;
 }
 
 uint64_t Environment::addr_of_func(const std::string& func_name) const {
+    error_msg.clear();
     auto it = freg.find(func_name);
     if (it != freg.end()) {
         return it->second;
     }
     return -1;
+}
+
+void Environment::del_func(const std::string& func_name) {
+    error_msg.clear();
+    auto it = freg.find(func_name);
+    if (it != freg.end()) {
+        // Won't actually delete, but try to save some memory
+        funcs[it->second].name.clear();
+        funcs[it->second].name.shrink_to_fit();
+        funcs[it->second].expr.ast.clear();
+        funcs[it->second].expr.ast.shrink_to_fit();
+        funcs[it->second].deps.clear();
+        funcs[it->second].deps.shrink_to_fit();
+        freg.erase(it);
+    }
 }
 }  // namespace nivalis

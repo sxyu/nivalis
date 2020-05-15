@@ -45,14 +45,26 @@ double fa_fact (size_t x, size_t to_exc = 1) {
 namespace detail {
 double eval_ast(Environment& env, const Expr::AST& ast,
         const std::vector<double>& arg_vals) {
+    // Main AST evaluation stack
     thread_local std::vector<double> stk;
+    // Stack of thunks available:
+    // contains positions of thunk_jmp encountered
     thread_local std::vector<size_t> thunks;
+    // Thunk call stack: contains positions to return to
+    // after reaching thunk_ret
     thread_local std::vector<size_t> thunks_stk;
-    static const size_t MAX_CALL_STK_HEIGHT = 128;
+
+    // Max function call stack height
+    static const size_t MAX_CALL_STK_HEIGHT = 256;
+    // Curr function call stack height
     thread_local size_t call_stk_height = 0;
-    stk.resize(stk.size() + ast.size());
+
     thread_local size_t top = -1;
     size_t init_top = top;
+
+    // Make sure there is enough space
+    stk.resize(top + ast.size() + 1);
+
     using namespace boost;
     using namespace boost::math;
     using namespace nivalis::OpCode;

@@ -13,7 +13,14 @@ struct Environment {
 
     // User function representation
     struct UserFunction {
+        // Function name
+        std::string name;
+        // Function expression
         Expr expr;
+        // Function dependencies
+        // (list of other user functions called)
+        std::vector<uint64_t> deps;
+        // # arguments
         size_t n_args;
     };
 
@@ -41,6 +48,9 @@ struct Environment {
     // Get a function's address (in funcs) by name; -1 if not present
     uint64_t addr_of_func(const std::string& func_name) const;
 
+    // Delete function
+    void del_func(const std::string& func_name);
+
     // Values of variables (by address)
     std::vector<double> vars;
 
@@ -50,8 +60,8 @@ struct Environment {
     // User functions
     std::vector<UserFunction> funcs;
 
-    // Names of functions
-    std::vector<std::string> funcnames;
+    // Error message
+    mutable std::string error_msg;
 
 private:
     // Free addresses on vars vector

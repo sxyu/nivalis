@@ -1,6 +1,8 @@
 #include "expr.hpp"
 
 #include <cmath>
+#include <unordered_set>
+#include <iostream>
 #include "opcodes.hpp"
 #include "util.hpp"
 #include "env.hpp"
@@ -65,6 +67,7 @@ struct Differentiator {
     Differentiator(const Expr::AST& ast, uint64_t var_addr,
             Environment& env, std::vector<Expr::ASTNode>& out)
         : nodes(ast), ast_root(&ast[0]), var_addr(var_addr), env(env), out(out) {
+        vis_asts.insert(ast_root);
     }
 
     const Expr::ASTNode* copy_ast(const Expr::ASTNode* ast,
@@ -73,7 +76,8 @@ struct Differentiator {
         skip_ast(&ast);
         for (const auto* n = init_pos; n != ast; ++n) {
             if (n->opcode == OpCode::arg) {
-                copy_ast(argv.back()[n->ref], out);
+                // Substitute function argument in terms of the input
+                copy_ast(&argv.back()[n->ref][0], out);
             } else {
                 out.push_back(*n);
             }
@@ -95,26 +99,30 @@ struct Differentiator {
                           uint32_t fid = ((*ast)-1)->call_info[0];
                           size_t n_args = env.funcs[fid].n_args;
 
-                          argv.emplace_back();
-                          auto& call_args = argv.back();
-                          call_args.resize(n_args);
                           const auto& fexpr = env.funcs[fid].expr;
-                          if (&nodes[0] == &fexpr.ast[0]) // Ban recursion
+                          if (vis_asts.count(&fexpr.ast[0])) {
+                              std::cerr << "Differentiator: Recursion detected, stop ("
+                                  "This shouldn't happen, fix input validation in def_func!)\n";
+                              // Prevent recursion/cycles
                               return false;
-                          const Expr::ASTNode* tmp = *ast;
-                          for (size_t i = 0; i < n_args; ++i) {
-                              call_args[i] = tmp;
-                              skip_ast(&tmp);
+                          }
+                          {
+                              std::vector<Expr::AST> call_args;
+                              call_args.resize(n_args);
+                              const Expr::ASTNode* tmp = *ast;
+                              for (size_t i = 0; i < n_args; ++i) {
+                                  tmp = copy_ast(tmp, call_args[i]);
+                              }
+                              argv.push_back(std::move(call_args));
                           }
                           for (size_t i = 0; i < n_args; ++i) {
                               if (i < n_args - 1) out.push_back(add);
                               out.push_back(mul);
                               DIFF_NEXT;
                               const Expr::ASTNode* f_astptr = &fexpr.ast[0];
-                              if(call_stk_height > MAX_CALL_STK_HEIGHT) return false;
-                              ++call_stk_height;
+                              vis_asts.insert(&fexpr.ast[0]);
                               if (!diff(&f_astptr, i)) return false;
-                              --call_stk_height;
+                              vis_asts.erase(&fexpr.ast[0]);
                           }
                           argv.pop_back();
                       }
@@ -147,7 +155,7 @@ struct Differentiator {
                               diff_tmp.clear();
                               ast_sub_var(&tmp, var_id, static_cast<double>(i), diff_tmp);
                               tmp = &diff_tmp[0];
-                              diff(&tmp, diff_arg_id);
+                              if (!diff(&tmp, diff_arg_id)) return false;
                           }
                           skip_ast(ast);
                           if ((*ast)->opcode != thunk_jmp) return false; ++*ast;
@@ -177,7 +185,7 @@ struct Differentiator {
                                       const Expr::ASTNode* tmp = *ast;
                                       ast_sub_var(&tmp, var_id, static_cast<double>(j), diff_tmp);
                                       tmp = &diff_tmp[0];
-                                      diff(&tmp, diff_arg_id);
+                                      if (!diff(&tmp, diff_arg_id)) return false;
                                   } else {
                                       const Expr::ASTNode* tmp2 = *ast;
                                       ast_sub_var(&tmp2, var_id, static_cast<double>(j), out);
@@ -235,7 +243,7 @@ struct Differentiator {
                               const Expr::ASTNode* elnbptr = &elnb[0];
                               PUSH(mul); PUSH(expb);
                               copy_ast(elnbptr, out);
-                              diff(&elnbptr, diff_arg_id);
+                              if (!diff(&elnbptr, diff_arg_id)) return false;
                           } else {
                               CHAIN_RULE(PUSH(mul);
                                       copy_ast(*ast, out);
@@ -368,12 +376,10 @@ private:
     const Expr::AST& nodes;
     const Expr::ASTNode* ast_root;
     size_t var_addr;
-    std::vector<std::vector<const Expr::ASTNode*> > argv;
+    std::vector<std::vector<Expr::AST> > argv;
     Environment env;
     std::vector<Expr::ASTNode>& out;
-
-    static const size_t MAX_CALL_STK_HEIGHT = 128;
-    size_t call_stk_height = 0;
+    std::unordered_set<const Expr::ASTNode*> vis_asts;
 };
 
 }  // namespace

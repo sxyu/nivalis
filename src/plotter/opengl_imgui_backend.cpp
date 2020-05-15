@@ -99,7 +99,7 @@ struct OpenGLGraphicsAdaptor {
         }
         else {
             draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
-                    ImColor(c.r, c.g, c.b));
+                    ImColor(c.r, c.g, c.b), 0.0, 0, 1.);
         }
         if (upd_cache) {
             DrawObj obj(fill ? DrawObj::Type::RECT_FILL : DrawObj::Type::RECT, x, y, c);
