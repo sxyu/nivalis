@@ -142,7 +142,9 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
             case '%':
                   if (env != nullptr) {
                       os << env->funcnames[ast[idx].call_info[0]];
-                  } os << "<function id=" << ast[idx].call_info[0] << ", " << ast[idx].call_info[0] << " args>";
+                  } else {
+                      os << "<function id=" << ast[idx].call_info[0] << ", " << ast[idx].call_info[0] << " args>";
+                  }
                   break;
             case '$':
                   os << "$" << ast[idx].ref;
