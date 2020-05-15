@@ -5,11 +5,12 @@
 #include "opcodes.hpp"
 #include "util.hpp"
 #include "env.hpp"
+#include "expr.hpp"
 
 namespace nivalis {
 namespace {
 
-#define DIFF_NEXT if (!diff(ast)) return false
+#define DIFF_NEXT if (!diff(ast, diff_arg_id)) return false
 #define PUSH(v) out.push_back(v)
 #define CHAIN_RULE(derivop1, derivop2) { \
                                const Expr::ASTNode* tmp = *ast; \
@@ -59,22 +60,27 @@ void ast_sub_var(const Expr::ASTNode** ast, uint64_t var_id, double value, Expr:
     }
 }
 
-const Expr::ASTNode* copy_ast(const Expr::ASTNode* ast,
-        std::vector<Expr::ASTNode>& out) {
-    const auto* init_pos = ast;
-    skip_ast(&ast);
-    std::copy(init_pos, ast, std::back_inserter(out));
-    return ast;
-}
-
 // Implementation
 struct Differentiator {
-    Differentiator(const Expr::AST& ast,
-            Environment& env, uint64_t var_addr,
-            std::vector<Expr::ASTNode>& out)
-        : ast_root(&ast[0]), env(env), var_addr(var_addr), out(out) {
+    Differentiator(const Expr::AST& ast, uint64_t var_addr,
+            Environment& env, std::vector<Expr::ASTNode>& out)
+        : nodes(ast), ast_root(&ast[0]), var_addr(var_addr), env(env), out(out) {
     }
-    bool diff(const Expr::ASTNode** ast = nullptr) {
+
+    const Expr::ASTNode* copy_ast(const Expr::ASTNode* ast,
+            std::vector<Expr::ASTNode>& out) {
+        const auto* init_pos = ast;
+        skip_ast(&ast);
+        for (const auto* n = init_pos; n != ast; ++n) {
+            if (n->opcode == OpCode::arg) {
+                copy_ast(argv.back()[n->ref], out);
+            } else {
+                out.push_back(*n);
+            }
+        }
+        return ast;
+    }
+    bool diff(const Expr::ASTNode** ast = nullptr, uint32_t diff_arg_id = -1) {
         if (ast == nullptr) ast = &ast_root;
         using namespace OpCode;
         uint32_t opcode = (*ast)->opcode;
@@ -83,6 +89,31 @@ struct Differentiator {
             case null: PUSH(null); break;
             case val: PUSH(0.); break;
             case ref: PUSH(((*ast)-1)->ref == var_addr ? 1. : 0.); break;
+            case arg: PUSH(((*ast)-1)->ref == diff_arg_id ? 1. : 0.); break;
+            case call:
+                      {
+                          uint32_t fid = ((*ast)-1)->call_info[0];
+                          size_t n_args = env.funcs[fid].n_args;
+
+                          argv.emplace_back();
+                          auto& call_args = argv.back();
+                          call_args.resize(n_args);
+                          const auto& fexpr = env.funcs[fid].expr;
+                          const Expr::ASTNode* tmp = *ast;
+                          for (size_t i = 0; i < n_args; ++i) {
+                              call_args[i] = tmp;
+                              skip_ast(&tmp);
+                          }
+                          for (size_t i = 0; i < n_args; ++i) {
+                              if (i < n_args - 1) out.push_back(add);
+                              out.push_back(mul);
+                              DIFF_NEXT;
+                              const Expr::ASTNode* f_astptr = &fexpr.ast[0];
+                              if (!diff(&f_astptr, i)) return false;
+                          }
+                          argv.pop_back();
+                      }
+                      break;
             case bnz:
                       {
                           PUSH(bnz);
@@ -111,7 +142,7 @@ struct Differentiator {
                               diff_tmp.clear();
                               ast_sub_var(&tmp, var_id, static_cast<double>(i), diff_tmp);
                               tmp = &diff_tmp[0];
-                              diff(&tmp);
+                              diff(&tmp, diff_arg_id);
                           }
                           skip_ast(ast);
                           if ((*ast)->opcode != thunk_jmp) return false; ++*ast;
@@ -141,7 +172,7 @@ struct Differentiator {
                                       const Expr::ASTNode* tmp = *ast;
                                       ast_sub_var(&tmp, var_id, static_cast<double>(j), diff_tmp);
                                       tmp = &diff_tmp[0];
-                                      diff(&tmp);
+                                      diff(&tmp, diff_arg_id);
                                   } else {
                                       const Expr::ASTNode* tmp2 = *ast;
                                       ast_sub_var(&tmp2, var_id, static_cast<double>(j), out);
@@ -199,7 +230,7 @@ struct Differentiator {
                               const Expr::ASTNode* elnbptr = &elnb[0];
                               PUSH(mul); PUSH(expb);
                               copy_ast(elnbptr, out);
-                              diff(&elnbptr);
+                              diff(&elnbptr, diff_arg_id);
                           } else {
                               CHAIN_RULE(PUSH(mul);
                                       copy_ast(*ast, out);
@@ -310,7 +341,6 @@ struct Differentiator {
             case tanhb: CHAIN_RULE(PUSH(sub); PUSH(1.); PUSH(sqrb); PUSH(tanhb),); break;
             case tgammab:
                         {
-                            // diff(x)[1/fact(x)]
                             const Expr::ASTNode* tmp = *ast;
                             out.push_back(mul); DIFF_NEXT;
                             PUSH(mul); PUSH(tgammab); copy_ast(tmp, out);
@@ -330,9 +360,11 @@ struct Differentiator {
         return true;
     }
 private:
+    const Expr::AST& nodes;
     const Expr::ASTNode* ast_root;
+    size_t var_addr;
+    std::vector<std::vector<const Expr::ASTNode*> > argv;
     Environment env;
-    uint64_t var_addr;
     std::vector<Expr::ASTNode>& out;
 };
 
@@ -342,7 +374,7 @@ private:
 std::vector<Expr::ASTNode> diff_ast(const Expr::AST& ast,
         uint64_t var_addr, Environment& env) {
     std::vector<Expr::ASTNode> dast;
-    Differentiator diff(ast, env, var_addr, dast);
+    Differentiator diff(ast, var_addr, env, dast);
     if (!diff.diff()) {
         dast.resize(1);
         dast[0] = OpCode::null;
@@ -355,7 +387,7 @@ Expr Expr::diff(uint64_t var_addr, Environment& env) const {
     Expr dexpr;
     dexpr.ast.clear();
 
-    Differentiator diff(ast, env, var_addr, dexpr.ast);
+    Differentiator diff(ast, var_addr, env, dexpr.ast);
     if (!diff.diff()) {
         dexpr.ast.resize(1);
         dexpr.ast[0].opcode = OpCode::null;

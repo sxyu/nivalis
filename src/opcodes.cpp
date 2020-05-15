@@ -10,7 +10,7 @@ size_t n_args(uint32_t opcode) {
     using namespace nivalis::OpCode;
     switch(opcode) {
         case OpCode::null: case val: case ref:
-        case thunk_jmp:
+        case thunk_jmp: case arg:
             return 0;
         case bsel: case add: case sub: case mul: case divi: case mod:
         case power: case logbase: case max: case min:
@@ -22,6 +22,7 @@ size_t n_args(uint32_t opcode) {
             return 2;
         case sums: case prods: case bnz:
             return 3;
+        // case call: return -1;
     }
     return 1;
 }
@@ -92,9 +93,10 @@ const char* repr(uint32_t opcode) {
         case trigammab: return "trigamma(@)";
         case erfb:      return "erf(@)";
         case zetab:     return "zeta(@)";
-        // case thunk_jmp: return ":%>";
         case thunk_jmp: return "]";
-        case thunk_ret: return "[@@";
+        case thunk_ret: return "[@<@>";
+        case arg: return "$";
+        case call: return "%(@)";
         default: return "";
     };
 }

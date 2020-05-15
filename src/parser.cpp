@@ -322,27 +322,45 @@ private:
                     }
                     const std::string func_name =
                         expr.substr(left, funname_end - left);
-                    const auto& func_opcodes = OpCode::funcname_to_opcode_map();
-                    auto it = func_opcodes.find(func_name);
-                    if (it != func_opcodes.end()) {
-                        const auto func_opcode = it->second;
-                        if (func_opcode == -1) {
-                            // Special handling (pseudo instruction)
-                            if (func_name[0] == 'f') {
-                                result.ast.push_back(OpCode::tgammab);
-                                result.ast.push_back(OpCode::add);
-                                result.ast.push_back(1.0);
-                            } else if (func_name[0] == 'N') {
-                                result.ast.push_back(OpCode::mul);
-                                result.ast.push_back(1. / sqrt(2* M_PI));
-                                result.ast.push_back(OpCode::expb);
-                                result.ast.push_back(OpCode::mul);
-                                result.ast.push_back(-0.5);
-                                result.ast.push_back(OpCode::sqrb);
+
+                    uint32_t func_opcode = -1;
+                    size_t expected_argcount = -1;
+
+                    // First look at user-defined functions
+                    auto func_addr = env.addr_of_func(func_name);
+                    if (func_addr != -1) {
+                        expected_argcount = env.funcs[func_addr].n_args;
+                        // Add call
+                        result.ast.push_back(Expr::ASTNode::call((uint32_t) func_addr,
+                                    expected_argcount));
+                    } else {
+                        // Else, look at built-in functions
+                        const auto& func_opcodes = OpCode::funcname_to_opcode_map();
+                        auto it = func_opcodes.find(func_name);
+                        if (it != func_opcodes.end()) {
+                            func_opcode = it->second;
+                            if (func_opcode == -1) {
+                                // Special handling (pseudo instruction)
+                                if (func_name[0] == 'f') {
+                                    result.ast.push_back(OpCode::tgammab);
+                                    result.ast.push_back(OpCode::add);
+                                    result.ast.push_back(1.0);
+                                } else if (func_name[0] == 'N') {
+                                    result.ast.push_back(OpCode::mul);
+                                    result.ast.push_back(1. / sqrt(2* M_PI));
+                                    result.ast.push_back(OpCode::expb);
+                                    result.ast.push_back(OpCode::mul);
+                                    result.ast.push_back(-0.5);
+                                    result.ast.push_back(OpCode::sqrb);
+                                }
+                            } else {
+                                result.ast.push_back(func_opcode);
                             }
-                        } else {
-                            result.ast.push_back(func_opcode);
+                            expected_argcount = OpCode::n_args(func_opcode);
                         }
+                    }
+                    if (~expected_argcount) {
+                        // Valid function, process args
                         int64_t stkh = 0, last_begin = funname_end + 1;
                         size_t argcount = 1;
                         for (int64_t i = funname_end + 1; i < right - 1; ++i) {
@@ -360,8 +378,7 @@ private:
                             }
                         }
                         if (!_parse(last_begin, right-1, _PRI_LOWEST)) return false;
-                        size_t expect_argcount = OpCode::n_args(func_opcode);
-                        if (argcount != expect_argcount) {
+                        if (argcount != expected_argcount) {
                             if (func_opcode == OpCode::logbase &&
                                     argcount == 1) {
                                 // log: use ln if only 1 arg (HACK)
@@ -369,7 +386,7 @@ private:
                             } else {
                                 PARSE_ERR(func_name << ": wrong number of "
                                         "arguments (expecting " <<
-                                        expect_argcount << ")\n");
+                                        expected_argcount << ")\n");
                                 return false;
                             }
                         }

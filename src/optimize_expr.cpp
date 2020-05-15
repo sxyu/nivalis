@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cmath>
 #include <boost/math/constants/constants.hpp>
+#include "env.hpp"
 #include "util.hpp"
 #include "opcodes.hpp"
 
@@ -41,10 +42,16 @@ struct ASTLinkNode {
         for (size_t i = std::min<size_t>(c.size(), 3); i < 3; ++i) {
             hash_combine(hash, 0);
         }
+        if (opcode == OpCode::call) {
+            hash_combine(hash, (size_t)call_info[0]);
+        } else {
+            hash_combine(hash, 0);
+        }
         return hash;
     }
 
-    bool equals(const ASTLinkNode& other, const std::vector<ASTLinkNode>& nodes) const {
+    bool equals(const ASTLinkNode& other,
+            const std::vector<ASTLinkNode>& nodes) const {
         if (other.hash != hash || other.opcode != opcode || other.ref != ref ||
                 other.val != val || other.c.size() != c.size()) return false;
         for (size_t i = 0; i < c.size(); ++i) {
@@ -58,6 +65,7 @@ struct ASTLinkNode {
     uint64_t hash;
     uint32_t opcode;
     uint64_t ref;
+    uint32_t call_info[2];
     std::vector<size_t> c;
     double val;
     bool nonconst_flag, null_flag;
@@ -71,7 +79,15 @@ uint32_t ast_to_link_nodes(
     uint32_t node_idx = static_cast<uint32_t>(store.size());
     uint32_t opcode = (*ast)->opcode;
     store.emplace_back(opcode);
-    auto n_args = OpCode::n_args(opcode);
+    size_t n_args = OpCode::n_args(opcode);
+    if (opcode == OpCode::call) {
+        // User function, special way to get number of arguments
+        // (which is not fixed)
+        n_args = (size_t)(*ast)->call_info[1];
+        memcpy(store[node_idx].call_info,
+                (*ast)->call_info,
+                sizeof((*ast)->call_info));
+    }
     if (opcode == OpCode::val) store[node_idx].val = (*ast)->val;
     else if (OpCode::has_ref(opcode)) store[node_idx].ref = (*ast)->ref;
     ++*ast;
@@ -168,13 +184,21 @@ void ast_from_link_nodes(const std::vector<ASTLinkNode>& nodes,
     }
     size_t out_idx = out.size();
     out.emplace_back(node.opcode);
+    auto& out_node = out.back();
     if (node.opcode == OpCode::val) {
-        out.back().val = node.val;
+        out_node.val = node.val;
     } else if (OpCode::has_ref(node.opcode)) {
-        out.back().ref = node.ref;
+        out_node.ref = node.ref;
     }
-    for (size_t i = 0; i < std::min(node.c.size(),
-                OpCode::n_args(node.opcode)); ++i) {
+    size_t n_args = OpCode::n_args(node.opcode);
+    if (node.opcode == OpCode::call) {
+        // Copy back the user function data
+        n_args = (size_t)node.call_info[1];
+        memcpy(out_node.call_info,
+                node.call_info,
+                sizeof(node.call_info));
+    }
+    for (size_t i = 0; i < std::min(node.c.size(), n_args); ++i) {
         ast_from_link_nodes(nodes, out, node.c[i]);
         if (node.opcode == OpCode::thunk_ret &&
             nodes[node.c[i]].opcode == OpCode::thunk_jmp) {
@@ -204,13 +228,15 @@ void print_link_nodes(const std::vector<ASTLinkNode>& nodes) {
 
 // Main optimization rules
 void optim_link_nodes_main(Environment& env,
-        std::vector<ASTLinkNode>& nodes, uint32_t vi = 0) {
+        std::vector<ASTLinkNode>& nodes, size_t vi = 0) {
     auto& v = nodes[vi];
-    if (~v.ref) v.nonconst_flag = true;
+    if (OpCode::has_ref(v.opcode) && ~v.ref) v.nonconst_flag = true;
     size_t i = 0;
     for (; i < v.c.size(); ++i) {
         auto ui = v.c[i];
         if (ui == -1) break;
+        nodes[ui].nonconst_flag = false;
+        nodes[ui].null_flag = false;
         optim_link_nodes_main(env, nodes, ui);
         auto& u = nodes[ui];
         // Detect nonconst
@@ -241,6 +267,17 @@ void optim_link_nodes_main(Environment& env,
         v.opcode = OpCode::val;
         v.c.clear();
     } else {
+        static auto is_positive = [](std::vector<ASTLinkNode>& nodes,
+                    size_t idx) -> bool{
+            return nodes[idx].opcode == OpCode::absb ||
+                     nodes[idx].opcode == OpCode::sqrb ||
+                     (nodes[idx].opcode == OpCode::power &&
+                        nodes[nodes[idx].c[1]].opcode == OpCode::val &&
+                        nodes[nodes[idx].c[1]].val >= 0 &&
+                        std::fmod(nodes[nodes[idx].c[1]].val, 2.) == 0) ||
+                     (nodes[idx].opcode == OpCode::power &&
+                        nodes[nodes[idx].c[0]].opcode == OpCode::val);
+        };
         // Apply rules
         using namespace OpCode;
         size_t li = vi, ri = vi;
@@ -264,9 +301,13 @@ void optim_link_nodes_main(Environment& env,
                 }
                 break;
             case unaryminus:
+                // Combine -
                 if (l->opcode == val) {
                     v = *l;
                     v.val = -v.val;
+                } else if (l->opcode == unaryminus) {
+                    v = nodes[l->c[0]];
+                    break;
                 }
                 if (l->opcode == mul) {
                     auto lli = l->c[0];
@@ -306,41 +347,60 @@ void optim_link_nodes_main(Environment& env,
                         *r = nodes[r->c[1]];
                     }
                 }
-                // Crazy factoring rules
-                ASTLinkNode* lm, * rm;
-                size_t lf, rf, rmi;
-                if (l->opcode == mul) {
-                    lm = &nodes[l->c[1]];
-                    lf = l->c[0];
-                } else if (l->opcode == unaryminus) {
-                    lm = &nodes[l->c[0]];
-                    lf = nodes.size() - 3;
-                } else {
-                    lm = l;
-                    lf = nodes.size() - 2;
+                // Factoring
+                {
+                    ASTLinkNode* lm, * rm;
+                    size_t lf, rf, rmi;
+                    if (l->opcode == mul) {
+                        lm = &nodes[l->c[1]];
+                        lf = l->c[0];
+                    } else if (l->opcode == unaryminus) {
+                        lm = &nodes[l->c[0]];
+                        lf = nodes.size() - 3;
+                    } else {
+                        lm = l;
+                        lf = nodes.size() - 2;
+                    }
+                    if (r->opcode == mul) {
+                        rm = &nodes[r->c[1]];
+                        rf = r->c[0];
+                        rmi = r->c[1];
+                    } else if (r->opcode == unaryminus) {
+                        rm = &nodes[r->c[0]];
+                        rf = nodes.size() - 3;
+                    } else {
+                        rm = r;
+                        rf = nodes.size() - 2;
+                        rmi = ri;
+                    }
+                    if (lm->equals(*rm, nodes)) {
+                        l->opcode = v.opcode;
+                        v.opcode = OpCode::mul;
+                        l->c.resize(2); l->ref = -1;
+                        l->c[0] = lf; l->c[1] = rf;
+                        v.c[1] = rmi;
+                        v.nonconst_flag = false;
+                        optim_link_nodes_main(env, nodes, vi);
+                        break;
+                    }
                 }
-                if (r->opcode == mul) {
-                    rm = &nodes[r->c[1]];
-                    rf = r->c[0];
-                    rmi = r->c[1];
-                } else if (r->opcode == unaryminus) {
-                    rm = &nodes[r->c[0]];
-                    rf = nodes.size() - 3;
-                } else {
-                    rm = r;
-                    rf = nodes.size() - 2;
-                    rmi = ri;
-                }
-                if (lm->equals(*rm, nodes)) {
-                    l->opcode = v.opcode;
-                    v.opcode = OpCode::mul;
-                    l->c.resize(2); l->ref = -1;
-                    l->c[0] = lf; l->c[1] = rf;
-                    v.c[0] = li; v.c[1] = rmi;
-                    v.nonconst_flag = false;
-                    l->nonconst_flag = false;
-                    optim_link_nodes_main(env, nodes, vi);
-                    break;
+
+                // Trig
+                if (v.opcode == add && l->opcode == power &&
+                        r->opcode == power) {
+                    auto lli = l->c[0], lri = l->c[1];
+                    auto rli = r->c[0], rri = r->c[1];
+                    auto& lr = nodes[lri], & rr = nodes[rri];
+                    auto& ll = nodes[lli], & rl = nodes[rli];
+                    if (lr.opcode == val && rr.opcode == val &&
+                        lr.val == 2. && rr.val == 2.) {
+                        if (((ll.opcode == sinb && rl.opcode == cosb) ||
+                            (ll.opcode == cosb && rl.opcode == sinb)) &&
+                            nodes[ll.c[0]].equals(nodes[rl.c[0]], nodes)) {
+                            v.opcode = val; v.val = 1.;
+                            break;
+                        }
+                    }
                 }
 
                 if (l->opcode == val && l->val == 0.) {
@@ -350,17 +410,16 @@ void optim_link_nodes_main(Environment& env,
                 } else if (r->opcode == val && r->val == 0.) v = *l;
                 break;
             case mul:
-                // Normalize
+                // Take out - sign
                 if (l->opcode == unaryminus &&
                         r->opcode == unaryminus) {
-                    *l = nodes[l->c[0]]; *r = nodes[r->c[0]];
+                    *l = nodes[l->c[0]]; *r = nodes[r->c[0]]; // Cancel
                 } else if (l->opcode == unaryminus)  {
                     auto tmp = l->c[0]; *l = v;
                     v.opcode = unaryminus;
                     v.c.resize(1);
                     l->c[0] = tmp;
                     v.nonconst_flag = false;
-                    l->nonconst_flag = false;
                     optim_link_nodes_main(env, nodes, vi);
                     return;
                 } else if (r->opcode == unaryminus)  {
@@ -373,20 +432,34 @@ void optim_link_nodes_main(Environment& env,
                     optim_link_nodes_main(env, nodes, vi);
                     return;
                 }
+                // Normalize left/right
                 if ((r->opcode == val && l->opcode != val) ||
                     (r->opcode != mul && l->opcode == mul)) {
                     std::swap(*l, *r);
                 }
                 if (r->opcode == mul) {
-                    auto rli = r->c[0];
-                    auto* rl = &nodes[rli];
-                    if (rl->opcode == val) {
-                        if (l->opcode == val) {
-                            l->val *= rl->val;
-                            *r = nodes[r->c[1]];
-                        } else {
-                            std::swap(*l, *rl);
+                    if (l->opcode == mul) {
+                        auto rli = r->c[0], lli = l->c[0];
+                        auto* rl = &nodes[rli], * ll = &nodes[lli];
+                        if (rl->opcode == val && ll->opcode == val) {
+                            r->c[0] = l->c[1];
+                            l->val = ll->val * rl->val;
+                            l->opcode = val;
+                            l->c.clear();
                             optim_link_nodes_main(env, nodes, ri);
+                            break;
+                        }
+                    } else {
+                        auto rli = r->c[0];
+                        auto* rl = &nodes[rli];
+                        if (rl->opcode == val) {
+                            if (l->opcode == val) {
+                                l->val *= rl->val;
+                                *r = nodes[r->c[1]];
+                            } else {
+                                std::swap(*l, *rl);
+                                optim_link_nodes_main(env, nodes, ri);
+                            }
                         }
                     }
                 }
@@ -435,7 +508,6 @@ void optim_link_nodes_main(Environment& env,
                         l->c[0] = lf; l->c[1] = rf;
                         v.c[0] = rmi; v.c[1] = li;
                         v.nonconst_flag = false;
-                        l->nonconst_flag = false;
                         optim_link_nodes_main(env, nodes, vi);
                     }
                 }
@@ -465,9 +537,36 @@ void optim_link_nodes_main(Environment& env,
                     v.c[0] = l->c[0];
                     l->c[0] = ri;
                     v.c[1] = li;
-                    l->nonconst_flag = false;
                     v.nonconst_flag = false;
                     optim_link_nodes_main(env, nodes, vi);
+                    break;
+                }
+                if (r->opcode == logbase &&
+                    l->equals(nodes[r->c[1]], nodes) &&
+                    is_positive(nodes, r->c[0])) {
+                    // Inverse
+                    v = nodes[r->c[0]];
+                    v.nonconst_flag = false;
+                    optim_link_nodes_main(env, nodes, vi);
+                    break;
+                }
+                break;
+            case logbase:
+                if (l->opcode == power &&
+                    r->equals(nodes[l->c[0]], nodes)) {
+                    // Inverse
+                    v = nodes[l->c[1]];
+                    v.nonconst_flag = false;
+                    optim_link_nodes_main(env, nodes, vi);
+                    break;
+                } else if (l->opcode == power &&
+                        is_positive(nodes, l->c[0])) {
+                    // Take the exponent out
+                    v.opcode = mul;
+                    l->opcode = logbase;
+                    v.c[0] = l->c[1];
+                    v.c[1] = li;
+                    l->c[1] = ri;
                     break;
                 }
                 break;
@@ -505,7 +604,7 @@ void optim_link_nodes_main(Environment& env,
 // Second pass optimization rules, replace x^-1 with 1/x,
 // apply shorthand functions like exp(x), log2(x)
 void optim_link_nodes_second_pass(Environment& env,
-        std::vector<ASTLinkNode>& nodes, uint32_t vi = 0) {
+        std::vector<ASTLinkNode>& nodes, size_t vi = 0) {
     auto& v = nodes[vi];
     size_t i = 0;
     for (; i < v.c.size(); ++i) {
@@ -583,6 +682,7 @@ void optim_link_nodes_second_pass(Environment& env,
 
 // Implementation of optimize in Expr class
 void Expr::optimize() {
+     // diff x prod(i:1,3)[2*x]
     std::vector<ASTLinkNode> nodes;
     ASTNode* astptr = &ast[0];
     ast_to_link_nodes(&astptr, nodes);

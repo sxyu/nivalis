@@ -43,7 +43,8 @@ double fa_fact (size_t x, size_t to_exc = 1) {
 }  // namespace
 
 namespace detail {
-double eval_ast(Environment& env, const Expr::AST& ast) {
+double eval_ast(Environment& env, const Expr::AST& ast,
+        const std::vector<double>& arg_vals) {
     thread_local std::vector<double> stk;
     thread_local std::vector<size_t> thunks;
     thread_local std::vector<size_t> thunks_stk;
@@ -59,6 +60,8 @@ double eval_ast(Environment& env, const Expr::AST& ast) {
 #define ARG3 stk[top-2]
 #define ARG2 stk[top-1]
 #define ARG1 stk[top]
+// Return value from thunk or func call
+#define RET_VAL stk[top+1]
     // Thunk system helpers
     // For each command that calls thunks, we need to use the
     // following block ON_THUNK_RET(do on ret, do else)
@@ -68,8 +71,6 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
 } else { \
     elsedo \
 }}while(0)
-    // Return value from thunk, usable in retdo part of ON_THUNK_RET
-#define THUNK_RET_VAL stk[top+1]
     // "Call" a thunk immediately after the current operator
 #define CALL_THUNK_AT(id) do{thunks_stk.push_back(cidx); \
                         cidx = thunks[thunks.size() - (id) - 1]; }while(0)
@@ -78,6 +79,12 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
         const auto& node = ast[cidx];
         switch(node.opcode) {
             case null: stk[++top] = NONE; break;
+            case val:
+                stk[++top] = node.val;  break;
+            case ref:
+                stk[++top] = env.vars[node.ref]; break;
+            case arg:
+                stk[++top] = arg_vals[node.ref]; break;
             case thunk_jmp:
                 thunks.push_back(cidx);
                 cidx = ast[cidx].ref;
@@ -87,13 +94,25 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                 thunks_stk.pop_back();
                 _is_thunk_ret = true;
                 break;
-            case val:
-                stk[++top] = node.val;  break;
-            case ref:
-                stk[++top] = env.vars[node.ref]; break;
+            case call:
+                {
+                    size_t n_args = node.call_info[1];
+                    auto& func = env.funcs[node.call_info[0]];
+                    if (n_args != func.n_args) {
+                        // Should not happen
+                        break;
+                    }
+                    std::vector<double> f_args(func.n_args);
+                    for (size_t i = 0; i < n_args; ++i) {
+                        f_args[i] = stk[top--];
+                    }
+                    eval_ast(env, func.expr.ast, f_args);
+                    ++top;
+                }
+                break;
             case bnz:
                 ON_THUNK_RET(
-                    ARG1 = THUNK_RET_VAL;
+                    ARG1 = RET_VAL;
                 ,
                     CALL_THUNK_AT(ARG1 == 0.);
                     thunks.resize(thunks.size() - 2);
@@ -105,9 +124,9 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                     ON_THUNK_RET(
                         // update arg3 (the output)
                         if (node.opcode == prods)
-                            ARG3 *= THUNK_RET_VAL;
+                            ARG3 *= RET_VAL;
                         else
-                            ARG3 += THUNK_RET_VAL; // arg3 is output
+                            ARG3 += RET_VAL; // arg3 is output
                     ,
                         // Move over the arguments and use arg3
                         // as output
@@ -250,6 +269,14 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
 // Interface for evaluating expression
 double Expr::operator()(Environment& env) const {
     return detail::eval_ast(env, ast);
+}
+double Expr::operator()(double arg, Environment& env) const {
+    return detail::eval_ast(env, ast, {arg});
+}
+double Expr::operator()(const std::vector<double>& args,
+        Environment& env) const {
+
+    return detail::eval_ast(env, ast, args);
 }
 
 }  // namespace nivalis

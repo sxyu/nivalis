@@ -16,11 +16,14 @@ enum _OpCode {
     null = 0, // returns NaN
     val,      // stores value in 8 bytes after
     ref,      // stores address of var in env in 4 bytes after
-    arg,      // function argument (placeholder)
+    arg,      // function argument
 
     // thunk system
     thunk_ret = 8,     // beginning of thunk (unevaluated segment)
-    thunk_jmp,            // end of thunk
+    thunk_jmp,         // end of thunk
+
+    // function system
+    call = 12,         // call function in environment
 
     // control and special forms
     bnz = 16, // if first is not zero, second, else third (short-circuiting)
@@ -66,18 +69,18 @@ size_t n_args(uint32_t opcode);
 // Check if the operator has a reference (node.ref)
 constexpr bool has_ref(uint32_t opcode) {
     return opcode == ref || opcode == sums ||
-        opcode == prods;
+        opcode == prods || opcode == arg;
 }
 
 // Representations of expressions for printing purposes
 // @: replace with subexpression
 // &: replace with ref in next 4 bytes
 // #: replace with value in next 8 bytes (double)
-const char* repr(uint32_t opcode); 
+const char* repr(uint32_t opcode);
 
 // Get opcode of operator from char e.g. '+' -> 32
 // If not a valid operator, returns bsel
-uint32_t from_char(char opchar); 
+uint32_t from_char(char opchar);
 
 // Get map from function name to opcode
 const std::map<std::string, uint32_t>& funcname_to_opcode_map();

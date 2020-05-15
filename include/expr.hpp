@@ -4,16 +4,49 @@
 #include <ostream>
 #include <vector>
 
-#include "env.hpp"
 #include "opcodes.hpp"
 namespace nivalis {
 
+struct Environment; // in env.hpp
+
 // Nivalis expression
 struct Expr {
+    // Represents abstract syntax tree node
+    // no child pointers: first child immediately follows in list
+    // second child follows after subtree of 1st child, etc.
+    struct ASTNode {
+        // Opcode of the node (val for value, ref for reference)
+        uint32_t opcode;
+        ASTNode();
+        // Not explicit on purpose
+        ASTNode(uint32_t opcode, uint64_t ref = -1);
+        ASTNode(OpCode::_OpCode opcode);
+        ASTNode(double val);
+        static ASTNode varref(uint64_t id);
+        static ASTNode call(uint32_t id, uint32_t n_arg);
+
+        bool operator==(const ASTNode& other) const;
+        bool operator!=(const ASTNode& other) const;
+        union {
+            // Variable reference id
+            uint64_t ref;
+            // Stored value
+            double   val;
+            // Used for func calls (func_id, n_args)
+            uint32_t call_info[2];
+        };
+    };
+    typedef std::vector<Expr::ASTNode> AST;
+
     Expr();
+    Expr(const AST& ast);
 
     // Evaluate expression in environment
     double operator()(Environment& env) const;
+    // Evaluate expression in environment, setting one argument
+    double operator()(double arg, Environment& env) const;
+    // Evaluate expression in environment, setting arguments
+    double operator()(const std::vector<double>& args, Environment& env) const;
 
     // Combine expressions with basic operator
     Expr operator+(const Expr& other) const;
@@ -29,7 +62,7 @@ struct Expr {
 
     // Checks if expression contains given variable
     bool has_var(uint32_t addr) const;
-   
+
     // Substitute variable
     void sub_var(uint32_t addr, double value);
 
@@ -66,35 +99,19 @@ struct Expr {
                   double fx0 = std::numeric_limits<double>::max(),
                   double dfx0 = std::numeric_limits<double>::max()) const;
 
-    // Represents abstract syntax tree node
-    // no child pointers: first child immediately follows in list
-    // second child follows after subtree of 1st child, etc.
-    struct ASTNode {
-        // Opcode of the node (val for value, ref for reference)
-        uint32_t opcode;
-        ASTNode();
-        // Not explicit on purpose
-        ASTNode(uint32_t opcode, uint64_t ref = -1);
-        ASTNode(OpCode::_OpCode opcode);
-        ASTNode(double val);
-        bool operator==(const ASTNode& other) const;
-        bool operator!=(const ASTNode& other) const;
-        union {
-            // Variable reference id
-            uint64_t ref;
-            // Stored value
-            double   val;
-        };
-    };
-
-    typedef std::vector<Expr::ASTNode> AST;
-    // Padded AST, for performance enhancement
+    // Abstract syntax tree
     AST ast;
 };
 
 namespace detail {
 // Evaluate an AST directly (advanced)
-double eval_ast(Environment& env, const Expr::AST& ast);
+double eval_ast(Environment& env, const Expr::AST& ast,
+                const std::vector<double>& arg_vals = {});
+
+// Print AST
+size_t print_ast(std::ostream& os, const Expr::AST& ast,
+               const Environment* env = nullptr,
+               size_t idx = 0);
 
 // Substitute variables in AST, in-place (advanced)
 void sub_var_ast(Expr::AST& ast, int64_t addr, double value);

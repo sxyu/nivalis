@@ -36,6 +36,8 @@ int main(int argc, char ** argv) {
     std::cout << "Nivalis " NIVALIS_VERSION " " NIVALIS_COPYRIGHT << std::endl;
 
     std::string orig_line, line, var;
+    std::vector<std::string> def_fn_args;
+    bool def_fn;
     int assn_opcode = OpCode::bsel;
     Environment env;
     Parser parse;
@@ -77,22 +79,47 @@ int main(int argc, char ** argv) {
             }
             // Evaluate
             var.clear();
+            def_fn_args.clear();
+            def_fn = false;
             assn_opcode = OpCode::bsel;
             if (util::is_varname_first(line[0])) {
                 size_t pos = util::find_equality(line);
                 if (~pos) {
                     var = line.substr(0, pos);
+                    util::trim(var);
                     if (util::is_arith_operator(var.back())) {
                         assn_opcode = OpCode::from_char(var.back());
                         var.pop_back();
                     }
-                    if (util::is_varname(var)) {
+                    if (var.back() == ')') {
+                        auto brpos = var.find('(');
+                        if (brpos != std::string::npos) {
+                            def_fn = true;
+                            size_t prev_comma = brpos + 1;
+                            for (size_t i = brpos + 1; i < var.size(); ++i) {
+                                if (var[i] == ',' || var[i] == ')') {
+                                    def_fn_args.push_back(var.substr(
+                                                prev_comma, i - prev_comma));
+                                    util::trim(def_fn_args.back());
+                                    prev_comma = i + 1;
+                                }
+                            }
+                            var = var.substr(0, brpos);
+                            util::rtrim(var);
+                            // Function def
+                            line = line.substr(pos + 1);
+                        }
+                    } else if (util::is_varname(var)) {
                         // Assignment
                         line = line.substr(pos + 1);
                     }
                 }
             }
 
+            for (size_t i = 0; i < def_fn_args.size(); ++i) {
+                // Pre-register variables
+                env.addr_of(def_fn_args[i], false);
+            }
             auto expr = parse(line, env, !(do_diff || do_optim));
             if (do_optim) {
                 expr.optimize();
@@ -103,10 +130,28 @@ int main(int argc, char ** argv) {
                 std::cout << diff.repr(env) << "\n";
             } else {
                 double output;
-                if (!std::isnan(output = expr(env))) {
-                    if (var.size()) {
+                // Assignment statement
+                if (var.size()) {
+                    if (def_fn) {
+                        // Define function
+                        std::vector<uint64_t> bindings;
+                        for (size_t i = 0; i < def_fn_args.size(); ++i) {
+                            bindings.push_back(env.addr_of(def_fn_args[i]));
+                        }
+                        auto addr = env.def_func(var, expr, bindings);
+                        std::cout << var << "(";
+                        for (size_t i = 0; i < def_fn_args.size(); ++i) {
+                            if (i) std::cout << ", ";
+                            std::cout << "$" << i;
+                        }
+                        std::cout << ") = "  <<
+                            env.funcs[addr].expr.repr(env) << std::endl;
+
+                    } else {
+                        // Define variable
                         double var_val;
                         if (assn_opcode != OpCode::bsel) {
+                            // Operator assignment
                             auto addr = env.addr_of(var, true);
                             if (addr == -1) {
                                 std::cout << "Undefined variable \"" << var
@@ -117,13 +162,14 @@ int main(int argc, char ** argv) {
                                 .combine(assn_opcode,
                                         Expr::constant(output))(env);
                         } else {
+                            // Usual assignment
                             var_val = output;
                         }
                         env.set(var, var_val);
                         std::cout << var << " = " << var_val << std::endl;
-                    } else {
-                        std::cout << output << std::endl;
                     }
+                } else if (!std::isnan(output = expr(env))) {
+                    std::cout << output << std::endl;
                 }
             }
         }

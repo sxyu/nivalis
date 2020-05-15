@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cmath>
 #include <algorithm>
+#include "env.hpp"
 #include "util.hpp"
 namespace nivalis {
 
@@ -29,36 +30,10 @@ Expr wrap_expr(uint32_t opcode, const Expr& a) {
     std::copy(a.ast.begin(), a.ast.end(), new_expr.ast.begin() + 1);
     return new_expr;
 }
-
-size_t print_ast(std::ostream& os, const Expr::AST& ast,
-               const Environment* env = nullptr,
-               size_t idx = 0) {
-    std::string_view reprs = OpCode::repr(ast[idx].opcode);
-    size_t n_idx = idx + 1;
-    for (char c : reprs) {
-        switch(c) {
-            case '@': n_idx = print_ast(os, ast, env, n_idx); break; // subexpr
-            case '#': os << ast[idx].val; break; // value
-            case '&':
-                  if (env != nullptr) {
-                      if (ast[idx].ref >= env->vars.size()) {
-                          os << "&NULL";
-                          break;
-                      } os << env->varname.at(ast[idx].ref);
-                  }
-                  else os << "&" << ast[idx].ref;
-                  break; // ref
-            case '%':
-                  os << "&" << ast[idx].ref;
-                  break;
-            default: os << c;
-        }
-    }
-    return n_idx;
-}
 }  // namespace
 
 Expr::Expr() { ast.resize(1); }
+Expr::Expr(const AST& ast) : ast(ast) { }
 
 Expr Expr::operator+(const Expr& other) const {
     return combine_expr(OpCode::add, *this, other); }
@@ -91,7 +66,7 @@ Expr Expr::constant(double val) {
 
 std::string Expr::repr(const Environment& env) const {
     std::stringstream ss;
-    print_ast(ss, ast, &env);
+    detail::print_ast(ss, ast, &env);
     auto s = ss.str();
     if (s.size() >= 2 &&
         s[0] == '(' && s.back() == ')') s = s.substr(1, s.size()-2);
@@ -110,6 +85,17 @@ Expr::ASTNode::ASTNode(OpCode::_OpCode opcode) : opcode(opcode) {}
 Expr::ASTNode::ASTNode(double val)
     : opcode(OpCode::val), val(val) { }
 
+Expr::ASTNode Expr::ASTNode::varref(uint64_t id) {
+    ASTNode node(OpCode::ref, id);
+    return node;
+}
+Expr::ASTNode Expr::ASTNode::call(uint32_t id, uint32_t n_arg) {
+    ASTNode node(OpCode::call);
+    node.call_info[0] = id;
+    node.call_info[1] = n_arg;
+    return node;
+}
+
 bool Expr::ASTNode::operator==(const ASTNode& other) const {
     if (other.opcode != opcode) return false;
     if ((OpCode::has_ref(opcode) || opcode == OpCode::val ||
@@ -123,7 +109,7 @@ bool Expr::ASTNode::operator!=(const ASTNode& other) const {
 
 std::ostream& operator<<(std::ostream& os, const Expr& expr) {
     os << "nivalis::Expr[";
-    print_ast(os, expr.ast);
+    detail::print_ast(os, expr.ast);
     os << "]";
     return os;
 }
@@ -136,6 +122,34 @@ std::ostream& operator<<(std::ostream& os, const Expr::ASTNode& node) {
 
 
 namespace detail {
+size_t print_ast(std::ostream& os, const Expr::AST& ast,
+               const Environment* env, size_t idx) {
+    std::string_view reprs = OpCode::repr(ast[idx].opcode);
+    size_t n_idx = idx + 1;
+    for (char c : reprs) {
+        switch(c) {
+            case '@': n_idx = print_ast(os, ast, env, n_idx); break; // subexpr
+            case '#': os << ast[idx].val; break; // value
+            case '&':
+                  if (env != nullptr) {
+                      if (ast[idx].ref >= env->vars.size()) {
+                          os << "&NULL";
+                          break;
+                      } os << env->varname.at(ast[idx].ref);
+                  }
+                  else os << "&" << ast[idx].ref;
+                  break; // ref
+            case '%':
+                  os << "ufun" << ast[idx].ref;
+                  break;
+            case '$':
+                  os << "$" << ast[idx].ref;
+                  break;
+            default: os << c;
+        }
+    }
+    return n_idx;
+}
 void sub_var_ast(Expr::AST& ast, int64_t addr, double value) {
     for (size_t i = 0; i < ast.size(); ++i) {
         if (ast[i].opcode == OpCode::ref &&
