@@ -109,6 +109,9 @@ struct PointMarker {
 };
 
 /** Generic GUI plotter logic; used in plot_gui.hpp with appropriate backend
+ *  This design looks sort of messy now,
+ *  but was originally intended to support different GUI backends
+ *
  * Register GUI event handlers to call handle_xxx
  * Register resize handler to call resize
  * Call draw() in drawing event/loop

@@ -9,7 +9,7 @@ endif (POLICY CMP0048)
 
 project( nivalis )
 
-set( _VERSION_ "0.0.5 (dev)" )
+set( _VERSION_ "0.0.5a-1 (alpha)" )
 set( _COPYRIGHT_ "Alex Yu 2020" )
 
 set( CMAKE_CXX_STACK_SIZE "10000000" )
@@ -17,17 +17,9 @@ set( CMAKE_CXX_STANDARD 17 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON)
 set( CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" )
 
-option ( USE_OPENGL_IMGUI "Use OpenGL3/GLFW/ImGui GUI backend" ON )
-option ( USE_NANA "Use Nana GUI backend (fallback if ImGui config fails)" ON )
 option ( USE_BOOST_MATH "Use Boost math function (e.g. gamma, digamma, zeta, beta)" ON )
 option ( USE_SYSTEM_GLFW "Use system glfw3 if available" ON )
 option ( BUILD_TESTS "Build tests" ON )
-
-if (WIN32)
-    set( COLOR_TERM OFF )
-else()
-    set( COLOR_TERM ON )
-endif()
 
 if( NOT CMAKE_BUILD_TYPE )
   set( CMAKE_BUILD_TYPE Release )
@@ -40,6 +32,9 @@ set( INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include" )
 set( SRC_DIR "${PROJECT_SOURCE_DIR}/src" )
 set( TEST_DIR "${PROJECT_SOURCE_DIR}/test" )
 
+set ( IMGUI_DIR "3rdparty/imgui" )
+set ( GLFW_DIR "3rdparty/glfw3" )
+
 if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -O3 -g" )
 endif ( CMAKE_COMPILER_IS_GNUCXX )
@@ -47,6 +42,7 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 set(
     PROJ_EXECUTABLES
     ${SHELL_PROJ_NAME}
+    ${PLOT_GUI_PROJ_NAME}
 )
 
 set(
@@ -65,8 +61,9 @@ set(
   expr.hpp
   util.hpp
   opcodes.hpp
-  plotter/plotter.hpp
   plotter/plot_gui.hpp
+  plotter/internal/plotter.hpp
+  shell.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
@@ -81,6 +78,13 @@ set(
   optimize_expr.cpp
   diff_expr.cpp
   plotter/common.cpp
+  plotter/opengl_imgui_backend.cpp
+  "../${IMGUI_DIR}/imgui.cpp"
+  "../${IMGUI_DIR}/imgui_draw.cpp"
+  "../${IMGUI_DIR}/imgui_widgets.cpp"
+  "../${IMGUI_DIR}/imgui_impl_opengl3.cpp"
+  "../${IMGUI_DIR}/imgui_impl_glfw.cpp"
+  shell.cpp
 )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 
@@ -88,10 +92,9 @@ include_directories(
     ${INCLUDE_DIR}
     ${X11_INCLUDE_DIR}
     ${Fontconfig_INCLUDE_DIRS}
-    ${NANA_INCLUDE_DIR}
 )
 
-set (PROJ_DEPENDENCIES )
+set( PROJ_DEPENDENCIES )
 
 set ( _BOOST_ENABLED_ "//" )
 set ( BOOST_ENABLED OFF )
@@ -110,109 +113,62 @@ else ()
     message ( STATUS "Boost math was disabled by user" )
 endif ()
 
-
 find_package(Threads REQUIRED)
 
-set ( _NANA_ENABLED_ "//" )
-set ( NANA_ENABLED OFF )
-set ( _OPENGL_IMGUI_ENABLED_ "//" )
-set ( OPENGL_IMGUI_ENABLED OFF )
-
-if ( USE_OPENGL_IMGUI )
-    set ( IMGUI_DIR "${PROJECT_SOURCE_DIR}/3rdparty/imgui" )
-    set ( GLFW_DIR "${PROJECT_SOURCE_DIR}/3rdparty/glfw3" )
-    set ( WILL_USE_SYSTEM_GLFW ${USE_SYSTEM_GLFW} )
-
-    find_package(PkgConfig)
-    if ( NOT PkgConfig_FOUND )
-        set ( WILL_USE_SYSTEM_GLFW OFF )
-    else()
-        pkg_check_modules(GLFW glfw3)
-        if ( NOT GLFW_FOUND )
-            set ( WILL_USE_SYSTEM_GLFW OFF )
-        endif ()
-    endif ()
-
-    if ( NOT WILL_USE_SYSTEM_GLFW )
-        message ( STATUS "Using included glfw3 (in 3rdparty/)" )
-        add_subdirectory( "${GLFW_DIR}" )
-        set( PROJ_DEPENDENCIES
-            ${PROJ_DEPENDENCIES} glfw)
-        include_directories( "${GLFW_DIR}/include" )
-    else()
-        message ( STATUS "Using system glfw3" )
-    endif ()
-
-    find_package(OpenGL REQUIRED)
-    find_package(GLEW REQUIRED)
-    add_definitions(-DGLEW_STATIC)
-
-    include_directories(${GLEW_INCLUDE_DIRS})
-
-    set ( _OPENGL_IMGUI_ENABLED_ "" )
-    set ( OPENGL_IMGUI_ENABLED ON )
-    set( PROJ_DEPENDENCIES
-        OpenGL::GL
-        ${PROJ_DEPENDENCIES} ${GLFW_STATIC_LIBRARIES}
-        ${GLEW_LIBRARIES}
-        GLEW::glew_s
-        )
-
-    set ( SOURCES ${SOURCES}
-        "${IMGUI_DIR}/imgui.cpp"
-        "${IMGUI_DIR}/imgui_draw.cpp"
-        "${IMGUI_DIR}/imgui_widgets.cpp"
-        "${SRC_DIR}/plotter/opengl_imgui_backend.cpp"
-    )
-    set ( SOURCES ${SOURCES}
-        "${IMGUI_DIR}/imgui_impl_opengl3.cpp"
-        "${IMGUI_DIR}/imgui_impl_glfw.cpp"
-        )
-    include_directories( "${IMGUI_DIR}")
-        
-    message ( STATUS "Using OpenGL with ImGui as plotter backend" )
-else()
-    message ( STATUS "OpenGL + ImGui plotter backend was disabled by user" )
+set ( _READLINE_ENABLED_ "//" )
+if (NOT WIN32)
+    # Find Readline
+    find_package( Readline QUIET )
+    if ( READLINE_FOUND )
+        set ( _READLINE_ENABLED_ "" )
+        set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} ${READLINE_LIBRARIES} )
+        include_directories(${READLINE_INCLUDE_DIRS})
+    endif()
 endif()
 
-if ( (USE_NANA) AND (NOT OPENGL_IMGUI_ENABLED) )
-    IF (NOT WIN32)
-        find_package(X11)
-        find_package(Fontconfig)
-        find_package(JPEG)
-    endif()
-    set (SOURCES ${SOURCES} "${SRC_DIR}/plotter/nana_backend.cpp")
-    find_package(Nana)
-    if (NANA_FOUND)
-        set ( _NANA_ENABLED_ "" )
-        set ( NANA_ENABLED ON )
-        message ( STATUS "Nana found, using as plotter backend" )
-    else ()
-        message ( WARNING "Nana not found, Nana plotter backend disabled" )
+# Finding OpenGL/GLEW/GLFW
+set ( OPENGL_IMGUI_ENABLED OFF )
+set ( WILL_USE_SYSTEM_GLFW ${USE_SYSTEM_GLFW} )
+
+find_package(PkgConfig)
+if ( NOT PkgConfig_FOUND )
+    set ( WILL_USE_SYSTEM_GLFW OFF )
+else()
+    pkg_check_modules(GLFW glfw3)
+    if ( NOT GLFW_FOUND )
+        set ( WILL_USE_SYSTEM_GLFW OFF )
     endif ()
-elseif ( NOT USE_NANA )
-    message ( STATUS "Nana was disabled by user" )
 endif ()
 
-if ( (NANA_ENABLED) OR (OPENGL_IMGUI_ENABLED) )
-    set( PROJ_EXECUTABLES ${PROJ_EXECUTABLES} ${PLOT_GUI_PROJ_NAME} )
+if ( NOT WILL_USE_SYSTEM_GLFW )
+    message ( STATUS "Using included glfw3 (in 3rdparty/)" )
+    add_subdirectory( "${GLFW_DIR}" )
+    set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} glfw)
+    include_directories( "${GLFW_DIR}/include" )
 else()
-    message ( WARNING "No usable GUI backend found, no GUI will be built...")
+    message ( STATUS "Using system glfw3" )
 endif ()
+
+find_package(OpenGL REQUIRED)
+find_package(GLEW REQUIRED)
+add_definitions(-DGLEW_STATIC)
+
+set ( OPENGL_IMGUI_ENABLED ON )
+set( PROJ_DEPENDENCIES
+    OpenGL::GL
+    ${PROJ_DEPENDENCIES} ${GLFW_STATIC_LIBRARIES}
+    ${GLEW_LIBRARIES}
+    GLEW::glew_s
+)
+
+include_directories(${GLEW_INCLUDE_DIRS} ${IMGUI_DIR})
+    
+message ( STATUS "Using OpenGL with ImGui as plotter backend" )
 
 configure_file( version.hpp.in "${INCLUDE_DIR}/version.hpp" )
 
-set (NANA_DEPENDENCIES
-    ${NANA_LIBRARIES}
-    ${X11_X11_LIB}
-    ${X11_Xft_LIB}
-    ${Fontconfig_LIBRARIES}
-    ${JPEG_LIBRARIES}
-)
-
 if ( BOOST_ENABLED )
     include_directories( ${Boost_INCLUDE_DIRS} )
-    set (PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} )
 # ensure boost doesn't throw exception when evaluating out of domain
 add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
     -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
@@ -223,10 +179,6 @@ add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
 if ( MSVC )
     add_definitions(-D_HAS_AUTO_PTR_ETC=1)
 endif ()
-endif ()
-
-if ( NANA_ENABLED )
-set (PROJ_DEPENDENCIES ${NANA_DEPENDENCIES} ${PROJ_DEPENDENCIES} )
 endif ()
 
 add_definitions( -D_USE_MATH_DEFINES ) 
@@ -273,6 +225,7 @@ if (BUILD_TESTS)
             set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GLT")
             set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
         endif ( MSVC )
+
         if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
             target_link_libraries( ${targ} stdc++fs )
         endif ()
@@ -282,6 +235,7 @@ if (BUILD_TESTS)
 else ()
     message ( STATUS "NOT building tests" )
 endif (BUILD_TESTS)
+
 
 install(TARGETS ${PROJ_EXECUTABLES} DESTINATION bin)
 

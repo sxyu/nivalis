@@ -1,3 +1,4 @@
+// This backend is no longer supported, kept for reference only
 #include "version.hpp"
 
 #ifdef ENABLE_NIVALIS_NANA_BACKEND

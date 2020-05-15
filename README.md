@@ -6,10 +6,8 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 ## Dependencies
 - C++ 17
 - Boost 1.58+ (Optional, only need math)
-- GUI Library; one of
-    - OpenGL3 and GLEW
-        - and glfw3, Dear ImGui which are included in repo
-    - Nana (limited 
+- OpenGL3 and GLEW
+    - and glfw3, Dear ImGui which are included in repo
 
 ## Installation
 
@@ -17,10 +15,8 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 
 ### Ubuntu 
 - Install a modern version of GCC which supports C++17
-- Choose a GUI backend option:
-    - Install OpenGL3, GLEW, and glfw3 (more features, recommended)
-        - `sudo apt update && sudo apt install -y pkg-config mesa-utils libglew-dev libglfw3-dev`
-    - Install Nana: clone and follow the instructions in <https://github.com/qPCR4vir/nana>. You can use CMake or just GCC. Good luck!
+- Install OpenGL3, GLEW, and glfw3 (more features, recommended)
+    - `sudo apt update && sudo apt install -y pkg-config mesa-utils libglew-dev libglfw3-dev`
 - Configure project with CMake:
     - `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release`
     - CMake options:
@@ -28,28 +24,19 @@ The evaluator parses expressions into custom bytecode, which is optimized before
         - To force using glfw3 in the repo (as opposed to the one you installed) use `-DUSE_SYSTEM_GLFW=OFF`
         - To disable OpenGL/Dear ImGui and force using Nana, add
           `-DUSE_OPENGL_IMGUI=OFF` to this command 
-        - If using Nana: you may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
-          and library path: `cmake .. -DNANA_LIBRARY='nana_output_lib_name'`
 - Built project: `make -j8`
 - Optionally: install by `sudo make install`
 
 ### Windows
 - Install Visual Studio 2017+, if not already present. I used 2017
-- Choose a GUI backend option:
-    - Install GLEW, and glfw3 (more features, recommended)
-        - Go to  <http://glew.sourceforge.net/> and click "Binaries Windows 32-bit and 64-bit"; extract it somewhere. Note the directory
-            `.../glew-x.x.x` containing `include` and `lib/Release/x64/glew32s.lib`
-    - Install Nana <https://github.com/qPCR4vir/nana>
-        - Clone <https://github.com/qPCR4vir/nana>. VS solution files are in the build directory of this repo.
+- Install GLEW, and glfw3 (more features, recommended)
+    - Go to  <http://glew.sourceforge.net/> and click "Binaries Windows 32-bit and 64-bit"; extract it somewhere. Note the directory
+        `.../glew-x.x.x` containing `include` and `lib/Release/x64/glew32s.lib`
 - Configure project with CMake:
     - `mkdir build && cd build && cmake .. -G"Visual Studio 15 2017 Win64" -DCMAKE_BUILD_TYPE=Release`
     - CMake options:
         - To force disable Boost math add `-DUSE_BOOST_MATH=OFF` to this command (some functions like digamma, beta will become unavailable)
         - To force using glfw3 in the repo (as opposed to the one you installed) use `-DUSE_SYSTEM_GLFW=OFF`
-        - To disable OpenGL/Dear ImGui and force using Nana, add
-          `-DUSE_OPENGL_IMGUI=OFF` to this command 
-        - If using Nana: you may need to set Nana's include path: `cmake .. -DNANA_INCLUDE_DIR='dir_containing_nana_headers'`
-          and library path: `cmake .. -DNANA_LIBRARY='nana_output_lib_name'`
 - Built project: `cmake --build . --config Release`, or open the solution in VS and build in "Release" configuration manually
 
 ### Testing
@@ -100,25 +87,3 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - Click on slider below to change the variable value
     - E.g. if variable is `a`, you can write `a*x` in some function (in the Function window) and then drag the slider to see the function change smoothly
 ![Screenshot of New GUI](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot2.png?raw=true)
-
-### Nana GUI
-- Run the `./nivplot` binary to open GUI
-- After launch, `Ctrl`+`E` to edit function expression (or click the textbox)
-    - Function expressions can be:
-        - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`
-        - Implicit function ( less detail):
-          e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
-        - *Polylines*: draws a series of points and lines e.g. (1,1) e.g. (1,1) (2,2) (3,2) 
-            - If size 1, like (a,b), it draws a single
-            - If size >1, like (a,b)(c,d), draws all points and connects them in order
-    - Updates plot automatically
-- `Up`/`Down` arrow keys in textbox (or use `<` `>` buttons below textbox) to switch functions or add new functions (by going past last defined function)
-- Click the x button or press `Ctrl`+`Del` to delete current function
-- Drag mouse (or arrow keys) to move, scroll (or `=`/`-`)  to zoom
-- `Ctrl`/`Alt` and `=`/`-` to zoom asymmetrically
-- `Ctrl`+`H` or click the reset view button to reset to home view (around origin)
-- Mouse over a marked point (minimum/maximum/intersection etc) to see label+coordinates
-- Click any point on an explicit function to see the x-value and function value
-
-![Screenshot](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
-![Screenshot: implicit functions (older version)](https://github.com/sxyu/nivalis/blob/master/readme_img/implicit.png?raw=true)

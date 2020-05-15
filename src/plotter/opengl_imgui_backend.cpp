@@ -1,13 +1,9 @@
-#include "version.hpp"
-
-#ifdef ENABLE_NIVALIS_OPENGL_IMGUI_BACKEND
-
 #include "plotter/plot_gui.hpp"
 #include <iostream>
 #include <utility>
 #include <thread>
 
-#include "plotter/plotter.hpp"
+#include "plotter/internal/plotter.hpp"
 #include "imgui.h"
 #include "imstb_textedit.h"
 #include "imgui_impl_opengl3.h"
@@ -16,11 +12,33 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include "shell.hpp"
 #include "util.hpp"
 
 namespace nivalis {
 namespace {
 
+// Add scaled default font (Dear ImGui)
+ImFont* AddDefaultFont(float pixel_size) {
+    ImGuiIO &io = ImGui::GetIO();
+    ImFontConfig config;
+    config.SizePixels = pixel_size;
+    config.OversampleH = config.OversampleV = 1;
+    config.PixelSnapH = true;
+    ImFont *font = io.Fonts->AddFontDefault(&config);
+    return font;
+}
+
+// Data for each slider in Slider window
+struct SliderData {
+    static const int VAR_NAME_MAX = 256;
+    char var_name_buf[VAR_NAME_MAX];
+    std::string var_name;
+    float var_val, lo = 0.0, hi = 1.0;
+    uint32_t var_addr;
+};
+
+// Graphics adaptor
 struct OpenGLGraphicsAdaptor {
     // Drawing object
     struct DrawObj {
@@ -99,7 +117,7 @@ struct OpenGLGraphicsAdaptor {
         }
         else {
             draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
-                    ImColor(c.r, c.g, c.b), 0.0, 0, 1.);
+                    ImColor(c.r, c.g, c.b));
         }
         if (upd_cache) {
             DrawObj obj(fill ? DrawObj::Type::RECT_FILL : DrawObj::Type::RECT, x, y, c);
@@ -132,38 +150,27 @@ struct OpenGLGraphicsAdaptor {
     ImDrawList* draw_list;
 };
 
-// Add scaled default font
-ImFont* AddDefaultFont(float pixel_size) {
-    ImGuiIO &io = ImGui::GetIO();
-    ImFontConfig config;
-    config.SizePixels = pixel_size;
-    config.OversampleH = config.OversampleV = 1;
-    config.PixelSnapH = true;
-    ImFont *font = io.Fonts->AddFontDefault(&config);
-    return font;
-}
-
-// Data for each slider
-struct SliderData {
-    static const int VAR_NAME_MAX = 256;
-    char var_name_buf[VAR_NAME_MAX];
-    std::string var_name;
-    float var_val, lo = 0.0, hi = 1.0;
-    uint32_t var_addr;
-};
-
+// Plotter backend with ImGui
 struct OpenGLPlotBackend {
     using GLPlotter = Plotter<OpenGLPlotBackend, OpenGLGraphicsAdaptor>;
 
+    // Constants
     // Screen size
     static const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
     // Max buffer size
     static const int EDITOR_BUF_SZ = 2048;
     // Maximum functions supported
     static const int EDITOR_MAX_FUNCS = 128;
+    // FPS restriction when not moving (to reduce CPU usage)
+    const int RESTING_FPS = 12;
+    // Frames to stay active after update
+    const int ACTIVE_FRAMES = 60;
+    // Number of frames to average
+    const size_t FPS_AVG_SIZE = 5;
 
     OpenGLPlotBackend(Environment expr_env, const std::string& init_expr)
-        :  plot(*this, expr_env, init_expr, SCREEN_WIDTH, SCREEN_HEIGHT) {
+        :  plot(*this, expr_env, init_expr, SCREEN_WIDTH, SCREEN_HEIGHT),
+           shell(plot.env, shell_ss) {
             /* Initialize the library */
             if (!glfwInit()) return;
 
@@ -302,7 +309,8 @@ struct OpenGLPlotBackend {
                 frame_time = glfwGetTime();
                 // Set to open popups
                 bool open_color_picker = false,
-                     open_reference = false;
+                     open_reference = false,
+                     open_shell = false;
                 glfwPollEvents();
                 // Clear
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -417,6 +425,10 @@ struct OpenGLPlotBackend {
                 if (ImGui::Button("? Help")) {
                     open_reference = true;
                 }
+                ImGui::SameLine();
+                if (ImGui::Button("# Shell")) {
+                    open_shell = true;
+                }
                 ImGui::PushFont(font_sm);
                 ImGui::TextColored(ImColor(255, 50, 50), "%s", error_text.c_str());
                 ImGui::PushFont(font_md);
@@ -427,13 +439,12 @@ struct OpenGLPlotBackend {
                             static_cast<float>(plot.shigh - 150)));
                     ImGui::SetNextWindowSize(ImVec2(333, 130));
                 }
-                if (ImGui::Begin("Sliders", NULL)) {
-                    if (~pwwidth && !init) {
-                        // Outer window was resized
-                        ImVec2 pos = ImGui::GetWindowPos();
-                        ImGui::SetWindowPos(ImVec2(pos.x,
-                                    (float)wheight - ((float)pwheight - pos.y)));
-                    }
+                ImGui::Begin("Sliders", NULL);
+                if (~pwwidth && !init) {
+                    // Outer window was resized
+                    ImVec2 pos = ImGui::GetWindowPos();
+                    ImGui::SetWindowPos(ImVec2(pos.x,
+                                (float)wheight - ((float)pwheight - pos.y)));
                 }
 
                 for (size_t i = 0; i < sliders.size(); ++i) {
@@ -536,18 +547,23 @@ struct OpenGLPlotBackend {
 
                 if (init) {
                     ImGui::SetNextWindowPos(ImVec2(
+                                static_cast<float>(10),
+                                static_cast<float>(10)));
+                    ImGui::SetNextWindowSize(ImVec2(350, 150));
+                }
+
+                if (init) {
+                    ImGui::SetNextWindowPos(ImVec2(
                                 static_cast<float>(plot.swid - 182), 10));
                     ImGui::SetNextWindowSize(ImVec2(175, 105));
                 }
-
-                if (ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize)) {
-                    if (~pwwidth && !init) {
-                        // Outer window was resized
-                        ImVec2 pos = ImGui::GetWindowPos();
-                        ImGui::SetWindowPos(ImVec2(
-                                    wwidth - ((float) pwwidth - pos.x),
-                                    pos.y));
-                    }
+                ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
+                if (~pwwidth && !init) {
+                    // Outer window was resized
+                    ImVec2 pos = ImGui::GetWindowPos();
+                    ImGui::SetWindowPos(ImVec2(
+                                wwidth - ((float) pwwidth - pos.x),
+                                pos.y));
                 }
                 ImGui::PushItemWidth(60.);
                 ImGui::InputDouble("<x<", &plot.xmin); ImGui::SameLine();
@@ -571,6 +587,7 @@ struct OpenGLPlotBackend {
                 }
                 if(open_color_picker) ImGui::OpenPopup("Color picker");
                 if(open_reference) ImGui::OpenPopup("Reference");
+                if(open_shell) ImGui::OpenPopup("Shell");
                 if (ImGui::BeginPopupModal("Color picker", NULL,
                             ImGuiWindowFlags_AlwaysAutoResize)) {
                     // Color picker dialog
@@ -675,6 +692,43 @@ struct OpenGLPlotBackend {
 
                     ImGui::Unindent();
                     ImGui::Unindent();
+                    ImGui::EndPopup();
+                }
+                ImGui::SetNextWindowSize(ImVec2(std::min(700, plot.swid),
+                                                std::min(500, plot.shigh)));
+                if (ImGui::BeginPopupModal("Shell", NULL,
+                            ImGuiWindowFlags_NoResize)) {
+                    // Shell popup
+                    if (ImGui::Button("Close##shellclose", ImVec2(100.f, 0.0f))) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                    if (init) ImGui::SetWindowCollapsed(true);
+
+                    ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 85));
+                    ImGui::TextWrapped("%s\n", shell_ss.str().c_str());
+                    if (shell_scroll) {
+                        shell_scroll = false;
+                        ImGui::SetScrollHere(1.0f);
+                    }
+                    ImGui::EndChild();
+
+                    if (!ImGui::IsAnyItemActive())
+                        ImGui::SetKeyboardFocusHere(0);
+                    ImGui::PushItemWidth(ImGui::GetWindowWidth() - 80.);
+                    auto exec_shell = [&]{
+                        shell_ss << ">>> " << shell_cmd_buf << "\n";
+                        shell.eval_line(shell_cmd_buf);
+                        shell_cmd_buf[0] = 0;
+                        shell_scroll = true;
+                    };
+                    if (ImGui::InputText("##ShellCommand", shell_cmd_buf, EDITOR_BUF_SZ,
+                                ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        exec_shell();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Submit")) {
+                        exec_shell();
+                    }
                     ImGui::EndPopup();
                 }
 
@@ -801,15 +855,16 @@ private:
     // Active counter: if > 0 updates at full FPS
     int active_counter = 0;
 
-    // FPS restriction when not moving (to reduce CPU usage)
-    const int RESTING_FPS = 12;
-    // Frames to stay active after update
-    const int ACTIVE_FRAMES = 60;
-    // Number of frames to average
-    const size_t FPS_AVG_SIZE = 5;
-
     // Templated plotter instance, contains plotter logic
     GLPlotter plot;
+    // Shell output string
+    std::stringstream shell_ss;
+    // Hidden shell
+    Shell shell;
+    // Shell command buffer
+    char shell_cmd_buf[EDITOR_BUF_SZ] = {0};
+    // If true, scrolls the shell to bottom
+    bool shell_scroll = false;
 };
 }  // namespace
 
@@ -817,4 +872,3 @@ PlotGUI::PlotGUI(Environment& env, const std::string& init_expr) {
     OpenGLPlotBackend openglgui(env, init_expr);
 }
 }  // namespace nivalis
-#endif // ifdef ENABLE_NIVALIS_OPENGL_IMGUI_BACKEND

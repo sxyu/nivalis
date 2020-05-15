@@ -1,5 +1,4 @@
 #include "parser.hpp"
-#include "version.hpp"
 #include "plotter/plot_gui.hpp"
 #include "util.hpp"
 #include <string>
@@ -34,8 +33,6 @@ std::vector<std::string> get_args(std::string& line) {
 
 int main(int argc, char ** argv) {
     using namespace nivalis;
-    std::cout << "Nivplot " NIVALIS_VERSION " " NIVALIS_COPYRIGHT << std::endl;
-    
     Environment env;
     PlotGUI gui(env);
 
