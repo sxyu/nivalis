@@ -846,8 +846,6 @@ public:
                                 ddy > 1e-6 ? PointMarker::LABEL_LOCAL_MIN :
                                 ddy < -1e-6 ? PointMarker::LABEL_LOCAL_MAX:
                                 PointMarker::LABEL_INFLECTION_PT;
-                            // Do not show
-                            if (label == PointMarker::LABEL_INFLECTION_PT) continue;
 
                             int sy = static_cast<int>((ymax - y) / ydiff * shigh);
                             int sx = static_cast<int>((x - xmin) / xdiff * swid);
