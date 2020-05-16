@@ -159,8 +159,6 @@ struct OpenGLPlotBackend {
     static const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
     // Max buffer size
     static const int EDITOR_BUF_SZ = 2048;
-    // Maximum functions supported
-    static const int EDITOR_MAX_FUNCS = 128;
     // FPS restriction when not moving (to reduce CPU usage)
     const int RESTING_FPS = 12;
     // Frames to stay active after update
@@ -169,7 +167,8 @@ struct OpenGLPlotBackend {
     const size_t FPS_AVG_SIZE = 5;
 
     OpenGLPlotBackend(Environment expr_env, const std::string& init_expr)
-        :  plot(*this, expr_env, init_expr, SCREEN_WIDTH, SCREEN_HEIGHT),
+        :  editor_strs(1),
+           plot(*this, expr_env, init_expr, SCREEN_WIDTH, SCREEN_HEIGHT),
            shell(plot.env, shell_ss) {
             /* Initialize the library */
             if (!glfwInit()) return;
@@ -193,7 +192,7 @@ struct OpenGLPlotBackend {
                 return;
             }
 
-            // Set up initial function color
+            // Set up initial function color / function string
             update_func_color(0);
 
             IMGUI_CHECKVERSION();
@@ -350,9 +349,8 @@ struct OpenGLPlotBackend {
                 }
                 if (~del_fun) {
                     for (size_t i = del_fun; i < plot.funcs.size()-1; ++i) {
-                        strcpy(editor_strs[i], editor_strs[i+1]);
-                        memcpy(edit_colors[i], edit_colors[i+1],
-                                4*sizeof(float));
+                        editor_strs[i].swap(editor_strs[i+1]);
+                        edit_colors[i].swap(edit_colors[i+1]);
                     }
                     plot.delete_func(del_fun);
                     del_fun = -1;
@@ -360,10 +358,13 @@ struct OpenGLPlotBackend {
                 }
 
                 if (seek_dir != 0) {
+                    // Seek to previous/next function after up/down arrow on textbox
                     plot.set_curr_func(plot.curr_func + seek_dir);
                     update_func_color(plot.curr_func);
                     focus_idx = plot.curr_func;
                     seek_dir = 0;
+                    while (plot.funcs.size() > editor_strs.size())
+                        editor_strs.push_back({});
                 }
 
                 // Render GUI
@@ -384,13 +385,13 @@ struct OpenGLPlotBackend {
                     ImGui::PushItemWidth(ImGui::GetWindowWidth() - 100);
                     if (ImGui::InputText((fid +
                                     "##funcedit-" + fid).c_str(),
-                            editor_strs[func_idx], EDITOR_BUF_SZ,
+                            editor_strs[func_idx].data(), EDITOR_BUF_SZ,
                             ImGuiInputTextFlags_CallbackHistory,
                             [](ImGuiTextEditCallbackData* data) -> int {
                                 // Handle up/down arrow keys in textboxes
                                 OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
                                         data->UserData);
-                                be->seek_dir = data->EventKey == 3 ? -1 : 1;
+                                be->seek_dir = data->EventKey == ImGuiKey_UpArrow ? -1 : 1;
                                 return 0;
                         }, this)) {
                         plot.reparse_expr(func_idx);
@@ -400,7 +401,7 @@ struct OpenGLPlotBackend {
                             plot.set_curr_func(func_idx);
                     }
                     ImGui::SameLine();
-                    auto* col = edit_colors[func_idx];
+                    auto* col = edit_colors[func_idx].data();
                     if (ImGui::ColorButton(("c##colfun" +fid).c_str(),
                                 ImVec4(col[0], col[1], col[2], col[3]))) {
                         open_color_picker = true;
@@ -411,16 +412,16 @@ struct OpenGLPlotBackend {
                         del_fun = func_idx;
                     }
                 }
-                if (plot.funcs.size() <= EDITOR_MAX_FUNCS) {
-                    std::string tmp = plot.funcs.back().expr_str;
-                    util::trim(tmp);
-                    if (tmp.size()) {
-                        if (ImGui::Button("+ New function")) {
-                            plot.set_curr_func(plot.funcs.size());
-                            update_func_color(plot.funcs.size()-1);
-                            focus_idx = plot.funcs.size() - 1;
-                        } ImGui::SameLine();
-                    }
+                std::string tmp = plot.funcs.back().expr_str;
+                util::trim(tmp);
+                if (tmp.size()) {
+                    if (ImGui::Button("+ New function")) {
+                        plot.set_curr_func(plot.funcs.size());
+                        update_func_color(plot.funcs.size()-1);
+                        focus_idx = plot.funcs.size() - 1;
+                        while (plot.funcs.size() > editor_strs.size())
+                            editor_strs.push_back({});
+                    } ImGui::SameLine();
                 }
                 if (ImGui::Button("? Help")) {
                     open_reference = true;
@@ -566,11 +567,11 @@ struct OpenGLPlotBackend {
                                 pos.y));
                 }
                 ImGui::PushItemWidth(60.);
-                ImGui::InputDouble("<x<", &plot.xmin); ImGui::SameLine();
+                ImGui::InputDouble(" <x<", &plot.xmin); ImGui::SameLine();
                 ImGui::PushItemWidth(60.);
                 ImGui::InputDouble("##xmax", &plot.xmax);
                 ImGui::PushItemWidth(60.);
-                ImGui::InputDouble("<y<", &plot.ymin); ImGui::SameLine();
+                ImGui::InputDouble(" <y<", &plot.ymin); ImGui::SameLine();
                 ImGui::PushItemWidth(60.);
                 ImGui::InputDouble("##ymax", &plot.ymax);
                 if (ImGui::Button("Reset view")) plot.reset_view();
@@ -591,7 +592,7 @@ struct OpenGLPlotBackend {
                 if (ImGui::BeginPopupModal("Color picker", NULL,
                             ImGuiWindowFlags_AlwaysAutoResize)) {
                     // Color picker dialog
-                    auto* sel_col = edit_colors[curr_edit_color_idx];
+                    auto* sel_col = edit_colors[curr_edit_color_idx].data();
                     ImGui::ColorPicker3("color", sel_col);
                     if (ImGui::Button("Ok##cpickok", ImVec2(100.f, 0.0f))) {
                         // Update color when ok pressed
@@ -694,6 +695,7 @@ struct OpenGLPlotBackend {
                     ImGui::Unindent();
                     ImGui::EndPopup();
                 }
+
                 ImGui::SetNextWindowSize(ImVec2(std::min(700, plot.swid),
                                                 std::min(500, plot.shigh)));
                 if (ImGui::BeginPopupModal("Shell", NULL,
@@ -714,17 +716,52 @@ struct OpenGLPlotBackend {
 
                     if (!ImGui::IsAnyItemActive())
                         ImGui::SetKeyboardFocusHere(0);
-                    ImGui::PushItemWidth(ImGui::GetWindowWidth() - 80.);
                     auto exec_shell = [&]{
+                        if (!strlen(shell_cmd_buf)) return;
                         shell_ss << ">>> " << shell_cmd_buf << "\n";
+                        // Push history
+                        if (shell_hist.empty() || strcmp(shell_hist.back().data(), shell_cmd_buf)){
+                            // Don't push if same as last
+                            shell_hist.emplace_back();
+                            strcpy(shell_hist.back().data(), shell_cmd_buf);
+                        }
+                        shell_hist_pos = -1;
                         shell.eval_line(shell_cmd_buf);
                         shell_cmd_buf[0] = 0;
                         shell_scroll = true;
                     };
-                    if (ImGui::InputText("##ShellCommand", shell_cmd_buf, EDITOR_BUF_SZ,
-                                ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        exec_shell();
-                    }
+                    ImGui::PushItemWidth(ImGui::GetWindowWidth() - 80.);
+                    if (ImGui::InputText("##ShellCommand",
+                                shell_cmd_buf, EDITOR_BUF_SZ,
+                                ImGuiInputTextFlags_EnterReturnsTrue |
+                                ImGuiInputTextFlags_CallbackHistory,
+                            [](ImGuiTextEditCallbackData* data) -> int {
+                                // Handle up/down arrow keys in textboxes
+                                OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
+                                        data->UserData);
+                                const int prev_history_pos = be->shell_hist_pos;
+                                if (data->EventKey == ImGuiKey_UpArrow)
+                                {
+                                    if (be->shell_hist_pos == -1)
+                                        be->shell_hist_pos = be->shell_hist.size() - 1;
+                                    else if (be->shell_hist_pos > 0)
+                                        be->shell_hist_pos--;
+                                } else if (data->EventKey == ImGuiKey_DownArrow) {
+                                    if (~be->shell_hist_pos)
+                                        if (++be->shell_hist_pos >= be->shell_hist.size())
+                                            be->shell_hist_pos = -1;
+                                }
+                                if (prev_history_pos != be->shell_hist_pos) {
+                                    data->DeleteChars(0, data->BufTextLen);
+                                    if (be->shell_hist_pos != -1) {
+                                        data->InsertChars(0,
+                                                be->shell_hist[be->shell_hist_pos].data());
+                                    }
+                                }
+                                return 0;
+                            }, this)) {
+                                exec_shell();
+                            }
                     ImGui::SameLine();
                     if (ImGui::Button("Submit")) {
                         exec_shell();
@@ -777,13 +814,16 @@ struct OpenGLPlotBackend {
     // Update editor (tb)
     // Assumes func_id is curr_func !
     void update_editor(size_t func_id, const std::string& contents) {
-        strncpy(editor_strs[func_id], contents.c_str(), contents.size()+1);
+        std::copy(&contents[0], (&contents[0]) +
+                std::min<size_t>(contents.size(), EDITOR_BUF_SZ-1),
+                editor_strs[func_id].data());
+        editor_strs[func_id][contents.size()] = 0;
     }
 
     // Get contents of editor (tb)
     // Assumes func_id is curr_func !
     const char * read_editor(size_t func_id) {
-        return editor_strs[func_id];
+        return &editor_strs[func_id][0];
     }
 
     // Set error label
@@ -809,7 +849,10 @@ struct OpenGLPlotBackend {
     // Update color of function in function window
     // to match color in plotter
     void update_func_color(size_t func_id) {
-        auto* col = edit_colors[func_id];
+        while (edit_colors.size() <= func_id) {
+            edit_colors.push_back({0.});
+        }
+        auto& col = edit_colors[func_id];
         auto& fcol = plot.funcs[func_id].line_color;
         col[0] = fcol.r / 255.0f;
         col[1] = fcol.g / 255.0f;
@@ -835,11 +878,11 @@ private:
     int marker_posx, marker_posy;
 
     // Color picker data
-    float edit_colors[EDITOR_MAX_FUNCS][4];
+    std::vector<std::array<float, 4> > edit_colors;
     size_t curr_edit_color_idx;
 
     // Editor data
-    char editor_strs[EDITOR_MAX_FUNCS][EDITOR_BUF_SZ];
+    std::vector<std::array<char, EDITOR_BUF_SZ> > editor_strs;
 
     // Slider data
     std::string slider_error;
@@ -863,8 +906,12 @@ private:
     Shell shell;
     // Shell command buffer
     char shell_cmd_buf[EDITOR_BUF_SZ] = {0};
-    // If true, scrolls the shell to bottom
+    // If true, scrolls the shell to bottom on next frame
+    // (used after command exec to scroll to bottom)
     bool shell_scroll = false;
+    // Shell history implementation
+    std::vector<std::array<char, EDITOR_BUF_SZ> > shell_hist;
+    size_t shell_hist_pos = -1;
 };
 }  // namespace
 
