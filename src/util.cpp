@@ -33,7 +33,9 @@ size_t find_equality(const std::string& expr, char eqn_chr) {
         } else if (stkh == 0 && c == eqn_chr &&
                    i > 0 && i < expr.size()-1 &&
                    !util::is_comp_operator(expr[i-1]) &&
-                   !util::is_comp_operator(expr[i+1])) {
+                   expr[i-1] != '!' &&
+                   !util::is_comp_operator(expr[i+1]) &&
+                   expr[i+1] != '!') {
             return i;
         }
     }

@@ -49,10 +49,10 @@ double eval_ast(Environment& env, const Expr::AST& ast,
     thread_local std::vector<double> stk;
     // Stack of thunks available:
     // contains positions of thunk_jmp encountered
-    thread_local std::vector<size_t> thunks;
+    std::vector<size_t> thunks;
     // Thunk call stack: contains positions to return to
     // after reaching thunk_ret
-    thread_local std::vector<size_t> thunks_stk;
+    std::vector<size_t> thunks_stk;
 
     // Max function call stack height
     static const size_t MAX_CALL_STK_HEIGHT = 256;
@@ -77,19 +77,7 @@ double eval_ast(Environment& env, const Expr::AST& ast,
 #define ARG1 stk[top]
 // Return value from thunk or func call
 #define RET_VAL stk[top+1]
-    // Thunk system helpers
-    // For each command that calls thunks, we need to use the
-    // following block ON_THUNK_RET(do on ret, do else)
-#define ON_THUNK_RET(retdo, elsedo) do{\
-if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
-    retdo \
-} else { \
-    elsedo \
-}}while(0)
-    // "Call" a thunk immediately after the current operator
-#define CALL_THUNK_AT(id) do{thunks_stk.push_back(cidx); \
-                        cidx = thunks[thunks.size() - (id) - 1]; }while(0)
-    // Quit without messing up stack
+// Quit without messing up stack
 #define FAIL_AND_QUIT do {top = init_top; return NONE; } while(0)
 
     for (size_t cidx = ast.size() - 1; ~cidx; --cidx) {
@@ -104,7 +92,7 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                 stk[++top] = arg_vals[node.ref]; break;
             case thunk_jmp:
                 thunks.push_back(cidx);
-                cidx = ast[cidx].ref;
+                cidx -= ast[cidx].ref;
                 break;
             case thunk_ret:
                 cidx = thunks_stk.back() + 1;
@@ -119,9 +107,10 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                     for (size_t i = 0; i < n_args; ++i) {
                         f_args[i] = stk[top--];
                     }
-                    if (n_args != func.n_args) FAIL_AND_QUIT; // Should not happen
-                    if (&func.expr.ast[0] == &ast[0]) FAIL_AND_QUIT; // Ban recursion
-                    if (call_stk_height > MAX_CALL_STK_HEIGHT) FAIL_AND_QUIT; // Too deep
+                    if (n_args != func.n_args ||               // Should not happen
+                        &func.expr.ast[0] == &ast[0] ||        // Disallow recursion
+                        call_stk_height > MAX_CALL_STK_HEIGHT) // Too many nested calls
+                            FAIL_AND_QUIT;
                     ++call_stk_height;
                     eval_ast(env, func.expr.ast, f_args);
                     --call_stk_height;
@@ -129,28 +118,31 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                 }
                 break;
             case bnz:
-                ON_THUNK_RET(
+                if (_is_thunk_ret) {
+                    --top; _is_thunk_ret = false;
                     ARG1 = RET_VAL;
-                ,
-                    CALL_THUNK_AT(ARG1 == 0.);
+                } else {
+                    thunks_stk.push_back(cidx);
+                    cidx = thunks[thunks.size() - (ARG1 == 0.) - 1];
                     thunks.resize(thunks.size() - 2);
-                );
+                }
                 break;
 
             case sums: case prods:
                 {
-                    ON_THUNK_RET(
+                    if (_is_thunk_ret) {
+                        --top; _is_thunk_ret = false;
                         // update arg3 (the output)
                         if (node.opcode == prods)
                             ARG3 *= RET_VAL;
                         else
                             ARG3 += RET_VAL; // arg3 is output
-                    ,
+                    } else {
                         // Move over the arguments and use arg3
                         // as output
                         ++top; ARG1 = ARG2; ARG2 = ARG3;
                         ARG3 = node.opcode == prods ? 1. : 0.;
-                    );
+                    }
                     uint64_t var_id = node.ref;
                     int64_t a = static_cast<int64_t>(ARG1),
                             b = static_cast<int64_t>(ARG2);
@@ -162,7 +154,8 @@ if (_is_thunk_ret) { --top; _is_thunk_ret = false; \
                         a += step;
                         if (a == b + step) ARG1 = NONE;
                         else ARG1 = static_cast<double>(a);
-                        CALL_THUNK_AT(0);
+                        thunks_stk.push_back(cidx);
+                        cidx = thunks.back();
                     }
                 }
                 break;

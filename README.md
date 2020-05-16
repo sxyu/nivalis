@@ -45,6 +45,7 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 - Alternatively, Windows/Linux: `ctest` to run tests
 - `ctest --verbose` to get more information (error line number etc.)
 
+## Usage 
 ### Shell
 - Run `./nivalis`
     - Or use the shell built into the GUI; see next section
@@ -62,8 +63,7 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - Differentiate a function: `diff <var> <expr>` e.g. `diff x sin(x)*cos(2*x)`
     - Simplify expression (not super reliable): `opt <expr>` e.g. `opt (1+x)^2 + 2*(x+1)^2`, `opt exp(x)*exp(2*x)`
 
-## Usage 
-### OpenGL GUI
+### Plotter GUI
 - Run the `./nivplot` binary to open GUI
 - Background window (plotter)
     - Drag mouse (or arrow keys) to move, scroll (or `=`/`-`)  to zoom

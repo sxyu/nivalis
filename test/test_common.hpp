@@ -82,7 +82,8 @@ struct ThunkManager {
         ast.push_back(OpCode::thunk_ret);
     }
     void end() {
-        ast.emplace_back(OpCode::thunk_jmp, thunks.back());
+        ast.emplace_back(OpCode::thunk_jmp,
+                ast.size() - thunks.back());
         thunks.pop_back();
     }
 };

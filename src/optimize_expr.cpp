@@ -202,7 +202,8 @@ void ast_from_link_nodes(const std::vector<ASTLinkNode>& nodes,
         ast_from_link_nodes(nodes, out, node.c[i]);
         if (node.opcode == OpCode::thunk_ret &&
             nodes[node.c[i]].opcode == OpCode::thunk_jmp) {
-            out.back().ref = out_idx;
+            // Set thunk ref
+            out.back().ref = out.size() - out_idx - 1;
         }
     }
 }
@@ -260,9 +261,8 @@ void optim_link_nodes_main(Environment& env,
         // Evaluate constants
         std::vector<Expr::ASTNode> ast;
         ast_from_link_nodes(nodes, ast, vi);
-        // print_link_nodes(nodes);
-        // Expr tmp; tmp.ast = ast;
-        // std::cout << tmp <<" T\n";
+        // Debug
+        // print_link_nodes(nodes); std::cout << ast <<" T\n";
         v.val = detail::eval_ast(env, ast);
         v.opcode = OpCode::val;
         v.c.clear();
@@ -290,8 +290,7 @@ void optim_link_nodes_main(Environment& env,
         switch(v.opcode) {
             case absb:
                 // Involution
-                if (l->opcode == absb ||
-                        l->opcode == sqrb) v = *l;
+                if (is_positive(nodes, li)) v = *l;
                 break;
             case floorb: case ceilb: case roundb:
                 if (l->opcode == floorb ||
@@ -592,6 +591,27 @@ void optim_link_nodes_main(Environment& env,
                             break;
                         }
                     }
+                }
+                break;
+            case bsel:
+                // Super useless opcode
+                v = *r;
+                break;
+            case max: case min:
+                // If both sides are same,
+                // keep only one of them
+                if (l->equals(*r, nodes)) {
+                    v = *l;
+                }
+                break;
+            case eq: case ne: case le: case ge: case lt: case gt:
+                if (l->equals(*r, nodes)) {
+                    v.c.clear();
+                    v.val = (double)(
+                            v.opcode == eq ||
+                            v.opcode == le ||
+                            v.opcode == ge);
+                    v.opcode = val;
                 }
                 break;
         }

@@ -490,7 +490,7 @@ private:
     }
     void end_thunk() {
         result.ast.emplace_back(OpCode::thunk_jmp,
-                    thunks.back());
+                    result.ast.size() - thunks.back());
         thunks.pop_back();
     }
 

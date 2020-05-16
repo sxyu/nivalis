@@ -84,6 +84,7 @@ struct Differentiator {
         }
         return ast;
     }
+
     bool diff(const Expr::ASTNode** ast = nullptr, uint32_t diff_arg_id = -1) {
         if (ast == nullptr) ast = &ast_root;
         using namespace OpCode;
@@ -131,7 +132,12 @@ struct Differentiator {
                       {
                           PUSH(bnz);
                           *ast = copy_ast(*ast, out);
-                          DIFF_NEXT; DIFF_NEXT;
+                          if ((*ast)->opcode != thunk_ret) return false; ++*ast;
+                          begin_thunk(); DIFF_NEXT; end_thunk();
+                          if ((*ast)->opcode != thunk_jmp) return false; ++*ast;
+                          if ((*ast)->opcode != thunk_ret) return false; ++*ast;
+                          begin_thunk(); DIFF_NEXT; end_thunk();
+                          if ((*ast)->opcode != thunk_jmp) return false; ++*ast;
                       }
                       break;
             case sums:
@@ -271,9 +277,10 @@ struct Differentiator {
                       {
                           PUSH(bnz); PUSH(opcode == max ? ge : le);
                           const Expr::ASTNode* tmp = *ast;
-                          copy_ast(tmp, out); skip_ast(&tmp);
                           copy_ast(tmp, out);
-                          DIFF_NEXT; DIFF_NEXT;
+                          skip_ast(&tmp); copy_ast(tmp, out);
+                          begin_thunk(); DIFF_NEXT; end_thunk();
+                          begin_thunk(); DIFF_NEXT; end_thunk();
                           break;
                       }
             case land: case lor: case lxor: case gcd: case lcm: case choose: case fafact: case rifact:
@@ -380,6 +387,20 @@ private:
     Environment env;
     std::vector<Expr::ASTNode>& out;
     std::unordered_set<const Expr::ASTNode*> vis_asts;
+
+    // Thunk management helpers
+    void begin_thunk() {
+        thunks.push_back(out.size());
+        out.emplace_back(OpCode::thunk_ret);
+    }
+    void end_thunk() {
+        out.emplace_back(OpCode::thunk_jmp,
+                    out.size() - thunks.back());
+        thunks.pop_back();
+    }
+
+    // Beginnings of thunks
+    std::vector<size_t> thunks;
 };
 
 }  // namespace
