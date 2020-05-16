@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="https://unpkg.com/ionicons@5.0.0/dist/ionicons.js"></script>
     <title>Nivalis Plotter</title>
     <style>
       body {
@@ -14,8 +15,10 @@
           margin-right: auto; display: block; }
       div.emscripten { text-align: center; }
       div.emscripten_border { border: none; }
-      /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
-      canvas.emscripten { border: 0px none; background-color: black; }
+      canvas.emscripten { border: 0px none; background-color: black }
+      a#branding { position: fixed; bottom:5px; right: 7px }
+      a { text-decoration: none; font-family: monospace }
+      a#branding > ion-icon { position:relative; top: 1px }
     </style>
   </head>
   <body>
@@ -23,6 +26,10 @@
     <div class="emscripten_border">
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
     </div>
+    <a href="https://github.com/sxyu/nivalis" id="branding" target="_blank">
+        Nivalis
+        <ion-icon name="logo-github" titile="Nivalis"></ion-icon>
+    </a>
 
     <script type='text/javascript'>
       var Module = {
