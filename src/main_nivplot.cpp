@@ -667,7 +667,7 @@ struct OpenGLPlotBackend {
             ImGui::Indent();
             ImGui::BulletText("On background\n");
             ImGui::Indent();
-            ImGui::BulletText("%s", "Ctrl + E to focus on functions editor");
+            ImGui::BulletText("%s", "E to focus on functions editor");
             ImGui::BulletText("%s", "-= keys to zoom, arrow keys to move");
             ImGui::BulletText("%s", "Ctrl/Alt + -= keys to zoom asymmetrically");
             ImGui::BulletText("%s", "q to close window\n");
@@ -835,7 +835,11 @@ struct OpenGLPlotBackend {
     }
 
     // Close window
-    void close() { glfwSetWindowShouldClose(window, GL_TRUE); }
+    void close() {
+#ifndef NIVALIS_EMSCRIPTEN
+        glfwSetWindowShouldClose(window, GL_TRUE);
+#endif
+    }
 
     // Require the plot to be updated
     void update(bool force = false) {

@@ -829,23 +829,21 @@ public:
                             graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
                         }
                         // Draw roots/extrema/y-int
-                        if (!func.expr.is_null() && !func.diff.is_null()) {
-                            env.vars[x_var] = 0;
-                            double y = expr(env);
-                            if (!std::isnan(y) && !std::isinf(y))
-                                push_if_valid(0., roots_and_extrema); // y-int
-                        }
-                        for (double x : roots_and_extrema) {
-                            env.vars[x_var] = x;
-                            double y = expr(env);
+                        std::vector<double> to_erase;
+                        auto draw_extremum = [&](double x, double y) {
                             double dy = func.diff(env);
                             double ddy = func.ddiff(env);
                             auto label =
-                                x == 0. ? PointMarker::LABEL_Y_INT :
-                                std::fabs(dy) > 1e-6 ? PointMarker::LABEL_X_INT :
-                                ddy > 1e-6 ? PointMarker::LABEL_LOCAL_MIN :
-                                ddy < -1e-6 ? PointMarker::LABEL_LOCAL_MAX:
+                                x == 0.0 ? PointMarker::LABEL_Y_INT :
+                                std::fabs(dy) > 2e-7 * ydiff ? PointMarker::LABEL_X_INT :
+                                ddy > 2e-7 * ydiff ? PointMarker::LABEL_LOCAL_MIN :
+                                ddy < -2e-7 * ydiff ? PointMarker::LABEL_LOCAL_MAX:
                                 PointMarker::LABEL_INFLECTION_PT;
+                            // Do not show
+                            if (label == PointMarker::LABEL_INFLECTION_PT) {
+                                to_erase.push_back(x);
+                                return;
+                            }
 
                             int sy = static_cast<int>((ymax - y) / ydiff * shigh);
                             int sx = static_cast<int>((x - xmin) / xdiff * swid);
@@ -864,6 +862,24 @@ public:
                             for (int r = std::max(sy - MARKER_MOUSE_RADIUS, 0); r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh-1); ++r) {
                                 for (int c = std::max(sx - MARKER_MOUSE_RADIUS, 0); c <= std::min(sx + MARKER_MOUSE_RADIUS, swid-1); ++c) {
                                     grid[r * swid + c] = idx;
+                                }
+                            }
+                        };
+                        for (double x : roots_and_extrema) {
+                            env.vars[x_var] = x;
+                            double y = expr(env);
+                            draw_extremum(x, y);
+                        }
+                        for (auto x : to_erase) {
+                            roots_and_extrema.erase(x);
+                        }
+                        if (!func.expr.is_null() && !func.diff.is_null()) {
+                            env.vars[x_var] = 0;
+                            double y = expr(env);
+                            if (!std::isnan(y) && !std::isinf(y)) {
+                                push_if_valid(0., roots_and_extrema); // y-int
+                                if (roots_and_extrema.count(0.)) {
+                                    draw_extremum(0.0, y);
                                 }
                             }
                         }
@@ -1165,6 +1181,7 @@ public:
                 break;
             case 38: case 40: case 264: case 265:
                 {
+                    // UD Arrow
                     auto delta = (ymax - ymin) * 0.02;
                     if (key == 40 || key == 264) delta = -delta;
                     ymin += delta; ymax += delta;
@@ -1194,10 +1211,8 @@ public:
                 }
                 break;
             case 69:
-                // ctrl E: Edit (focus tb)
-                if (ctrl) {
-                    be.focus_editor();
-                }
+                // E: Edit (focus tb)
+                be.focus_editor();
                 break;
         }
     }
