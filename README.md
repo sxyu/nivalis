@@ -6,17 +6,19 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 ## Dependencies
 - C++ 17
 - Boost 1.58+ (Optional, only need math)
-- OpenGL3 and GLEW
-    - and glfw3, Dear ImGui which are included in repo
+- OpenGL3
+    - and GLEW, glfw3, Dear ImGui which are included in repo
 
 ## Installation
 
 - I offer instructions for Ubuntu and Windows, since I only have access to these systems
 
 ### Ubuntu 
-- Install a modern version of GCC which supports C++17
-- Install OpenGL3, GLEW, and glfw3 (more features, recommended)
-    - `sudo apt update && sudo apt install -y pkg-config mesa-utils libglew-dev libglfw3-dev`
+- Install CMake from <https://cmake.org/download/>
+    - If you already have an older version: I do not guarantee version <3.14 will work, but you may try
+- Install a modern version of GCC which supports C++17 (GCC 7 will work)
+- Install OpenGL3
+    - `sudo apt update && sudo apt install -y pkg-config mesa-common-dev freeglut3 freeglut3-dev`
 - Configure project with CMake:
     - `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release`
     - CMake options:
@@ -24,20 +26,18 @@ The evaluator parses expressions into custom bytecode, which is optimized before
         - To force using glfw3 in the repo (as opposed to the one you installed) use `-DUSE_SYSTEM_GLFW=OFF`
         - To disable OpenGL/Dear ImGui and force using Nana, add
           `-DUSE_OPENGL_IMGUI=OFF` to this command 
-- Built project: `make -j8`
+- Build project: `make -j8`
 - Optionally: install by `sudo make install`
 
 ### Windows
+- Install CMake from <https://cmake.org/download/>
 - Install Visual Studio 2017+, if not already present. I used 2017
-- Install GLEW, and glfw3 (more features, recommended)
-    - Go to  <http://glew.sourceforge.net/> and click "Binaries Windows 32-bit and 64-bit"; extract it somewhere. Note the directory
-        `.../glew-x.x.x` containing `include` and `lib/Release/x64/glew32s.lib`
 - Configure project with CMake:
     - `mkdir build && cd build && cmake .. -G"Visual Studio 15 2017 Win64" -DCMAKE_BUILD_TYPE=Release`
     - CMake options:
         - To force disable Boost math add `-DUSE_BOOST_MATH=OFF` to this command (some functions like digamma, beta will become unavailable)
         - To force using glfw3 in the repo (as opposed to the one you installed) use `-DUSE_SYSTEM_GLFW=OFF`
-- Built project: `cmake --build . --config Release`, or open the solution in VS and build in "Release" configuration manually
+- Build project: `cmake --build . --config Release`, or open the solution in VS and build in "Release" configuration manually
 
 ### Testing
 - Tests are built by default. To disable, add `-DBUILD_TESTS=OFF` to cmake command line
