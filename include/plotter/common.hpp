@@ -1203,12 +1203,10 @@ public:
                     be.update();
                 }
                 break;
-            case 72:
+            case 48: case 72:
                 // ctrl H: Home
                 if (ctrl) {
-                    if (!alt) xmax = 10.0; xmin = -10.0;
-                    ymax = 6.0; ymin = -6.0;
-                    be.update();
+                    reset_view();
                 }
                 break;
             case 69:
