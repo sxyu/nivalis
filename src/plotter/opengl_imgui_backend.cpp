@@ -303,13 +303,13 @@ struct OpenGLPlotBackend {
             OpenGLGraphicsAdaptor adaptor(window);
             size_t del_fun = -1;
 
+            // Set to open popups
+            bool open_color_picker = false,
+                 open_reference = false,
+                 open_shell = false;
             // Main GLFW loop
             while (!glfwWindowShouldClose(window)) {
                 frame_time = glfwGetTime();
-                // Set to open popups
-                bool open_color_picker = false,
-                     open_reference = false,
-                     open_shell = false;
                 glfwPollEvents();
                 // Clear
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -589,7 +589,8 @@ struct OpenGLPlotBackend {
                 if(open_color_picker) ImGui::OpenPopup("Color picker");
                 if(open_reference) ImGui::OpenPopup("Reference");
                 if(open_shell) ImGui::OpenPopup("Shell");
-                if (ImGui::BeginPopupModal("Color picker", NULL,
+
+                if (ImGui::BeginPopupModal("Color picker", &open_color_picker,
                             ImGuiWindowFlags_AlwaysAutoResize)) {
                     // Color picker dialog
                     auto* sel_col = edit_colors[curr_edit_color_idx].data();
@@ -600,18 +601,16 @@ struct OpenGLPlotBackend {
                         fcol.r = static_cast<uint8_t>(sel_col[0] * 255.);
                         fcol.g = static_cast<uint8_t>(sel_col[1] * 255.);
                         fcol.b = static_cast<uint8_t>(sel_col[2] * 255.);
+                        open_color_picker = false;
                         ImGui::CloseCurrentPopup();
                         update();
                     }
                     ImGui::EndPopup();
                 }
                 ImGui::SetNextWindowSize(ImVec2(600, 400));
-                if (ImGui::BeginPopupModal("Reference", NULL,
+                if (ImGui::BeginPopupModal("Reference", &open_reference,
                             ImGuiWindowFlags_NoResize)) {
                     // Reference popup
-                    if (ImGui::Button("Close##refclose", ImVec2(100.f, 0.0f))) {
-                        ImGui::CloseCurrentPopup();
-                    }
                     ImGui::TextUnformatted("GUI: Function editor");
                     ImGui::Indent();
                         ImGui::BulletText("%s", "The function editor is the window initially on top-left with\ntextboxes. You can enter expressions here to draw:");
@@ -698,12 +697,9 @@ struct OpenGLPlotBackend {
 
                 ImGui::SetNextWindowSize(ImVec2(std::min(700, plot.swid),
                                                 std::min(500, plot.shigh)));
-                if (ImGui::BeginPopupModal("Shell", NULL,
+                if (ImGui::BeginPopupModal("Shell", &open_shell,
                             ImGuiWindowFlags_NoResize)) {
                     // Shell popup
-                    if (ImGui::Button("Close##shellclose", ImVec2(100.f, 0.0f))) {
-                        ImGui::CloseCurrentPopup();
-                    }
                     if (init) ImGui::SetWindowCollapsed(true);
 
                     ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 85));
