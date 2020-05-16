@@ -139,7 +139,7 @@ endif()
 
 set(_EMSCRIPTEN_ "//")
 if (EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s USE_BOOST_HEADERS=1 -std=c++17")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -std=c++17")
     set(_EMSCRIPTEN_ "")
 else ()
     set (SOURCES ${SOURCES} "../${GLEW_DIR}/glew.c")

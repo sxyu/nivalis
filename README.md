@@ -55,7 +55,6 @@ Under the hood: features an expression parser, expression (AST) evaluator, symbo
 - Host `build-emcc/` on a server and open index in a browser.
   - Using Python 3: in build-emcc/, run: `python3 -http.server` then run `firefox localhost:8000`
 - To deploy, simply upload `index.html`, `nivplot.js`, `nivplot.wasm`
-- **Known Issue**: plotting some implicit functions like `x=x`, `cos(x*y)=0` causes a crash with OOM error
 
 ### Testing
 - Tests are built by default. To disable, add `-DBUILD_TESTS=OFF` to cmake command line
