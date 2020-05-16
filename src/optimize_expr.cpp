@@ -14,7 +14,7 @@ namespace {
 using ::nivalis::OpCode::repr;
 
 // Hash combine
-void hash_combine(size_t& seed, size_t v) {
+void hash_combine(uint64_t& seed, uint64_t v) {
     seed ^= v + 0x9e3779b9 + (seed<<6) + (seed>>2);
 }
 
@@ -220,7 +220,7 @@ void print_link_nodes(const std::vector<ASTLinkNode>& nodes) {
             std::cout << nodes[i].ref;
         }
         std::cout << " -> ";
-        for (int j = 0; j < nodes[i].c.size(); ++j) {
+        for (size_t j = 0; j < nodes[i].c.size(); ++j) {
             std::cout << nodes[i].c[j] << " ";
         }
         std::cout << "\n";

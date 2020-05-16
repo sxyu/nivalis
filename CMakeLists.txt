@@ -33,6 +33,7 @@ set( SRC_DIR "${PROJECT_SOURCE_DIR}/src" )
 set( TEST_DIR "${PROJECT_SOURCE_DIR}/test" )
 
 set ( IMGUI_DIR "3rdparty/imgui" )
+set ( GLEW_DIR "3rdparty/glew" )
 set ( GLFW_DIR "3rdparty/glfw3" )
 
 if ( CMAKE_COMPILER_IS_GNUCXX )
@@ -77,6 +78,7 @@ set(
   eval_expr.cpp
   optimize_expr.cpp
   diff_expr.cpp
+  shell.cpp
   plotter/common.cpp
   plotter/opengl_imgui_backend.cpp
   "../${IMGUI_DIR}/imgui.cpp"
@@ -84,7 +86,7 @@ set(
   "../${IMGUI_DIR}/imgui_widgets.cpp"
   "../${IMGUI_DIR}/imgui_impl_opengl3.cpp"
   "../${IMGUI_DIR}/imgui_impl_glfw.cpp"
-  shell.cpp
+  "../${GLEW_DIR}/glew.c"
 )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 
@@ -126,9 +128,10 @@ if (NOT WIN32)
     endif()
 endif()
 
-# Finding OpenGL/GLEW/GLFW
+# Finding OpenGL/GLFW
 set ( OPENGL_IMGUI_ENABLED OFF )
 set ( WILL_USE_SYSTEM_GLFW ${USE_SYSTEM_GLFW} )
+add_definitions(-DGLEW_STATIC)
 
 find_package(PkgConfig)
 if ( NOT PkgConfig_FOUND )
@@ -150,18 +153,15 @@ else()
 endif ()
 
 find_package(OpenGL REQUIRED)
-find_package(GLEW REQUIRED)
-add_definitions(-DGLEW_STATIC)
 
 set ( OPENGL_IMGUI_ENABLED ON )
 set( PROJ_DEPENDENCIES
     OpenGL::GL
-    ${PROJ_DEPENDENCIES} ${GLFW_STATIC_LIBRARIES}
-    ${GLEW_LIBRARIES}
-    GLEW::glew_s
+    ${PROJ_DEPENDENCIES}
+    ${GLFW_STATIC_LIBRARIES}
 )
 
-include_directories(${GLEW_INCLUDE_DIRS} ${IMGUI_DIR})
+include_directories(${GLEW_DIR} ${IMGUI_DIR})
     
 message ( STATUS "Using OpenGL with ImGui as plotter backend" )
 

@@ -108,13 +108,14 @@ int main() {
     ASSERT(test_optim_equiv_random("exp(log(2^x))", 0, -10., 10));
 
     using namespace OpCode;
+    AST ast_zero = {0.}, ast_one = {1.};
     // Basic competence
     ASSERT_EQ(optim("x+x").ast, AST({mul, 2., Ref(x)}));
     ASSERT_EQ(optim("exp(x)+3*exp(x)").ast, AST({mul, 4., expb, Ref(x)}));
     ASSERT_EQ(optim("2*x-x").ast, AST({Ref(x)}));
-    ASSERT_EQ(optim("3*x^2-2*x^2-x^2").ast, AST({0.}));
+    ASSERT_EQ(optim("3*x^2-2*x^2-x^2").ast, ast_zero);
     ASSERT_EQ(optim("x*-3*x*x*2*x").ast, AST({mul, -6., power, Ref(x), 4.}));
-    ASSERT_EQ(optim("sin(x)*sin(x) + cos(x)*cos(x)").ast, AST({1.}));
+    ASSERT_EQ(optim("sin(x)*sin(x) + cos(x)*cos(x)").ast, ast_one);
     ASSERT_EQ(optim("---x").ast, AST({unaryminus, Ref(x)}));
     ASSERT_EQ(optim("----x^2").ast, AST({sqrb, Ref(x)}));
     ASSERT_EQ(optim("3*3/4*x/3*4").ast, AST({mul, 3., Ref(x)}));

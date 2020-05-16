@@ -20,16 +20,16 @@ int main() {
     using namespace OpCode;
     Parser parser;
     Environment dummy_env;
-    ASSERT_EQ(parser("nan", dummy_env).ast, AST({ null }));
+    ASSERT_EQ(parser("nan", dummy_env).ast, AST(1)); // AST(1) has only null
     ASSERT(parser.error_msg.empty());
     // Syntax error
-    ASSERT_EQ(parser("()()", dummy_env, true, true).ast, AST({ null }));
+    ASSERT_EQ(parser("()()", dummy_env, true, true).ast, AST(1));
     ASSERT_EQ(parser.error_msg.substr(0,6), "Syntax");
     // Numeric parsing error
-    ASSERT_EQ(parser("2x+(3)", dummy_env, true, true).ast, AST({ null }));
+    ASSERT_EQ(parser("2x+(3)", dummy_env, true, true).ast, AST(1));
     ASSERT_EQ(parser.error_msg.substr(0,7), "Numeric");
     // Undefined variable
-    ASSERT_EQ(parser("2*x", dummy_env, true, true).ast, AST({ null }));
+    ASSERT_EQ(parser("2*x", dummy_env, true, true).ast, AST(1));
     ASSERT_EQ(parser.error_msg.substr(0,9), "Undefined");
     {
         Environment env_tmp;

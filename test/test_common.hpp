@@ -88,9 +88,9 @@ struct ThunkManager {
     }
 };
 // AST node shorthands
-ASTNode Ref(uint32_t addr) { return ASTNode(OpCode::ref, addr); }
-ASTNode SumOver(uint32_t addr) { return ASTNode(OpCode::sums, addr); }
-ASTNode ProdOver(uint32_t addr) { return ASTNode(OpCode::prods, addr); }
+ASTNode Ref(uint64_t addr) { return ASTNode(OpCode::ref, addr); }
+ASTNode SumOver(uint64_t addr) { return ASTNode(OpCode::sums, addr); }
+ASTNode ProdOver(uint64_t addr) { return ASTNode(OpCode::prods, addr); }
 }  // namespace
 
 }  // namespace test

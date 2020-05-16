@@ -5,6 +5,7 @@
 
 #ifndef _PLOTTER_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
 #define _PLOTTER_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
+#include <cctype>
 #include <cstddef>
 #include <utility>
 #include <iomanip>
