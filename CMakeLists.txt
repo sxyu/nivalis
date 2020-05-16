@@ -106,22 +106,28 @@ set ( BOOST_ENABLED OFF )
 if ( USE_BOOST_MATH )
     set( Boost_USE_STATIC_LIBS ON )
     set( Boost_USE_STATIC ON )
-    find_package(Boost)
-    if (Boost_FOUND)
+    if ( EMSCRIPTEN )
+        # From port
         set ( _BOOST_ENABLED_ "" )
         set ( BOOST_ENABLED ON )
-        message ( STATUS "Boost math found, enabled" )
-    else()
-        message ( WARNING "Boost math not found, some functions (beta, digamma,...) may not be available" )
-    endif()
-else ()
+    else ( EMSCRIPTEN )
+        find_package(Boost)
+        if (Boost_FOUND)
+            set ( _BOOST_ENABLED_ "" )
+            set ( BOOST_ENABLED ON )
+            message ( STATUS "Boost math found, enabled" )
+        else()
+            message ( WARNING "Boost math not found, some functions (beta, digamma,...) may not be available" )
+        endif()
+    endif( EMSCRIPTEN )
+else ( USE_BOOST_MATH )
     message ( STATUS "Boost math was disabled by user" )
-endif ()
+endif ( USE_BOOST_MATH )
 
 find_package(Threads REQUIRED)
 
 set ( _READLINE_ENABLED_ "//" )
-if (NOT WIN32)
+if ((NOT WIN32) AND (NOT EMSCRIPTEN))
     # Find Readline
     find_package( Readline QUIET )
     if ( READLINE_FOUND )
@@ -133,7 +139,7 @@ endif()
 
 set(_EMSCRIPTEN_ "//")
 if (EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -std=c++17")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s USE_BOOST_HEADERS=1 -std=c++17")
     set(_EMSCRIPTEN_ "")
 else ()
     set (SOURCES ${SOURCES} "../${GLEW_DIR}/glew.c")
@@ -172,7 +178,7 @@ else ()
 
     include_directories(${GLEW_DIR})
 endif (EMSCRIPTEN)
-    
+
 message ( STATUS "Using OpenGL with ImGui as plotter backend" )
 
 configure_file( version.hpp.in "${INCLUDE_DIR}/version.hpp" )
@@ -185,16 +191,16 @@ add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
     -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
     -DBOOST_MATH_ROUNDING_ERROR_POLICY=ignore_error
     -DBOOST_MATH_EVALUATION_ERROR_POLICY=ignore_error
-    ) 
+    )
 if ( MSVC )
     add_definitions(-D_HAS_AUTO_PTR_ETC=1)
 endif ()
 endif ()
 
-add_definitions( -D_USE_MATH_DEFINES ) 
+add_definitions( -D_USE_MATH_DEFINES )
 
 add_library( ${LIB_PROJ_NAME} STATIC ${HEADERS} ${SOURCES} )
-set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME 
+set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME
     ${SHELL_PROJ_NAME} )
 
 foreach(targ ${PROJ_EXECUTABLES})
@@ -203,7 +209,7 @@ foreach(targ ${PROJ_EXECUTABLES})
         ${LIB_PROJ_NAME}
         ${CMAKE_THREAD_LIBS_INIT}
         ${PROJ_DEPENDENCIES} )
-    
+
     if ( MSVC )
         set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
         add_definitions(-D_CRT_SECURE_NO_WARNINGS)
@@ -230,7 +236,7 @@ if ((BUILD_TESTS) AND (NOT EMSCRIPTEN))
 
         set_target_properties( ${targ}
             PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_BINARY_DIR}")
-        
+
         if ( MSVC )
             set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
             add_definitions(-D_CRT_SECURE_NO_WARNINGS)
