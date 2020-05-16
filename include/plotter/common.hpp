@@ -1158,7 +1158,8 @@ public:
     }
 
     void reset_view() {
-        xmax = 10.0; xmin = -10.0;
+        double wid = 10. * swid / shigh * (600./ 1000.);
+        xmax = wid; xmin = -wid;
         ymax = 6.0; ymin = -6.0;
         be.update(true);
         be.focus_background();
