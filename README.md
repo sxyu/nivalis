@@ -1,12 +1,12 @@
 # Nivalis Plotter
 
-A simple expression evaluator + interactive function plotter in C++ supporting implicit functions.
-The evaluator parses expressions into custom bytecode, which is optimized before evaluation, leading to quite good performance.
+A Desmos-like interactive function plotter in C++ supporting implicit functions and real-time critical point/intersection finding.
+Under the hood: features an expression parser, expression (AST) evaluator, symbolic differentiator and expression simplifier, which can be used directly through the shell.
 
 - **Live online demo** using WebAssembly:
 <https://www.ocf.berkeley.edu/~sxyu/plot/>
 
-- **Pre-built binaries** for Windows 10 and Ubuntu 16/18 LTS (x86-64) in 
+- **Pre-built binaries** for Windows 10 and Ubuntu 16/18 LTS (x86-64) in
 <https://github.com/sxyu/nivalis/releases>
 
 ![Screenshot of plotter GUI](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
@@ -69,8 +69,9 @@ The evaluator parses expressions into custom bytecode, which is optimized before
 - Enter expressions to evaluate them
     - Exponentiation is `^`, other operators are standard: `+-*/%`
     - Comparison operators: `<`,`>`,`<=`,`>=`,`==` (or `=`, but can mean assignment statement in shell and equation in plotter)
-    - Some functions available: `sqrt exp ln log10 log2 sin cos tan asin acos atan abs fact gamma digamma polygamma beta`
-    - Piecewise functions aka. conditionals: `{x<0 : x, x>=0 : x^2}` or `{x<0 : x, x^2}` (last case is else by default)
+    - Some functions available: `sqrt exp exp2 ln log10 log2 sin cos tan asin acos atan abs fact gamma digamma polygamma zeta N` where `N(x)` is standard Gaussian pdf
+    - Some integer functions: `gcd lcm choose rifact fafact ifact` (rifact/fafact are rising/falling factorial)
+    - Piecewise functions aka. conditionals: `{<if-pred>:<if-expr>,<elif-pred>:<elif-expr>,...,<else-expr>}` e.g. `{x<0 : x, x>=0 : x^2}` or `{x<0 : x, x^2}` (last case is else by default)
     - Sum/prod special forms: `sum(x:1:10)[<expr>]` and `prod(x:1:10)[<expr>]` (inclusive indexing, upper index can be < lower)
     - Derivative special form: `diff(x)[<expr>]`
 - Define variable: for example, `a = 3+4`, then you can use `a` anywhere. Variables may contain: `0-9a-zA-Z_'` but cannot start with a number, e.g. `x3'` is valid.
