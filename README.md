@@ -95,4 +95,5 @@ The evaluator parses expressions into custom bytecode, which is optimized before
     - Click on slider below to change the variable value
     - E.g. if variable is `a`, you can write `a*x` in some function (in the Function window) and then drag the slider to see the function change smoothly
  
-![Screenshot of New GUI](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot2.png?raw=true)
+![Screenshot of plotter GUI](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
+![Screenshot of plotter GUI's virtual shell](https://github.com/sxyu/nivalis/blob/master/readme_img/shell.png?raw=true)
