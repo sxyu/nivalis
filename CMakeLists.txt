@@ -9,7 +9,7 @@ endif (POLICY CMP0048)
 
 project( nivalis )
 
-set( _VERSION_ "0.0.5a-1 (alpha)" )
+set( _VERSION_ "0.0.5a-2 (alpha)" )
 set( _COPYRIGHT_ "Alex Yu 2020" )
 
 set( CMAKE_CXX_STACK_SIZE "10000000" )
@@ -42,9 +42,14 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 
 set(
     PROJ_EXECUTABLES
-    ${SHELL_PROJ_NAME}
     ${PLOT_GUI_PROJ_NAME}
 )
+if (NOT EMSCRIPTEN)
+    set(
+        PROJ_EXECUTABLES
+        ${PROJ_EXECUTABLES} ${SHELL_PROJ_NAME}
+    )
+endif()
 
 set(
     PROJ_TESTS
@@ -62,8 +67,7 @@ set(
   expr.hpp
   util.hpp
   opcodes.hpp
-  plotter/plot_gui.hpp
-  plotter/internal/plotter.hpp
+  plotter/common.hpp
   shell.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
@@ -80,13 +84,11 @@ set(
   diff_expr.cpp
   shell.cpp
   plotter/common.cpp
-  plotter/opengl_imgui_backend.cpp
   "../${IMGUI_DIR}/imgui.cpp"
   "../${IMGUI_DIR}/imgui_draw.cpp"
   "../${IMGUI_DIR}/imgui_widgets.cpp"
   "../${IMGUI_DIR}/imgui_impl_opengl3.cpp"
   "../${IMGUI_DIR}/imgui_impl_glfw.cpp"
-  "../${GLEW_DIR}/glew.c"
 )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 
@@ -94,6 +96,7 @@ include_directories(
     ${INCLUDE_DIR}
     ${X11_INCLUDE_DIR}
     ${Fontconfig_INCLUDE_DIRS}
+    ${IMGUI_DIR}
 )
 
 set( PROJ_DEPENDENCIES )
@@ -128,40 +131,47 @@ if (NOT WIN32)
     endif()
 endif()
 
-# Finding OpenGL/GLFW
-set ( OPENGL_IMGUI_ENABLED OFF )
-set ( WILL_USE_SYSTEM_GLFW ${USE_SYSTEM_GLFW} )
-add_definitions(-DGLEW_STATIC)
+set(_EMSCRIPTEN_ "//")
+if (EMSCRIPTEN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -std=c++17")
+    set(_EMSCRIPTEN_ "")
+else ()
+    set (SOURCES ${SOURCES} "../${GLEW_DIR}/glew.c")
+    # Finding OpenGL/GLFW
+    set ( OPENGL_IMGUI_ENABLED OFF )
+    set ( WILL_USE_SYSTEM_GLFW ${USE_SYSTEM_GLFW} )
+    add_definitions(-DGLEW_STATIC)
 
-find_package(PkgConfig)
-if ( NOT PkgConfig_FOUND )
-    set ( WILL_USE_SYSTEM_GLFW OFF )
-else()
-    pkg_check_modules(GLFW glfw3)
-    if ( NOT GLFW_FOUND )
+    find_package(PkgConfig)
+    if ( NOT PkgConfig_FOUND )
         set ( WILL_USE_SYSTEM_GLFW OFF )
+    else()
+        pkg_check_modules(GLFW glfw3)
+        if ( NOT GLFW_FOUND )
+            set ( WILL_USE_SYSTEM_GLFW OFF )
+        endif ()
     endif ()
-endif ()
 
-if ( NOT WILL_USE_SYSTEM_GLFW )
-    message ( STATUS "Using included glfw3 (in 3rdparty/)" )
-    add_subdirectory( "${GLFW_DIR}" )
-    set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} glfw)
-    include_directories( "${GLFW_DIR}/include" )
-else()
-    message ( STATUS "Using system glfw3" )
-endif ()
+    if ( NOT WILL_USE_SYSTEM_GLFW )
+        message ( STATUS "Using included glfw3 (in 3rdparty/)" )
+        add_subdirectory( "${GLFW_DIR}" )
+        set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} glfw)
+        include_directories( "${GLFW_DIR}/include" )
+    else()
+        message ( STATUS "Using system glfw3" )
+    endif ()
 
-find_package(OpenGL REQUIRED)
+    find_package(OpenGL REQUIRED)
 
-set ( OPENGL_IMGUI_ENABLED ON )
-set( PROJ_DEPENDENCIES
-    OpenGL::GL
-    ${PROJ_DEPENDENCIES}
-    ${GLFW_STATIC_LIBRARIES}
-)
+    set ( OPENGL_IMGUI_ENABLED ON )
+    set( PROJ_DEPENDENCIES
+        OpenGL::GL
+        ${PROJ_DEPENDENCIES}
+        ${GLFW_STATIC_LIBRARIES}
+    )
 
-include_directories(${GLEW_DIR} ${IMGUI_DIR})
+    include_directories(${GLEW_DIR})
+endif (EMSCRIPTEN)
     
 message ( STATUS "Using OpenGL with ImGui as plotter backend" )
 
@@ -201,11 +211,13 @@ foreach(targ ${PROJ_EXECUTABLES})
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
     endif ( MSVC )
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        target_link_libraries( ${targ} stdc++fs )
+        if (NOT EMSCRIPTEN)
+            target_link_libraries( ${targ} stdc++fs )
+        endif()
     endif ()
 endforeach()
 
-if (BUILD_TESTS)
+if ((BUILD_TESTS) AND (NOT EMSCRIPTEN))
     include_directories( ${TEST_DIR})
     enable_testing()
     set(TEST_BINARY_DIR "${CMAKE_BINARY_DIR}/test")
@@ -234,7 +246,7 @@ if (BUILD_TESTS)
     message ( STATUS "Will build tests; 'make test' after build to use. -DBUILD_TESTS=OFF to disable" )
 else ()
     message ( STATUS "NOT building tests" )
-endif (BUILD_TESTS)
+endif ((BUILD_TESTS) AND (NOT EMSCRIPTEN))
 
 
 install(TARGETS ${PROJ_EXECUTABLES} DESTINATION bin)

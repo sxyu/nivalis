@@ -4,7 +4,6 @@
 #include <iostream>
 #include <cstring>
 #include <cmath>
-#include <boost/math/constants/constants.hpp>
 #include "env.hpp"
 #include "util.hpp"
 #include "opcodes.hpp"

@@ -65,8 +65,10 @@ double eval_ast(Environment& env, const Expr::AST& ast,
     // Make sure there is enough space
     stk.resize(top + ast.size() + 1);
 
+#ifdef ENABLE_NIVALIS_BOOST_MATH
     using namespace boost;
     using namespace boost::math;
+#endif
     using namespace nivalis::OpCode;
 
     bool _is_thunk_ret = false;
@@ -194,7 +196,7 @@ double eval_ast(Environment& env, const Expr::AST& ast,
                              double ad = std::round(ARG1);
                              double bd = std::round(ARG2);
                              if (ad < 0 || bd < 0) {
-                                 ret = std::numeric_limits<double>::quiet_NaN(); break;
+                                 ARG2 = std::numeric_limits<double>::quiet_NaN(); --top; break;
                              }
                              size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
                              b = std::min(b, a-b);
@@ -205,7 +207,7 @@ double eval_ast(Environment& env, const Expr::AST& ast,
                              double ad = std::round(ARG1);
                              double bd = std::round(ARG2);
                              if (ad < 0 || bd < 0) {
-                                 ret = std::numeric_limits<double>::quiet_NaN(); break;
+                                 ARG2 = std::numeric_limits<double>::quiet_NaN(); --top; break;
                              }
                              size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
                              ARG2 = fa_fact(a, a-b);
@@ -215,14 +217,14 @@ double eval_ast(Environment& env, const Expr::AST& ast,
                              double ad = std::round(ARG1);
                              double bd = std::round(ARG2);
                              if (ad < 0 || bd < 0) {
-                                 ret = std::numeric_limits<double>::quiet_NaN(); break;
+                                 ARG2 = std::numeric_limits<double>::quiet_NaN(); --top; break;
                              }
                              size_t a = static_cast<size_t>(ad), b = static_cast<size_t>(bd);
                              ARG2 = fa_fact(a+b-1, a-1);
                              --top; break;
                          }
             case betab: case polygammab:
-                ARG1 = NONE; print_boost_warning(opcode); break;
+                ARG1 = NONE; print_boost_warning(node.opcode); break;
 #endif
             case lt: ARG2 = static_cast<double>(ARG1 < ARG2); --top; break;
             case le: ARG2 = static_cast<double>(ARG1 <= ARG2); --top; break;
@@ -268,7 +270,7 @@ double eval_ast(Environment& env, const Expr::AST& ast,
 #else
            // The following functions are unavailable without Boost
             case digammab: case trigammab: case zetab:
-                ARG1 = NONE; print_boost_warning(opcode); break;
+                ARG1 = NONE; print_boost_warning(node.opcode); break;
 #endif
             case erfb: ARG1 = erf(ARG1); break; break;
         }

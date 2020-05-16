@@ -1,4 +1,4 @@
-#include "plotter/internal/plotter.hpp"
+#include "plotter/common.hpp"
 namespace nivalis {
 namespace color {
 color::color() = default;
