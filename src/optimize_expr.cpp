@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 #include "env.hpp"
 #include "util.hpp"
 #include "opcodes.hpp"
