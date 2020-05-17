@@ -969,6 +969,20 @@ static inline const char *emscripten_event_type_to_string(int eventType) {
 }  // namespace
 }  // namespace nivalis
 extern "C" {
+int emscripten_keypress(int k, int delv) {
+    if (delv == 0) {
+        ImGui::GetIO().AddInputCharacter(k);
+    } else if (delv == 1) {
+        ImGui::GetIO().KeysDown[
+            ImGui::GetIO().KeyMap[ImGuiKey_Backspace]] = k;
+
+    } else if (delv == 2) {
+        ImGui::GetIO().KeysDown[
+            ImGui::GetIO().KeyMap[ImGuiKey_Delete]] = k;
+    }
+    return 0;
+}
+
 #endif
 
 int main(int argc, char ** argv) {
@@ -983,5 +997,5 @@ int main(int argc, char ** argv) {
     return 0;
 }
 #ifdef NIVALIS_EMSCRIPTEN
-}  // extern "C"
+}
 #endif

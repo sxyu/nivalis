@@ -1,4 +1,6 @@
 // Emscripten GLFW monkey patch
+// - removed undesired fullscreen request on resize
+// - fixed touch mouse events and implements pinch-to-scroll
 GLFW.setWindowSize = function(winid, width, height) {
     var win = GLFW.WindowFromId(winid);
     if (!win) return;
@@ -99,8 +101,10 @@ Browser.calculateMouseEvent = function(event) {
         var rect = Module["canvas"].getBoundingClientRect();
         var cw = Module["canvas"].width;
         var ch = Module["canvas"].height;
-        var scrollX = typeof window.scrollX !== "undefined" ? window.scrollX : window.pageXOffset;
-        var scrollY = typeof window.scrollY !== "undefined" ? window.scrollY : window.pageYOffset;
+        var scrollX = typeof window.scrollX !== "undefined" ?
+            window.scrollX : window.pageXOffset;
+        var scrollY = typeof window.scrollY !== "undefined" ?
+            window.scrollY : window.pageYOffset;
         if (event.type === "touchstart" ||
             event.type === "touchend" || event.type === "touchmove") {
             var touches = event.touches;
@@ -114,7 +118,8 @@ Browser.calculateMouseEvent = function(event) {
                 PinchZoomState.ntouches = touches.length;
             }
 
-            if (touches.length === 2 && PinchZoomState.ntouches === 2) {
+            if (touches.length === 2) {
+                // Pinch to zoom
                 var touch1 = touches[0],
                     touch2 = touches[1];
                 if (PinchZoomState.focus_first) {
@@ -138,13 +143,11 @@ Browser.calculateMouseEvent = function(event) {
                 if (event.type === "touchstart"){
                     PinchZoomState.dist = dist;
                 } else {
-                    if (Math.abs(dist - PinchZoomState.dist) > 5.) {
-                        PinchZoomState.deltaY =
-                            PinchZoomState.delta =
-                            (PinchZoomState.dist - dist) * 1.5;
-                        PinchZoomState.dist = dist;
-                        GLFW.onMouseWheel(PinchZoomState);
-                    }
+                    PinchZoomState.deltaY =
+                        PinchZoomState.delta =
+                        (PinchZoomState.dist - dist) * 1.5;
+                    PinchZoomState.dist = dist;
+                    GLFW.onMouseWheel(PinchZoomState);
                 }
             } else {
                 var touch = touches[0];

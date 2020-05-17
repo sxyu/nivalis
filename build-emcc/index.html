@@ -20,9 +20,15 @@
       a#branding { position: fixed; bottom:5px; right: 7px }
       a { text-decoration: none; font-family: monospace; user-select: none }
       a#branding > ion-icon { position:relative; top: 1px }
+      #text-input {
+          position: absolute; left: 0; top: -100px; height:0; width:0;
+              opacity: 0 
+       }
     </style>
   </head>
   <body>
+    <input type="text" id="text-input" autocapitalize="none"/>
+
     <div class="emscripten_border">
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
     </div>
@@ -32,6 +38,9 @@
     </a>
 
     <script type='text/javascript'>
+      var c_keypress = null;
+        var is_mobile = ( /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+
       var Module = {
         preRun: [],
         postRun: [],
@@ -46,6 +55,21 @@
         setStatus: function(text) {},
         totalDependencies: 0,
         monitorRunDependencies: function(left) {},
+        onRuntimeInitialized: function() {
+            c_keypress = Module.cwrap('emscripten_keypress', 'number', ['number', 'number']);
+
+            var text_input = document.getElementById("text-input"); 
+            if (is_mobile) {
+                text_input.addEventListener(
+                    "input", function(e){
+                        console.log("input " + e.target.value + "\n");
+                        c_keypress(e.target.value[0].charCodeAt(0), 0);
+                        console.log(e.target.value[0]);
+                        e.target.value = "";
+                    });
+                text_input.focus();
+            }
+        },
       };
       window.addEventListener('resize', js_resizeCanvas, false);
       function js_resizeCanvas() {
@@ -68,10 +92,13 @@
           if(e.ctrlKey)
               event.preventDefault();//prevent zoom
       });
-      document.body.addEventListener("mouseu", e=>{
-          var text_input = document.getElementById("text-input"); 
-          text_input.focus();
-      }, true);
+      if (is_mobile) {
+          document.body.addEventListener("click", e=>{
+              var text_input = document.getElementById("text-input"); 
+              text_input.focus();
+              text_input.click();
+          }, true);
+      }
     </script>
     <script type="text/javascript" src="nivplot.js"></script>
     <script type="text/javascript" src="glfw-patch.js"></script>
