@@ -1174,7 +1174,7 @@ public:
             case 37: case 39: case 262: case 263:
                     // LR Arrow
                 {
-                    auto delta = (xmax - xmin) * 0.02;
+                    auto delta = (xmax - xmin) * 0.003;
                     if (key == 37 || key == 263) delta = -delta;
                     xmin += delta; xmax += delta;
                 }
@@ -1183,7 +1183,7 @@ public:
             case 38: case 40: case 264: case 265:
                 {
                     // UD Arrow
-                    auto delta = (ymax - ymin) * 0.02;
+                    auto delta = (ymax - ymin) * 0.003;
                     if (key == 40 || key == 264) delta = -delta;
                     ymin += delta; ymax += delta;
                 }
@@ -1193,7 +1193,7 @@ public:
             case 187: case 189:
                 // Zooming +-
                 {
-                    auto fa = (key == 45 || key == 189) ? 1.05 : 0.95;
+                    auto fa = (key == 45 || key == 189) ? 1.013 : 0.987;
                     auto dy = (ymax - ymin) * (fa - 1.) /2;
                     auto dx = (xmax - xmin) * (fa - 1.) /2;
                     if (ctrl) dy = 0.; // x-only
@@ -1263,7 +1263,7 @@ public:
         }
     }
 
-    void handle_mouse_up(int width, int height) {
+    void handle_mouse_up(int px, int py) {
         // Stop dragging
         draglabel = dragdown = false;
         be.hide_marker();
@@ -1271,7 +1271,7 @@ public:
 
     void handle_mouse_wheel(bool upwards, int distance, int px, int py) {
         dragdown = false;
-        constexpr double multiplier = 0.01;
+        constexpr double multiplier = 0.006;
         double scaling;
         if (upwards) {
             scaling = exp(-log(distance) * multiplier);

@@ -20,6 +20,7 @@
 
 #ifdef NIVALIS_EMSCRIPTEN
 #include <emscripten.h>
+#include <emscripten/html5.h>
 #include <GLES3/gl3.h>
 #define GLFW_INCLUDE_ES3
 
@@ -50,6 +51,9 @@ EM_JS(void, resizeCanvas, (), {
 namespace nivalis {
 namespace {
 
+#ifdef NIVALIS_EMSCRIPTEN
+    double touch_x = -1, touch_y;
+#endif
 // Add scaled default font (Dear ImGui)
 ImFont* AddDefaultFont(float pixel_size) {
     ImGuiIO &io = ImGui::GetIO();
@@ -228,97 +232,14 @@ struct OpenGLPlotBackend {
 
             // Set pointer to this to pass to callbacks
             glfwSetWindowUserPointer(window, this);
-            // glfw io callbacks
-            imgui_key_callback = glfwSetKeyCallback(
-                        window, [](GLFWwindow* window,
-                        int key, int scancode, int action, int mods){
-                    OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
-                        glfwGetWindowUserPointer(window));
-                    be->make_active();
-                    ImGuiIO* io = be->imgui_io;
-                    be->imgui_key_callback(window, key, scancode,
-                            action, mods);
-                    // Prevent ImGui events from coming here
-                    GLPlotter& plot = be->plot;
-                    if (io->WantCaptureKeyboard) {
-                        return;
-                    }
-                    if (action == GLFW_REPEAT || action == GLFW_PRESS) {
-                        plot.handle_key(key, mods & GLFW_MOD_CONTROL,
-                                mods & GLFW_MOD_ALT);
-                    }
-            });
+            // ImplGlfw callbacks
+            // glfwSetMouseButtonCallback(window, ImGui_ImplGlfw_MouseButtonCallback);
+            // glfwSetScrollCallback(window, ImGui_ImplGlfw_ScrollCallback);
+            // glfwSetKeyCallback(window, ImGui_ImplGlfw_KeyCallback);
+            // glfwSetCharCallback(window, ImGui_ImplGlfw_CharCallback);
 
-            glfwSetCursorPosCallback(window, [](GLFWwindow* window,
-                        double xpos, double ypos) {
-                    OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
-                        glfwGetWindowUserPointer(window));
-                    ImGuiIO* io = be->imgui_io;
-                    // Prevent ImGui events from coming here
-                    if (io->WantCaptureMouse) return;
-                    GLPlotter& plot = be->plot;
-                    plot.handle_mouse_move(static_cast<int>(xpos), static_cast<int>(ypos));
-            });
-
-            imgui_mousebutton_callback =
-                glfwSetMouseButtonCallback(window, [](GLFWwindow* window,
-                        int button, int action, int mods){
-                    OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
-                        glfwGetWindowUserPointer(window));
-                    be->make_active();
-                    ImGuiIO* io = be->imgui_io;
-                    GLPlotter& plot = be->plot;
-                    double xpos, ypos;
-                    glfwGetCursorPos(window, &xpos, &ypos);
-                    be->imgui_mousebutton_callback(window, button, action, mods);
-                    int xposi = static_cast<int>(xpos);
-                    int yposi = static_cast<int>(ypos);
-                    if (action == GLFW_PRESS) {
-                        // Prevent ImGui events from coming here
-                        if (io->WantCaptureMouse) return;
-                        plot.handle_mouse_down(xposi, yposi);
-                    } else { //if (action == GLFW_RELEASE)
-                        plot.handle_mouse_up(xposi, yposi);
-                    }
-            });
-
-            glfwSetCursorEnterCallback(window, [](GLFWwindow* window,
-                        int entered) {
-                if (!entered) {
-                    OpenGLPlotBackend* be = reinterpret_cast<OpenGLPlotBackend*>(
-                    glfwGetWindowUserPointer(window));
-                    GLPlotter& plot = be->plot;
-                    plot.handle_mouse_up(0, 0);
-                }
-            });
-
-            imgui_scroll_callback =
-                glfwSetScrollCallback(window, [](GLFWwindow* window,
-                        double xoffset, double yoffset) {
-                    OpenGLPlotBackend* be =
-                        reinterpret_cast<OpenGLPlotBackend*>(
-                            glfwGetWindowUserPointer(window));
-                    be->make_active();
-                    GLPlotter& plot = be->plot;
-                    ImGuiIO* io = be->imgui_io;
-                    be->imgui_scroll_callback(window, xoffset, yoffset);
-                    if (io->WantCaptureMouse) return;
-
-                    double xpos, ypos;
-                    glfwGetCursorPos(window, &xpos, &ypos);
-                    plot.handle_mouse_wheel(
-#ifdef NIVALIS_EMSCRIPTEN
-                            // Scroll is reversed for some reason
-                            yoffset < 0,
-#else
-                            yoffset > 0,
-#endif
-                            static_cast<int>(std::fabs(yoffset) * 120),
-                            static_cast<int>(xpos),
-                            static_cast<int>(ypos));
-            });
 #ifndef NIVALIS_EMSCRIPTEN
-            // Main GLFW loop
+            // Main GLFW loop (desktop)
             while (!glfwWindowShouldClose(window)) {
                 main_loop_step();
             } // Main loop
@@ -331,6 +252,7 @@ struct OpenGLPlotBackend {
         ImGui::DestroyContext();
     }
 
+    // Run single step of main loop
     void main_loop_step() {
         static ImFont *font_sm = AddDefaultFont(12);
         static ImFont *font_md = AddDefaultFont(14);
@@ -604,13 +526,15 @@ struct OpenGLPlotBackend {
                         pos.y));
         }
         ImGui::PushItemWidth(60.);
-        ImGui::InputDouble(" <x<", &plot.xmin); ImGui::SameLine();
+        if (ImGui::InputDouble(" <x<", &plot.xmin)) { update(); }
+        ImGui::SameLine();
         ImGui::PushItemWidth(60.);
-        ImGui::InputDouble("##xmax", &plot.xmax);
+        if(ImGui::InputDouble("##xmax", &plot.xmax)) { update(); }
         ImGui::PushItemWidth(60.);
-        ImGui::InputDouble(" <y<", &plot.ymin); ImGui::SameLine();
+        if (ImGui::InputDouble(" <y<", &plot.ymin)) { update(); }
+        ImGui::SameLine();
         ImGui::PushItemWidth(60.);
-        ImGui::InputDouble("##ymax", &plot.ymax);
+        if(ImGui::InputDouble("##ymax", &plot.ymax)) { update(); }
         if (ImGui::Button("Reset view")) plot.reset_view();
         ImGui::End(); // View
 
@@ -644,7 +568,9 @@ struct OpenGLPlotBackend {
             }
             ImGui::EndPopup();
         }
-        ImGui::SetNextWindowSize(ImVec2(600, 400));
+
+        ImGui::SetNextWindowSize(ImVec2(std::min(600, plot.swid),
+                    std::min(400, plot.shigh)));
         if (ImGui::BeginPopupModal("Reference", &open_reference,
                     ImGuiWindowFlags_NoResize)) {
             // Reference popup
@@ -776,13 +702,13 @@ struct OpenGLPlotBackend {
                         if (data->EventKey == ImGuiKey_UpArrow)
                         {
                         if (be->shell_hist_pos == -1)
-                        be->shell_hist_pos = be->shell_hist.size() - 1;
-                        else if (be->shell_hist_pos > 0)
-                        be->shell_hist_pos--;
+                            be->shell_hist_pos = be->shell_hist.size() - 1;
+                            else if (be->shell_hist_pos > 0)
+                            be->shell_hist_pos--;
                         } else if (data->EventKey == ImGuiKey_DownArrow) {
-                        if (~be->shell_hist_pos)
-                        if (++be->shell_hist_pos >= be->shell_hist.size())
-                        be->shell_hist_pos = -1;
+                            if (~be->shell_hist_pos)
+                            if (++be->shell_hist_pos >= be->shell_hist.size())
+                            be->shell_hist_pos = -1;
                         }
                         if (prev_history_pos != be->shell_hist_pos) {
                             data->DeleteChars(0, data->BufTextLen);
@@ -816,6 +742,39 @@ struct OpenGLPlotBackend {
         }
         draw_list->AddText(ImVec2(10, plot.shigh - 20), ImColor(0,0,0), frame_rate_buf);
 #endif
+
+        // * Handle IO events
+        ImGuiIO &io = ImGui::GetIO();
+        if (!io.WantCaptureMouse) {
+            int mouse_x = static_cast<int>(io.MousePos[0]);
+            int mouse_y = static_cast<int>(io.MousePos[1]);
+            if (io.MouseDown[0]) {
+                plot.handle_mouse_down(mouse_x, mouse_y);
+            }
+            if (io.MouseReleased[0]) {
+                plot.handle_mouse_up(mouse_x, mouse_y);
+            }
+            if (mouse_x != mouse_prev_x || mouse_y != mouse_prev_y) {
+                plot.handle_mouse_move(mouse_x, mouse_y);
+            }
+            if (io.MouseWheel) {
+                plot.handle_mouse_wheel(
+                    io.MouseWheel > 0,
+                    static_cast<int>(std::fabs(io.MouseWheel) * 120),
+                    mouse_x, mouse_y);
+            }
+            mouse_prev_x = mouse_x;
+            mouse_prev_y = mouse_y;
+        }
+
+        if (!io.WantCaptureKeyboard) {
+            for (size_t i = 0; i < IM_ARRAYSIZE(io.KeysDown); ++i) {
+                if (ImGui::IsKeyDown(i)) {
+                    plot.handle_key(i,
+                            io.KeyCtrl, io.KeyAlt);
+                }
+            }
+        }
 
         // Render dear imgui into screen
         ImGui::Render();
@@ -899,7 +858,6 @@ struct OpenGLPlotBackend {
         active_counter = ACTIVE_FRAMES;
     }
 
-private:
     bool init_gl() {
         /* Initialize the library */
         if (!glfwInit()) return false;
@@ -930,10 +888,6 @@ private:
         return true;
     }
     GLFWwindow* window;
-
-    GLFWkeyfun imgui_key_callback;
-    GLFWmousebuttonfun imgui_mousebutton_callback;
-    GLFWscrollfun imgui_scroll_callback;
 
     ImGuiIO* imgui_io;
 
@@ -991,6 +945,7 @@ private:
     bool open_color_picker = false,
          open_reference = false,
          open_shell = false;
+    int mouse_prev_x = -1, mouse_prev_y = -1;
 };
 
 // Need to use global state since
@@ -1001,20 +956,32 @@ void emscripten_loop() {
     // Wrap loop
     primary_backend_ptr->main_loop_step();
 }
-#endif
+static inline const char *emscripten_event_type_to_string(int eventType) {
+    const char *events[] = { "(invalid)", "(none)", "keypress", "keydown", "keyup", "click", "mousedown", "mouseup", "dblclick", "mousemove", "wheel", "resize",
+        "scroll", "blur", "focus", "focusin", "focusout", "deviceorientation", "devicemotion", "orientationchange", "fullscreenchange", "pointerlockchange",
+        "visibilitychange", "touchstart", "touchend", "touchmove", "touchcancel", "gamepadconnected", "gamepaddisconnected", "beforeunload",
+        "batterychargingchange", "batterylevelchange", "webglcontextlost", "webglcontextrestored", "mouseenter", "mouseleave", "mouseover", "mouseout", "(invalid)" };
+    ++eventType;
+    if (eventType < 0) eventType = 0;
+    if (eventType >= sizeof(events)/sizeof(events[0])) eventType = sizeof(events)/sizeof(events[0])-1;
+    return events[eventType];
+}
 }  // namespace
 }  // namespace nivalis
-
-#ifdef NIVALIS_EMSCRIPTEN
-extern "C"
+extern "C" {
 #endif
+
 int main(int argc, char ** argv) {
     using namespace nivalis;
     Environment env;
     OpenGLPlotBackend backend(env, "");
 #ifdef NIVALIS_EMSCRIPTEN
+    // Set handlers and start emscripten main loop
     primary_backend_ptr = &backend;
     emscripten_set_main_loop(emscripten_loop, 0, 1);
 #endif
     return 0;
 }
+#ifdef NIVALIS_EMSCRIPTEN
+}  // extern "C"
+#endif
