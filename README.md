@@ -53,7 +53,7 @@ Under the hood: features an expression parser, expression (AST) evaluator, symbo
     - `cd build-emcc && emcmake cmake ..`
 - Build: `make -j8`
 - Host `build-emcc/` on a server and open index in a browser.
-  - Using Python 3: in build-emcc/, run: `python3 -http.server` then run `firefox localhost:8000`
+  - Using Python 3: in build-emcc/, run: `python3 -m http.server` then run `firefox localhost:8000`
 - To deploy, simply upload `index.html`, `nivplot.js`, `nivplot.wasm`
 
 ### Testing
@@ -73,12 +73,12 @@ Under the hood: features an expression parser, expression (AST) evaluator, symbo
     - Some integer functions: `gcd lcm choose rifact fafact ifact` (rifact/fafact are rising/falling factorial)
     - Piecewise functions aka. conditionals: `{<if-pred>:<if-expr>,<elif-pred>:<elif-expr>,...,<else-expr>}` e.g. `{x<0 : x, x>=0 : x^2}` or `{x<0 : x, x^2}` (last case is else by default)
     - Sum/prod special forms: `sum(x:1:10)[<expr>]` and `prod(x:1:10)[<expr>]` (inclusive indexing, upper index can be < lower)
-    - Derivative special form: `diff(x)[<expr>]`
+    - Derivative special form: `diff(<var>)[<expr>]` takes the derivative of `<expr>` wrt `<var>` and evaluates it at current value of `<var>`. E.g. `diff(x)[sin(x)]` 
 - Define variable: for example, `a = 3+4`, then you can use `a` anywhere. Variables may contain: `0-9a-zA-Z_'` but cannot start with a number, e.g. `x3'` is valid.
     - Operator assignment: `a+=3`, `a*=3`, etc., as in usual languages
 - Define custom function: `<name>(<args>) = <expr>` e.g. `sec(x) = 1/cos(x)` or `f(x,y,z) = x+y+z`
 - Symbolic operations
-    - Differentiate a function: `diff <var> <expr>` e.g. `diff x sin(x)*cos(2*x)`
+    - Differentiate a function: `diff <var> <expr>` e.g. `diff x sin(x)*cos(2*x)`; outputs the derivative expression
     - Simplify expression (not super reliable): `opt <expr>` e.g. `opt (1+x)^2 + 2*(x+1)^2`, `opt exp(x)*exp(2*x)`
 
 ### Plotter GUI
@@ -89,14 +89,14 @@ Under the hood: features an expression parser, expression (AST) evaluator, symbo
     - Mouse over a marked point (minimum/maximum/intersection etc) to see label+coordinates
     - Click any point on an explicit function to see the x-value and function value
 - Function window (editor)
-    - `Ctrl`+`E` to edit function expressions (or click the textbox)
+    - `E` to edit function expressions (or click the textbox)
         - Function expressions can be:
             - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`. Syntax is same as in shel
             - Implicit function (less detail, no subpixel render):
               e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
-            - *Polylines*: draws a series of points and lines e.g. (1,1) e.g. (1,1) (2,2) (3,2)
-                - If size 1, like (a,b), it draws a single
-                - If size >1, like (a,b)(c,d), draws all points and connects them in order
+            - *Polylines*: draws a series of points and lines e.g. `(5,1)`, or `(1,1) (2,2) (a,b)`
+                - If size 1, e.g. `(a,b)`, it draws a single point
+                - If size >1, e.g. `(a,b)(c,d)`, draws all points and connects them in order
         - Updates plot automatically
     - Click `+ New function` to add a function. Click textbox to highlight functions. Alternatively, use `Up`/`Down` arrow keys in textbox to switch between functions or add a new one (by going beyond the bottomost existing function)
     - Click the x button to delete the current function
