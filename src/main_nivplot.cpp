@@ -6,7 +6,6 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
-#include <algorithm>
 #include <cmath>
 #include <cctype>
 #include <utility>

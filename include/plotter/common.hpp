@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <utility>
 #include <iomanip>
-#include <iostream>
 #include <cmath>
 #include <string>
 #include <sstream>
@@ -18,10 +17,17 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <atomic>
 #include "expr.hpp"
 #include "parser.hpp"
 #include "color.hpp"
 #include "util.hpp"
+
+#include <chrono>
+#define BEGIN_PROFILE auto start = std::chrono::high_resolution_clock::now()
+#define PROFILE(x) do{printf("%s: %f ns\n", #x, std::chrono::duration<double, std::nano>(std::chrono::high_resolution_clock::now() - start).count()); start = std::chrono::high_resolution_clock::now(); }while(false)
 
 namespace nivalis {
 namespace util {
@@ -53,9 +59,6 @@ struct Function {
         FUNC_TYPE_IMPLICIT, // implicit func like abs(x)=abs(y)
         FUNC_TYPE_POLYLINE,  // poly-lines (x,y) (x',y') (x'',y'')...
     } type;
-    // Store x-positions of currently visible roots and extrema
-    // does not include y-int (0)
-    std::vector<double> roots_and_extrema;
     // Stores line points, if polyline-type
     std::vector<Expr> polyline;
 };
@@ -111,6 +114,7 @@ struct SliderData {
 * */
 class Plotter {
 public:
+    const unsigned NUM_THREADS = std::thread::hardware_concurrency();
     // Construct a Plotter.
     // expr_env: environment to store variables/evaluate function expressions in
     // init_expr: initial expression for first function (which is automatically added)
@@ -191,8 +195,8 @@ public:
             float syi = static_cast<float>(shigh * (ymax - ymb) / (ymax - ymin));
             graph.line(0, syi, swid, syi, color::GRAY);
 
-            std::stringstream sstm;
             if (ymb != 0) {
+                std::stringstream sstm;
                 sstm << std::setprecision(4) << ymb;
                 graph.string(sx0+5, syi-6, sstm.str(), color::BLACK);
             }
@@ -320,14 +324,9 @@ public:
                         // Implicit function
                         // Coarse interval
                         static const int COARSE_INTERVAL = 6;
-                        // Fine interval (variable)
-                        int fine_interval = 1;
 
-                        // Number of pixels drawn, used to increase fine interval
-                        size_t pix_cnt = 0;
                         // Function values in above line
                         std::vector<double> coarse_line(swid + 2);
-                        std::vector<double> line(swid + 2);
 
                         // 'Interesting' squares from above line/to left
                         // When a square is painted, need to paint neighbor
@@ -335,8 +334,10 @@ public:
                         // right (if changes sign above) as well
                         std::vector<bool> coarse_below_interesting(swid + 2);
                         bool coarse_right_interesting = false;
-                        std::vector<bool> fine_paint_below(swid + 2);
-                        bool fine_paint_right;
+
+                        // Interesting squares
+                        using Square = std::tuple<int, int, int, int, double>;
+                        std::vector<Square> interest_squares;
 
                         // Increase interval per x pixels
                         static const size_t HIGH_PIX_LIMIT = 75000;
@@ -345,179 +346,214 @@ public:
                         // Epsilon for bisection
                         static const double BISECTION_EPS = 1e-4;
 
-                        auto paint_square_fine = [&](int ylo, int yhi, int xlo, int xhi,
-                                        double z_at_xy_hi) {
-                            std::fill(fine_paint_below.begin() + xlo,
-                                    fine_paint_below.begin() + (xhi + 1), false);
-                            for (int sy = ylo; sy <= yhi; sy += fine_interval) {
-                                fine_paint_right = false;
-                                if (pix_cnt > MAX_PIXELS) break;
-                                const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
-                                for (int sx = xlo; sx <= xhi; sx += fine_interval) {
-                                    // Update interval based on point count
-                                    if (pix_cnt > MAX_PIXELS) break;
-                                    fine_interval = std::min(static_cast<int>(pix_cnt /
-                                            HIGH_PIX_LIMIT) + 1, COARSE_INTERVAL);
-
-                                    const double x = 1.*sx / swid * xdiff + xmin;
-                                    double precise_x = x, precise_y = y;
-
-                                    double z;
-                                    if (sy == yhi && sx == xhi) {
-                                        z = z_at_xy_hi;
-                                    } else {
-                                        env.vars[y_var] = y;
-                                        env.vars[x_var] = x;
-                                        z = expr(env);
-                                    }
-                                    if (sy > ylo && sx > xlo) {
-                                        int sgn_z = (z < 0 ? -1 : z == 0 ? 0 : 1);
-                                        bool paint_square = false;
-                                        bool paint_from_left = fine_paint_right;
-                                        bool paint_from_above = fine_paint_below[sx];
-                                        fine_paint_right = fine_paint_below[sx] = false;
-                                        double zup = line[sx];
-                                        int sgn_zup = (zup < 0 ? -1 : zup == 0 ? 0 : 1);
-                                        if (sgn_zup * sgn_z <= 0) {
-                                            // Bisect up
-                                            env.vars[x_var] = x;
-                                            double lo = y;
-                                            double hi = (shigh - (sy - fine_interval))*1. / shigh * ydiff + ymin;
-                                            while (hi - lo > BISECTION_EPS) {
-                                                double mi = (lo + hi) / 2;
-                                                env.vars[y_var] = mi;
-                                                double zmi = expr(env);
-                                                int sgn_zmi = (zmi < 0 ? -1 : 1);
-                                                if (sgn_z == sgn_zmi) lo = mi;
-                                                else hi = mi;
-                                            }
-                                            precise_y = lo;
-                                            paint_square = fine_paint_right = true;
-                                        }
-                                        double zleft = line[sx - fine_interval];
-                                        int sgn_zleft = (zleft < 0 ? -1 : zleft == 0 ? 0 : 1);
-                                        if (sgn_zleft * sgn_z <= 0) {
-                                            if (!paint_square) {
-                                                // Bisect left
-                                                env.vars[y_var] = y;
-                                                double lo = 1.*(sx - fine_interval) / swid * xdiff + xmin;
-                                                double hi = x;
-                                                while (hi - lo > BISECTION_EPS) {
-                                                    double mi = (lo + hi) / 2;
-                                                    env.vars[x_var] = mi;
-                                                    double zmi = expr(env);
-                                                    int sgn_zmi = (zmi < 0 ? -1 : 1);
-                                                    if (sgn_zleft == sgn_zmi) lo = mi;
-                                                    else hi = mi;
-                                                }
-                                                precise_x = lo;
-                                            }
-                                            paint_square = fine_paint_below[sx] = true;
-                                        }
-                                        if (paint_square || paint_from_left || paint_from_above) {
-                                            int pad = (curr_func == exprid) ? 1 : 0;
-                                            float precise_sy =
-                                                static_cast<float>(
-                                                        (ymax - y) / ydiff * shigh);
-                                            float precise_sx = static_cast<float>(
-                                                    (x - xmin) / xdiff * swid);
-                                            graph.rectangle(
-                                                    sx + (float)(- fine_interval + 1 - pad),
-                                                    sy + (float)(- fine_interval + 1 - pad),
-                                                    (float)(fine_interval + pad),
-                                                    (float)(fine_interval + pad),
-                                                    true,
-                                                    func_color);
-                                            // Add labels
-                                            size_t new_marker_idx = pt_markers.size();
-                                            PointMarker new_marker;
-                                            new_marker.x = precise_x; new_marker.y = precise_y;
-                                            new_marker.rel_func = exprid;
-                                            new_marker.label = PointMarker::LABEL_NONE;
-                                            new_marker.passive = true;
-                                            pt_markers.push_back(std::move(new_marker));
-                                            int cmin = std::max(sx - fine_interval + 1 - MARKER_MOUSE_RADIUS, 0);
-                                            int cmax = std::min(sx + MARKER_MOUSE_RADIUS, swid - 1);
-                                            if (cmin <= cmax) {
-                                                for (int r = std::max(sy - fine_interval + 1 - MARKER_MOUSE_RADIUS, 0);
-                                                        r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh - 1); ++ r) {
-                                                    std::fill(grid.begin() + (r * swid + cmin),
-                                                            grid.begin() + (r * swid + cmax + 1),
-                                                            new_marker_idx);
-                                                }
-                                            }
-                                            ++pix_cnt;
-                                        }
-                                    }
-                                    line[sx] = z;
-                                }
-                            }
-                        };
-
-                        for (int coarse_sy = 0; coarse_sy < shigh + COARSE_INTERVAL - 1; coarse_sy += COARSE_INTERVAL) {
+                        for (int csy = 0; csy < shigh + COARSE_INTERVAL - 1; csy += COARSE_INTERVAL) {
                             int coarse_int_y = COARSE_INTERVAL;
-                            if (coarse_sy >= shigh) {
-                                coarse_sy = shigh - 1;
+                            if (csy >= shigh) {
+                                csy = shigh - 1;
                                 coarse_int_y = (shigh-1) % COARSE_INTERVAL;
                                 if (coarse_int_y == 0) break;
                             }
-                            const double coarse_y = (shigh - coarse_sy)*1. / shigh * ydiff + ymin;
+                            const double cy = (shigh - csy)*1. / shigh * ydiff + ymin;
                             coarse_right_interesting = false;
-                            for (int coarse_sx = 0; coarse_sx < swid + COARSE_INTERVAL - 1; coarse_sx += COARSE_INTERVAL) {
-                                int coarse_int_x = COARSE_INTERVAL;
-                                if (coarse_sx >= swid) {
-                                    coarse_sx = swid - 1;
-                                    coarse_int_x = (swid-1) % COARSE_INTERVAL;
-                                    if (coarse_int_x == 0) break;
+                            for (int csx = 0; csx < swid + COARSE_INTERVAL - 1; csx += COARSE_INTERVAL) {
+                                int cxi = COARSE_INTERVAL;
+                                if (csx >= swid) {
+                                    csx = swid - 1;
+                                    cxi = (swid-1) % COARSE_INTERVAL;
+                                    if (cxi == 0) break;
                                 }
                                 // Update interval based on point count
-                                const double coarse_x = 1.*coarse_sx / swid * xdiff + xmin;
-                                double precise_x = coarse_x, precise_y = coarse_y;
-                                const int xy_pos = coarse_sy * swid + coarse_sx;
+                                const double coarse_x = 1.*csx / swid * xdiff + xmin;
+                                double precise_x = coarse_x, precise_y = cy;
+                                const int xy_pos = csy * swid + csx;
 
-                                env.vars[y_var] = coarse_y;
+                                env.vars[y_var] = cy;
                                 env.vars[x_var] = coarse_x;
                                 double z = expr(env);
-                                if (coarse_sx >= coarse_int_x && coarse_sy >= coarse_int_y) {
+                                if (csx >= cxi && csy >= coarse_int_y) {
                                     bool interesting_square = false;
                                     int sgn_z = (z < 0 ? -1 : z == 0 ? 0 : 1);
                                     bool interest_from_left = coarse_right_interesting;
-                                    bool interest_from_above = coarse_below_interesting[coarse_sx];
-                                    coarse_right_interesting = coarse_below_interesting[coarse_sx] = false;
-                                    double zleft = coarse_line[coarse_sx - coarse_int_x];
+                                    bool interest_from_above = coarse_below_interesting[csx];
+                                    coarse_right_interesting = coarse_below_interesting[csx] = false;
+                                    double zleft = coarse_line[csx - cxi];
                                     int sgn_zleft = (zleft < 0 ? -1 : zleft == 0 ? 0 : 1);
                                     if (sgn_zleft * sgn_z <= 0) {
-                                        coarse_below_interesting[coarse_sx] = true;
+                                        coarse_below_interesting[csx] = true;
                                         interesting_square = true;
                                     }
-                                    double zup = coarse_line[coarse_sx];
+                                    double zup = coarse_line[csx];
                                     int sgn_zup = (zup < 0 ? -1 : zup == 0 ? 0 : 1);
                                     if (sgn_zup * sgn_z <= 0) {
                                         coarse_right_interesting = true;
                                         interesting_square = true;
                                     }
                                     if (interesting_square || interest_from_left || interest_from_above) {
-                                        // Debug
-                                        // graph.rectangle(coarse_sx - coarse_int_x + 1,
-                                        //         coarse_sy - coarse_int_y + 1,
-                                        //         coarse_int_x,
-                                        //         coarse_int_y,
-                                        //         false,
-                                        //         interesting_square?
-                                        //         color::BLUE : color::GREEN);
-                                        paint_square_fine(coarse_sy - coarse_int_y,
-                                                coarse_sy,
-                                                coarse_sx - coarse_int_x,
-                                                coarse_sx, z);
-
+                                        interest_squares.push_back(Square(
+                                             csy - coarse_int_y, csy, csx - cxi, csx, z
+                                        ));
                                     }
                                 }
-                                coarse_line[coarse_sx] = z;
+                                coarse_line[csx] = z;
                             }
                         }
 
-                        // Show detail lost warning
-                        if (fine_interval > 1) loss_detail = true;
+                        {
+                            std::atomic<int> sqr_id(0);
+                            int pad = (curr_func == exprid) ? 1 : 0;
+                            auto worker = [&]() {
+                                std::vector<double> line(swid + 2);
+                                std::vector<bool> fine_paint_below(swid + 2);
+                                std::vector<std::array<int, 2> > tdraws;
+                                std::vector<PointMarker> tpt_markers;
+                                Environment tenv = env;
+                                bool fine_paint_right;
+                                // Number of pixels drawn, used to increase fine interval
+                                size_t tpix_cnt = 0;
+                                // Fine interval (variable)
+                                int fine_interval = 1;
+                                while (true) {
+                                    int i = sqr_id++;
+                                    if (i >= interest_squares.size()) break;
+                                    auto& sqr = interest_squares[i];
+
+                                    if (tpix_cnt > MAX_PIXELS) break;
+                                    // Update interval based on point count
+                                    fine_interval = std::min(static_cast<int>(tpix_cnt /
+                                                HIGH_PIX_LIMIT) + 1, COARSE_INTERVAL);
+
+                                    int ylo, yhi, xlo, xhi; double z_at_xy_hi;
+                                    std::tie(ylo, yhi, xlo, xhi, z_at_xy_hi) = sqr;
+
+                                    std::fill(fine_paint_below.begin() + xlo,
+                                            fine_paint_below.begin() + (xhi + 1), false);
+                                    for (int sy = ylo; sy <= yhi; sy += fine_interval) {
+                                        fine_paint_right = false;
+                                        const double y = (shigh - sy)*1. / shigh * ydiff + ymin;
+                                        for (int sx = xlo; sx <= xhi; sx += fine_interval) {
+
+                                            const double x = 1.*sx / swid * xdiff + xmin;
+                                            double precise_x = x, precise_y = y;
+
+                                            double z;
+                                            if (sy == yhi && sx == xhi) {
+                                                z = z_at_xy_hi;
+                                            } else {
+                                                tenv.vars[y_var] = y;
+                                                tenv.vars[x_var] = x;
+                                                z = expr(tenv);
+                                            }
+                                            if (sy > ylo && sx > xlo) {
+                                                int sgn_z = (z < 0 ? -1 : z == 0 ? 0 : 1);
+                                                bool paint_square = false;
+                                                bool paint_from_left = fine_paint_right;
+                                                bool paint_from_above = fine_paint_below[sx];
+                                                fine_paint_right = fine_paint_below[sx] = false;
+                                                double zup = line[sx];
+                                                int sgn_zup = (zup < 0 ? -1 : zup == 0 ? 0 : 1);
+                                                if (sgn_zup * sgn_z <= 0) {
+                                                    // Bisect up
+                                                    tenv.vars[x_var] = x;
+                                                    double lo = y;
+                                                    double hi = (shigh - (sy - fine_interval))*1. / shigh * ydiff + ymin;
+                                                    while (hi - lo > BISECTION_EPS) {
+                                                        double mi = (lo + hi) / 2;
+                                                        tenv.vars[y_var] = mi;
+                                                        double zmi = expr(tenv);
+                                                        int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                                        if (sgn_z == sgn_zmi) lo = mi;
+                                                        else hi = mi;
+                                                    }
+                                                    precise_y = lo;
+                                                    paint_square = fine_paint_right = true;
+                                                }
+                                                double zleft = line[sx - fine_interval];
+                                                int sgn_zleft = (zleft < 0 ? -1 : zleft == 0 ? 0 : 1);
+                                                if (sgn_zleft * sgn_z <= 0) {
+                                                    if (!paint_square) {
+                                                        // Bisect left
+                                                        tenv.vars[y_var] = y;
+                                                        double lo = 1.*(sx - fine_interval) / swid * xdiff + xmin;
+                                                        double hi = x;
+                                                        while (hi - lo > BISECTION_EPS) {
+                                                            double mi = (lo + hi) / 2;
+                                                            tenv.vars[x_var] = mi;
+                                                            double zmi = expr(tenv);
+                                                            int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                                            if (sgn_zleft == sgn_zmi) lo = mi;
+                                                            else hi = mi;
+                                                        }
+                                                        precise_x = lo;
+                                                    }
+                                                    paint_square = fine_paint_below[sx] = true;
+                                                }
+                                                if (paint_square || paint_from_left || paint_from_above) {
+                                                    float precise_sy =
+                                                        static_cast<float>(
+                                                                (ymax - y) / ydiff * shigh);
+                                                    float precise_sx = static_cast<float>(
+                                                            (x - xmin) / xdiff * swid);
+                                                    tdraws.push_back({sx, sy});
+                                                    // Add labels
+                                                    PointMarker new_marker;
+                                                    new_marker.x = precise_x; new_marker.y = precise_y;
+                                                    new_marker.sx = sx; new_marker.sy = sy;
+                                                    new_marker.rel_func = exprid;
+                                                    new_marker.label = PointMarker::LABEL_NONE;
+                                                    new_marker.passive = true;
+                                                    tpt_markers.push_back(std::move(new_marker));
+                                                    ++tpix_cnt;
+                                                }
+                                            }
+                                            line[sx] = z;
+                                        }
+                                    }
+                                }
+
+                                {
+                                    std::lock_guard<std::mutex> lock(mtx);
+                                    for (auto& p : tdraws) {
+                                        graph.rectangle(
+                                                p[0] + (float)(- fine_interval + 1 - pad),
+                                                p[1] + (float)(- fine_interval + 1 - pad),
+                                                (float)(fine_interval + pad),
+                                                (float)(fine_interval + pad),
+                                                true,
+                                                func_color);
+                                    }
+
+                                    for (auto& pm : tpt_markers) {
+                                        const int sx = pm.sx, sy = pm.sy;
+                                        size_t new_marker_idx = pt_markers.size();
+                                        pt_markers.push_back(pm);
+                                        int cmin = std::max(sx - fine_interval + 1 - MARKER_MOUSE_RADIUS, 0);
+                                        int cmax = std::min(sx + MARKER_MOUSE_RADIUS, swid - 1);
+                                        if (cmin <= cmax) {
+                                            for (int r = std::max(sy - fine_interval + 1 - MARKER_MOUSE_RADIUS, 0);
+                                                    r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh - 1); ++ r) {
+                                                std::fill(grid.begin() + (r * swid + cmin),
+                                                        grid.begin() + (r * swid + cmax + 1),
+                                                        new_marker_idx);
+                                            }
+                                        }
+                                    }
+
+                                    // Show detail lost warning
+                                    if (fine_interval > 1) loss_detail = true;
+                                }
+                            };
+
+                            if (NUM_THREADS <= 1) {
+                                worker();
+                            } else {
+                                std::vector<std::thread> pool;
+                                for (size_t i = 0; i < NUM_THREADS; ++i) {
+                                    pool.emplace_back(worker);
+                                }
+                                for (size_t i = 0; i < pool.size(); ++i) pool[i].join();
+                            }
+                        }
+
                     }
                     break;
                 case Function::FUNC_TYPE_EXPLICIT:
@@ -678,12 +714,6 @@ public:
                                 prev_x = x; prev_y = y;
                             }
                         }
-                        // Copy into function
-                        func.roots_and_extrema.resize(roots_and_extrema.size());
-                        std::copy(roots_and_extrema.begin(),
-                                roots_and_extrema.end(),
-                                func.roots_and_extrema.begin());
-
                         // Add screen edges to discontinuities list for convenience
                         discont.emplace(xmin, DISCONT_SCREEN);
                         discont.emplace(xmax, DISCONT_SCREEN);
@@ -1003,6 +1033,9 @@ public:
 
     // The environment object, contains defined functions and variables
     Environment& env;
+
+    // Mutex for concurrency
+    std::mutex mtx;
 private:
     // Helper for detecting if px, py activates a marker (in grid);
     // if so sets marker_* and current function
