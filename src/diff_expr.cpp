@@ -7,7 +7,6 @@
 #include "util.hpp"
 #include "env.hpp"
 #include "expr.hpp"
-#include "test_common.hpp"
 
 namespace nivalis {
 namespace {
