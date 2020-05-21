@@ -12,7 +12,7 @@ namespace nivalis {
 
     // Set error message and return false
 #define PARSE_ERR(errmsg) do { \
-     error_msg_stream.str("");\
+     std::stringstream error_msg_stream; \
      error_msg_stream << errmsg;\
      error_msg = error_msg_stream.str(); \
      if(!quiet) std::cout << error_msg; \
@@ -478,7 +478,6 @@ private:
     Environment& env;
     const std::string& expr;
     std::string& error_msg;
-    std::stringstream error_msg_stream;
     Expr result;
     bool mode_explicit, quiet;
     size_t max_args;

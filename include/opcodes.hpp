@@ -14,9 +14,9 @@ namespace OpCode {
 // nivalis bytecode operators
 enum _OpCode {
     null = 0, // returns NaN
-    val,      // stores value in 8 bytes after
-    ref,      // stores address of var in env in 4 bytes after
-    arg,      // function argument
+    val,      // stores value in val
+    ref,      // stores address of var in ref
+    arg,      // function argument (index in ref)
 
     // thunk system
     thunk_ret = 8,     // beginning of thunk (unevaluated segment)

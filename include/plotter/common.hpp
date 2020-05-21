@@ -20,36 +20,19 @@
 #include <algorithm>
 #include "expr.hpp"
 #include "parser.hpp"
+#include "color.hpp"
 #include "util.hpp"
 
 namespace nivalis {
+namespace util {
+// * Plotter-related utils
 
-namespace color {
-    // RGB color
-    struct color {
-        color();
-        color(unsigned clr);
-        color(uint8_t, uint8_t, uint8_t);
-        uint8_t r, g, b;
-    };
-    enum _colors {
-        // Hex codes of common colors
-        WHITE = 0xFFFFFF,
-        BLACK = 0x000000,
-        DARK_GRAY = 0xa9a9a9,
-        GRAY = 0x808080,
-        LIGHT_GRAY = 0xd3d3d3,
-        DIM_GRAY = 0x696969,
-        RED  = 0xFF0000,
-        BLUE  = 0x0000FF,
-        ROYAL_BLUE = 0x4169e1,
-        GREEN = 0x008000,
-        ORANGE = 0xffa500,
-        PURPLE = 0x800080,
-        YELLOW = 0xFFFF00
-    };
-    color from_int(size_t color_index);
-}  // namespace color
+// Helper for finding grid line sizes fo a given step size
+// rounds to increments of 1,2,5
+// e.g. 0.1, 0.2, 0.5, 1, 2, 5 (used for grid lines)
+// returns (small gridline size, big gridline size)
+std::pair<double, double> round125(double step);
+}  // namespace util
 
 // Represents function in plotter
 struct Function {
@@ -63,9 +46,9 @@ struct Function {
     Expr recip, drecip;
     // Color of function's line
     color::color line_color;
-    // Original expression string in editor
+    // Should be set by GUI implementation: expression string from editor.
     std::string expr_str;
-    enum FuncType {
+    enum {
         FUNC_TYPE_EXPLICIT, // normal func like x^2
         FUNC_TYPE_IMPLICIT, // implicit func like abs(x)=abs(y)
         FUNC_TYPE_POLYLINE,  // poly-lines (x,y) (x',y') (x'',y'')...
@@ -109,67 +92,36 @@ struct PointMarker {
     }
 };
 
-/** Generic GUI plotter logic; used in plot_gui.hpp with appropriate backend
- *  This design looks sort of messy now,
- *  but was originally intended to support different GUI backends
- *
+// Data for each slider in Slider window
+struct SliderData {
+    // Should be set by implementation when variable name changes
+    std::string var_name;
+    // Should be set by implementation when value, bounds change
+    float val, lo = 0.0, hi = 1.0;
+    // Internal
+    uint32_t var_addr;
+};
+
+/** Nivalis GUI plotter logic, decoupled from GUI implementation
  * Register GUI event handlers to call handle_xxx
  * Register resize handler to call resize
  * Call draw() in drawing event/loop
  * Call reset_view() to reset view, delete_func() delete function,
  * set_curr_func() to set current function, etc.
- *
- * * Required Backend API
- * void close();                                                        close GUI window
- * void focus_editor();                                                 focus on current function's editor, if applicable
- * void focus_background();                                             focus on background of window (off editor), if applicable
-
- * void update(bool force);                                             update the GUI (redraw); force: force draw, else may ignore
-
- * void update_editor(size_t func_id, std::string contents);               update the text in the (expression) editor for given function
- * std::string read_editor(size_t func_id);                                get text in the editor for given function
-
- * void show_error(std::string error_msg);                              show error message (empty = clear)
-
- * void show_marker_at(const PointMarker& marker, int px, int py);     show the marker (point label) at the position, with given marker data
- * void hide_marker();                                                 hide the marker
-
- * * Required Graphics adapter API
- * void line(float ax, float ay, float bx, float by, color::color color, float thickness = 1.0);          draw line (ax, ay) -- (bx, by)
- *                                                                                                        thickness shall be an integer
- * void polyline(const std::vector<std::array<float, 2> >& points, color::color c, float thickness = 1.);   draw polyline
- * void rectangle(float x, float y, float w, float h, bool fill, color::color color);                     draw rectangle (filled or non-filled)
- * void clear(color::color color);                                                                        fill entire view (clear)
- * void string(float x, float y, std::string s, color::color c);                                          draw a string
- * */
-template<class Backend, class Graphics>
+* */
 class Plotter {
 public:
-    Plotter(Backend& backend,
-            const Environment& expr_env, std::string init_expr,
-            int win_width, int win_height) :
-            env(expr_env), be(backend),
-            swid(win_width), shigh(win_height) {
-        curr_func = 0;
-        {
-            Function f;
-            f.name = "f" + std::to_string(next_func_name++);
-            f.expr_str = init_expr;
-            f.line_color = color::from_int(last_expr_color++);
-            f.type = Function::FUNC_TYPE_EXPLICIT;
-            funcs.push_back(f);
-        }
-        draglabel = dragdown = false;
+    // Construct a Plotter.
+    // expr_env: environment to store variables/evaluate function expressions in
+    // init_expr: initial expression for first function (which is automatically added)
+    // win_width/win_height: initial plotting window size
+    Plotter(Environment& expr_env, const std::string& init_expr,
+            int win_width, int win_height);
 
-        x_var = env.addr_of("x", false);
-        y_var = env.addr_of("y", false);
-
-        be.update_editor(curr_func, funcs[curr_func].expr_str);
-        set_curr_func(0);
-    }
-
-    // Draw axes and grid
-    void draw_grid(Graphics& graph) {
+    // Draw axes and grid onto given graphics adaptor
+    // for Graphics adaptor API see draw()
+    template<class GraphicsAdaptor>
+    void draw_grid(GraphicsAdaptor& graph) {
         int sx0 = 0, sy0 = 0;
         int cnt_visible_axis = 0;
         // Draw axes
@@ -194,8 +146,8 @@ public:
 
         // Draw lines
         double ystep, xstep, ymstep, xmstep;
-        std::tie(ystep, ymstep) = round125((ymax - ymin) / shigh * 600 / 10.8);
-        std::tie(xstep, xmstep) = round125((xmax - xmin) / swid * 1000 / 18.);
+        std::tie(ystep, ymstep) = util::round125((ymax - ymin) / shigh * 600 / 10.8);
+        std::tie(xstep, xmstep) = util::round125((xmax - xmin) / swid * 1000 / 18.);
         double xli = std::ceil(xmin / xstep) * xstep;
         double xr = std::floor(xmax / xstep) * xstep;
         double ybi = std::ceil(ymin / ystep) * ystep;
@@ -254,12 +206,21 @@ public:
         }
     }
 
-    // Draw grid and functions
-    void draw(Graphics& graph) {
+    /** Draw axes, grid AND all functions onto given graphics adaptor
+     * * Required Graphics adaptor API
+     * void line(float ax, float ay, float bx, float by, const color::color&, float thickness = 1.0);               draw line (ax, ay) -- (bx, by)
+     * void polyline(const std::vector<std::array<float, 2> >& points, const color::color&, float thickness = 1.);  draw polyline (not closed)
+     * void rectangle(float x, float y, float w, float h, bool fill, const color::color&);                          draw rectangle (filled or non-filled)
+     * void clear(color::const color color&);                                                                       fill entire view (clear)
+     * void string(float x, float y, std::string s, const color::color&);                                           draw a string
+     * Adapater may use internal caching and/or add optional arguments to above functions; when require_update is set the cache should be
+     * cleared. */
+    template<class GraphicsAdaptor>
+    void draw(GraphicsAdaptor& graph) {
         if (xmin >= xmax) xmax = xmin + 1e-9;
         if (ymin >= ymax) ymax = ymin + 1e-9;
         graph.clear(color::WHITE);
-        draw_grid(graph);
+        draw_grid<GraphicsAdaptor>(graph);
         double xdiff = xmax - xmin, ydiff = ymax - ymin;
 
         // * Constants
@@ -562,17 +523,25 @@ public:
                 case Function::FUNC_TYPE_EXPLICIT:
                     {
                         // explicit function
+                        //
                         env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
                         // Store roots and extrema
                         std::set<double> roots_and_extrema;
                         // Discontinuity type
                         // first: x-position
                         // second: DISCONT_xxx
+                        // Discontinuity type
+                        enum {
+                            DISCONT_ASYMPT = 0, // asymptote
+                            DISCONT_DOMAIN = 1, // domain boundary (possibly asymptote)
+                            DISCONT_SCREEN = 2, // edge of screen
+                        };
                         using Discontinuity = std::pair<double, int>;
                         // Store discontinuities
                         std::set<Discontinuity> discont;
                         size_t idx = 0;
                         // Push check helpers
+                        // Push to st if no other item less than MIN_DIST_BETWEEN_ROOTS from value
                         auto push_if_valid = [this](double value, std::set<double>& st) {
                             if (!std::isnan(value) && !std::isinf(value) &&
                                     value >= xmin && value <= xmax) {
@@ -586,6 +555,8 @@ public:
                                 if (cdist >= MIN_DIST_BETWEEN_ROOTS) st.insert(value);
                             }
                         };
+                        // Push (value, type) to discont if no other distcontinuity's first item
+                        // is less than MIN_DIST_BETWEEN_ROOTS from value
                         auto push_discont_if_valid = [&](double value, Discontinuity::second_type type) {
                             auto vc = Discontinuity(value, type);
                             if (!std::isnan(value) && !std::isinf(value) &&
@@ -603,6 +574,8 @@ public:
                                 }
                             }
                         };
+
+                        // Stores points in current line, which will be drawn as a polyline
                         std::vector<std::array<float, 2> > curr_line;
                         // Draw a line and construct markers along the line
                         // to allow clicking
@@ -714,9 +687,8 @@ public:
                         // Add screen edges to discontinuities list for convenience
                         discont.emplace(xmin, DISCONT_SCREEN);
                         discont.emplace(xmax, DISCONT_SCREEN);
-                        // std::cerr << discont.size() << ": ";
-                        // for (auto i : discont) std::cerr << i.first << ":" << i.second <<" ";
-                        // std::cerr <<  "\n";
+
+                        // Previous discontinuity infop
                         double prev_discont_x = xmin;
                         float prev_discont_sx;
                         int prev_discont_type;
@@ -824,12 +796,12 @@ public:
                             prev_discont_sx = discont_sx;
                         }
 
-                        // finish last line, if exists
+                        // Finish last line, if exists
                         if (curr_line.size() > 1) {
                             graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
                         }
-                        // Draw roots/extrema/y-int
-                        std::vector<double> to_erase;
+                        std::vector<double> to_erase; // Save dubious points to delete from roots_and_extrama
+                        // Helper to draw roots/extrema/y-int and add a marker for it
                         auto draw_extremum = [&](double x, double y) {
                             double dy = func.diff(env);
                             double ddy = func.ddiff(env);
@@ -870,6 +842,7 @@ public:
                             double y = expr(env);
                             draw_extremum(x, y);
                         }
+                        // Delete the "dubious" points
                         for (auto x : to_erase) {
                             roots_and_extrema.erase(x);
                         }
@@ -930,410 +903,112 @@ public:
             }
         }
         if (loss_detail) {
-            be.show_error("Warning: some detail may be lost");
+            func_error = "Warning: some detail may be lost";
         } else if (prev_loss_detail) {
-            be.show_error("");
+            func_error.clear();
         }
     }
 
-    // Re-parse expression in editor for function 'idx'
+    // Re-parse expression from expr_str into expr, etc. for function 'idx'
     // and update expression, derivatives, etc.
     // Also detects function type.
-    void reparse_expr(size_t idx = -1) {
-        if (idx == -1 ) idx = curr_func;
-        auto& func = funcs[idx];
-        auto& expr = func.expr;
-        auto& expr_str = func.expr_str;
-        func.polyline.clear();
-        expr_str = be.read_editor(idx);
-        size_t eqpos;
-        // Marks whether this is a vlaid polyline expr
-        bool valid_polyline;
-        util::trim(expr_str);
-        // Determine if function type is polyline
-        if (expr_str.size() &&
-            expr_str[0] == '(' && expr_str.back() == ')') {
-            // Only try if of form (...)
-            valid_polyline = true;
-            std::string polyline_err;
+    void reparse_expr(size_t idx = -1);
 
-            // Try to parse function as polyline expr
-            size_t last_begin = 0, stkh = 0;
-            bool has_comma = false;
-            for (size_t i = 0; i < expr_str.size(); ++i) {
-                const char c = expr_str[i];
-                if (std::isspace(c)) continue;
-                // Handle nested brackets
-                if (util::is_open_bracket(c)) ++stkh;
-                else if (util::is_close_bracket(c)) --stkh;
-                switch(c) {
-                    case '(':
-                        if (stkh == 1) {
-                            last_begin = i + 1;
-                        }
-                        break;
-                    case ',':
-                        if (stkh == 1) {
-                            func.polyline.push_back(parser(
-                                    expr_str.substr(last_begin,
-                                        i - last_begin), env,
-                                    true, true));
-                            if (parser.error_msg.size()) polyline_err = parser.error_msg;
-                            last_begin = i + 1;
-                            has_comma = true;
-                        }
-                        break;
-                    case ')':
-                        if (stkh == 0) {
-                            if (!has_comma) {
-                                // Must have comma
-                                valid_polyline = false;
-                                break;
-                            }
-                            func.polyline.push_back(parser(
-                                    expr_str.substr(last_begin,
-                                        i - last_begin), env,
-                                    true, true));
-                            if (parser.error_msg.size()) polyline_err = parser.error_msg;
-                            has_comma = false;
-                        }
-                        break;
-                    default:
-                        // Can't have things between ), (
-                        if (stkh == 0) valid_polyline = false;
-                }
-                if (!valid_polyline || polyline_err.size()) break;
-            }
-            if (valid_polyline) {
-                // Polyline.
-                func.type = Function::FUNC_TYPE_POLYLINE;
-                if (polyline_err.empty()) {
-                    for (Expr& e1 : func.polyline) {
-                        if (e1.has_var(x_var) || e1.has_var(y_var)) {
-                            // Can't have x,y, show warning
-                            func.polyline.clear();
-                            polyline_err = "x, y disallowed\n";
-                            break;
-                        }
-                    }
-                }
-                // Keep as polyline type but show error
-                // so that the user can see info about why it failed to parse
-                if (polyline_err.size())
-                    be.show_error("Polyline expr error: " + polyline_err);
-                else
-                    be.show_error(""); // Clear
-            }
-        } else valid_polyline = false;
-        if (!valid_polyline) {
-            // If failed to parse as polyline expr, try to detect if
-            // it is an implicit function
-            eqpos = util::find_equality(expr_str);
-            if (~eqpos) {
-                func.type = Function::FUNC_TYPE_IMPLICIT;
-                auto lhs = expr_str.substr(0, eqpos),
-                     rhs = expr_str.substr(eqpos+1);
-                util::trim(lhs); util::trim(rhs);
-                if (lhs == "y" || rhs == "y") {
-                    expr = parser(lhs == "y" ? rhs : lhs, env,
-                            true, // explicit
-                            true  // quiet
-                            );
-                    if (!expr.has_var(y_var)) {
-                        // if one side is y and other side has no y,
-                        // treat as explicit function
-                        func.type = Function::FUNC_TYPE_EXPLICIT;
-                    }
-                }
-                if (func.type == Function::FUNC_TYPE_IMPLICIT) {
-                    // If still valid, set expression to difference
-                    // i.e. rearrange so RHS is 0
-                    expr = parser(lhs, env, true, true)
-                         - parser(rhs, env, true, true);
-                }
-            } else {
-                func.type = Function::FUNC_TYPE_EXPLICIT;
-                expr = parser(expr_str, env, true, true);
-            }
-            if (!expr.is_null()) {
-                // Compute derivatives
-                expr.optimize();
-                if (func.type == Function::FUNC_TYPE_EXPLICIT) {
-                    func.diff = expr.diff(x_var, env);
-                    if (!func.diff.is_null()) {
-                        func.ddiff = func.diff.diff(x_var, env);
-                    }
-                    else func.ddiff.ast[0] = OpCode::null;
-                    func.recip = Expr::constant(1.) / func.expr;
-                    func.recip.optimize();
-                    func.drecip = func.recip.diff(x_var, env);
-                }
-            } else func.diff.ast[0] = OpCode::null;
-            be.show_error(parser.error_msg);
-        }
+    // Set the current function (drawn thicker than other functions) to func_id.
+    // If func_id is just beyond last current function (i.e., = funcs.size()),
+    // adds a new function
+    void set_curr_func(size_t func_id);
 
-        if (parser.error_msg.empty()) be.show_error("");
-        if (func.type == Function::FUNC_TYPE_EXPLICIT) {
-            // Register a function in env
-            env.def_func(func.name, func.expr, { x_var });
-            if (env.error_msg.size()) {
-                be.show_error(env.error_msg);
-            }
-        } else {
-            env.del_func(func.name);
-        }
-        loss_detail = false;
-        be.update();
-    }
+    // Add a new function to the end of funcs.
+    void add_func();
 
-    void set_curr_func(size_t func_id) {
-        if (func_id != curr_func)
-            be.show_error("");
-        reparse_expr(curr_func);
-        curr_func = func_id;
-        if (curr_func == -1) {
-            curr_func = 0;
-            return;
-        }
-        else if (curr_func >= funcs.size()) {
-            // New function
-            std::string tmp = funcs.back().expr_str;
-            util::trim(tmp);
-            if (!tmp.empty()) {
-                Function f;
-                f.type = Function::FUNC_TYPE_EXPLICIT;
-                if (reuse_colors.empty()) {
-                    f.line_color =
-                        color::from_int(last_expr_color++);
-                } else {
-                    f.line_color = reuse_colors.front();
-                    reuse_colors.pop();
-                }
-                f.name = "f" + std::to_string(next_func_name++);
-                funcs.push_back(std::move(f));
-            } else {
-                // If last function is empty,
-                // then stay on it and do not create a new function
-                curr_func = funcs.size()-1;
-                return;
-            }
-        }
-        be.update_editor(func_id, funcs[func_id].expr_str);
-        be.update(true);
-    }
+    // Delete the func at idx. If idx == -1, then deletes current function.
+    void delete_func(size_t idx = -1);
 
-    void delete_func(size_t idx = -1) {
-        if (idx == -1) idx = curr_func;
-        if (idx >= funcs.size()) return;
-        env.del_func(funcs[idx].name);
-        if (funcs.size() > 1) {
-            reuse_colors.push(funcs[idx].line_color);
-            funcs.erase(funcs.begin() + idx);
-            if (curr_func > idx || curr_func >= funcs.size()) {
-                curr_func--;
-            }
-        } else {
-            funcs[0].expr_str = "";
-            be.update_editor(0,
-                    funcs[0].expr_str);
-        }
-        if (idx == curr_func) {
-            set_curr_func(curr_func); // Update text without changing index
-            reparse_expr();
-        } else {
-            be.update_editor(idx, funcs[idx].expr_str);
-        }
-        be.update(true);
-    }
+    // Add a new slider to the end of sliders
+    void add_slider();
 
-    void resize(int width, int height) {
-        double wf = (xmax - xmin) * (1.*width / swid - 1.) / 2;
-        double hf = (ymax - ymin) * (1.*height / shigh - 1.) / 2;
-        xmax += wf; xmin -= wf;
-        ymax += hf; ymin -= hf;
+    // Delete the slider at index idx in sliders
+    void delete_slider(size_t idx);
 
-        swid = width;
-        shigh = height;
-        be.update();
-    }
+    // Call this when slider's variable name (var_name) changes:
+    // Using var_name update var_addr of slider at idx.
+    // If var_name is invalid, sets slider_error
+    void update_slider_var(size_t idx);
 
-    void reset_view() {
-        double wid = 10. * swid / shigh * (600./ 1000.);
-        xmax = wid; xmin = -wid;
-        ymax = 6.0; ymin = -6.0;
-        be.update(true);
-        be.focus_background();
-    }
+    // Call this when slider's variable value (val) changes:
+    // checks if val is outside bounds (in which case updates bounds)
+    // then copies the slider or float input value into the environment
+    void copy_slider_value_to_env(size_t idx);
 
-    void handle_key(int key, bool ctrl, bool alt) {
-        switch(key) {
-            case 81:
-                // q: quit
-                be.close();
-                break;
-            case 37: case 39: case 262: case 263:
-                    // LR Arrow
-                {
-                    auto delta = (xmax - xmin) * 0.003;
-                    if (key == 37 || key == 263) delta = -delta;
-                    xmin += delta; xmax += delta;
-                }
-                be.update();
-                break;
-            case 38: case 40: case 264: case 265:
-                {
-                    // UD Arrow
-                    auto delta = (ymax - ymin) * 0.003;
-                    if (key == 40 || key == 264) delta = -delta;
-                    ymin += delta; ymax += delta;
-                }
-                be.update();
-                break;
-            case 61: case 45:
-            case 187: case 189:
-                // Zooming +-
-                {
-                    auto fa = (key == 45 || key == 189) ? 1.013 : 0.987;
-                    auto dy = (ymax - ymin) * (fa - 1.) /2;
-                    auto dx = (xmax - xmin) * (fa - 1.) /2;
-                    if (ctrl) dy = 0.; // x-only
-                    if (alt) dx = 0.;  // y-only
-                    xmin -= dx; xmax += dx;
-                    ymin -= dy; ymax += dy;
-                    be.update();
-                }
-                break;
-            case 48: case 72:
-                // ctrl H: Home
-                if (ctrl) {
-                    reset_view();
-                }
-                break;
-            case 69:
-                // E: Edit (focus tb)
-                be.focus_editor();
-                break;
-        }
-    }
+    // Call this when plotter window/widget is resizing:
+    // Resize the plotter area to width x height
+    void resize(int width, int height);
 
-    void handle_mouse_down(int px, int py) {
-        if (!dragdown) {
-            if (px >= 0 && py >= 0 &&
-                    py * swid + px < grid.size() &&
-                    ~grid[py * swid + px]) {
-                // Show marker
-                auto& ptm = pt_markers[grid[py * swid + px]];
-                be.show_marker_at(ptm, px, py);
-                draglabel = true;
-                if (~ptm.rel_func && ptm.rel_func != curr_func) {
-                    // Switch to function
-                    set_curr_func(ptm.rel_func);
-                    be.update(true);
-                }
-            } else {
-                // Begin dragging window
-                dragx = px; dragy = py;
-                dragdown = true;
-                xmaxi = xmax; xmini = xmin;
-                ymaxi = ymax; ymini = ymin;
-            }
-        }
-    }
+    // Reset the plotter's view (xmin, xmax, etc.) to initial view,
+    // accounting for current window size
+    void reset_view();
 
-    void handle_mouse_move(int px, int py) {
-        if (dragdown) {
-            // Dragging background
-            be.hide_marker();
-            int dx = px - dragx;
-            int dy = py - dragy;
-            double fx = (xmax - xmin) / swid * dx;
-            double fy = (ymax - ymin) / shigh * dy;
-            xmax = xmaxi - fx; xmin = xmini - fx;
-            ymax = ymaxi + fy; ymin = ymini + fy;
-            be.update();
-        } else if (px >= 0 && py >= 0 &&
-                py * swid + px < grid.size() &&
-                ~grid[py * swid + px]) {
-            // Show marker if point marker under cursor
-            auto& ptm = pt_markers[grid[py * swid + px]];
-            if (ptm.passive && !draglabel) return;
-            be.show_marker_at(ptm, px, py);
-        } else {
-            be.hide_marker();
-        }
-    }
+    // * Keyboard/mouse handlers
+    // A basic key handler: key code, ctrl pressed?, alt pressed?
+    void handle_key(int key, bool ctrl, bool alt);
 
-    void handle_mouse_up(int px, int py) {
-        // Stop dragging
-        draglabel = dragdown = false;
-        be.hide_marker();
-    }
+    // Mouse down handler (any key)
+    void handle_mouse_down(int px, int py);
 
-    void handle_mouse_wheel(bool upwards, int distance, int px, int py) {
-        dragdown = false;
-        constexpr double multiplier = 0.006;
-        double scaling;
-        if (upwards) {
-            scaling = exp(-log(distance) * multiplier);
-        } else {
-            scaling = exp(log(distance) * multiplier);
-        }
-        double xdiff = (xmax - xmin) * (scaling-1.);
-        double ydiff = (ymax - ymin) * (scaling-1.);
+    // Mouse move handler (any key)
+    void handle_mouse_move(int px, int py);
 
-        double focx = px * 1. / swid;
-        double focy = py * 1./ shigh;
-        xmax += xdiff * (1-focx);
-        xmin -= xdiff * focx;
-        ymax += ydiff * focy;
-        ymin -= ydiff * (1-focy);
-        be.update();
-    }
+    // Mouse up handler (any key)
+    void handle_mouse_up(int px, int py);
 
-    int swid, shigh;            // Screen size
+    // Mouse wheel handler:
+    // upwards = whether scrolling up,
+    // distance = magnitude of amount scrolled
+    void handle_mouse_wheel(bool upwards, int distance, int px, int py);
 
-    double xmax = 10, xmin = -10;
-    double ymax = 6, ymin = -6;             // Function area bounds
+    // Public plotter state data
+    int swid, shigh;                        // Screen size
+
+    double xmax = 10, xmin = -10;           // Function area bounds: x
+    double ymax = 6, ymin = -6;             // Function area bounds: y
     size_t curr_func = 0;                   // Currently selected function
 
     std::vector<Function> funcs;            // Functions
+    std::string func_error;                 // Function parsing error str
     std::vector<PointMarker> pt_markers;    // Point markers
     std::vector<size_t> grid;               // Grid containing marker id
                                             // at every pixel, row major
                                             // (-1 if no marker)
+    // Slider data
+    std::vector<SliderData> sliders;        // Sliders to show
+    std::set<std::string> sliders_vars;     // Variables which have a slider
+    std::string slider_error;               // Error from slider
 
-    Environment env;
+    // If set, GUI implementation should:
+    // focus on the editor for the current function AND
+    // set focus_on_editor = false
+    bool focus_on_editor = true;
+
+    // If set, requires GUI to update lines and functions
+    // (using draw).
+    // - Implementation does not need to set this to false.
+    // - Implementation may set this to true, if e.g. xmin/xmax
+    //   are changed by code
+    bool require_update = false;
+
+    // Marker data
+    std::string marker_text;
+    int marker_posx, marker_posy;
+
+    // The environment object, contains defined functions and variables
+    Environment& env;
 private:
-    // Helper for finding grid line sizes fo a given step size
-    // rounds to increments of 1,2,5
-    // e.g. 0.1, 0.2, 0.5, 1, 2, 5 (used for grid lines)
-    // returns (small gridline size, big gridline size)
-    std::pair<double, double> round125(double step) {
-        double fa = 1., fan;
-        if (step < 1) {
-            int subdiv = 5;
-            while(1./fa > step) {
-                fan = fa; fa *= 2; subdiv = 5;
-                if(1./fa <= step) break;
-                fan = fa; fa /= 2; fa *= 5; subdiv = 5;
-                if(1./fa <= step) break;
-                fan = fa; fa *= 2; subdiv = 4;
-            }
-            return std::pair<double, double>(1./fan/subdiv, 1./fan);
-        } else {
-            double subdiv = 5.;
-            while(fa < step) {
-                fa *= 2; subdiv = 4;
-                if(fa >= step) break;
-                fa /= 2; fa *= 5; subdiv = 5;
-                if(fa >= step) break;
-                fa *= 2; subdiv = 5;
-            }
-            return std::pair<double, double>(fa * 1. / subdiv, fa);
-        }
-    }
-    Backend& be;
-    Parser parser;
+    // Helper for detecting if px, py activates a marker (in grid);
+    // if so sets marker_* and current function
+    // no_passive: if set, ignores passive markers
+    void detect_marker_click(int px, int py, bool no_passive = false);
+    Parser parser;                            // Parser instance, for parsing func expressions
 
     std::queue<color::color> reuse_colors;    // Reusable colors
     size_t last_expr_color = 0;               // Next available color index if no reusable
@@ -1345,15 +1020,7 @@ private:
 
     size_t next_func_name = 0;                // Next available function name
 
-    // whether some detail is lost
-    bool loss_detail = false;
-
-    // Discontinuity type
-    enum _DiscontType {
-        DISCONT_ASYMPT = 0, // asymptote
-        DISCONT_DOMAIN = 1, // domain boundary (possibly asymptote)
-        DISCONT_SCREEN = 2, // edge of screen
-    };
+    bool loss_detail = false;                 // Whether some detail is lost (if set, will show error)
 };
 
 }  // namespace nivalis

@@ -69,6 +69,7 @@ set(
   opcodes.hpp
   plotter/common.hpp
   shell.hpp
+  color.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
@@ -89,6 +90,8 @@ set(
   "../${IMGUI_DIR}/imgui_widgets.cpp"
   "../${IMGUI_DIR}/imgui_impl_opengl3.cpp"
   "../${IMGUI_DIR}/imgui_impl_glfw.cpp"
+  "../${IMGUI_DIR}/imgui_stdlib.cpp"
+  color.cpp
 )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 
