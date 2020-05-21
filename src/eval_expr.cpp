@@ -49,10 +49,10 @@ double eval_ast(Environment& env, const Expr::AST& ast,
     thread_local std::vector<double> stk;
     // Stack of thunks available:
     // contains positions of thunk_jmp encountered
-    std::vector<size_t> thunks;
+    thread_local std::vector<size_t> thunks;
     // Thunk call stack: contains positions to return to
     // after reaching thunk_ret
-    std::vector<size_t> thunks_stk;
+    thread_local std::vector<size_t> thunks_stk;
 
     // Max function call stack height
     static const size_t MAX_CALL_STK_HEIGHT = 256;

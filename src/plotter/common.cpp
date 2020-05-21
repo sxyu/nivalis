@@ -4,8 +4,9 @@
 namespace nivalis {
 namespace util {
 std::pair<double, double> round125(double step) {
-    double fa = 1., fan;
+    double fa = 1.;
     if (step < 1) {
+        double fan;
         int subdiv = 5;
         while(1./fa > step) {
             fan = fa; fa *= 2; subdiv = 5;
@@ -54,7 +55,6 @@ void Plotter::reparse_expr(size_t idx) {
     auto& expr = func.expr;
     auto& expr_str = func.expr_str;
     func.polyline.clear();
-    size_t eqpos;
     // Marks whether this is a vlaid polyline expr
     bool valid_polyline;
     util::trim(expr_str);
@@ -135,7 +135,7 @@ void Plotter::reparse_expr(size_t idx) {
     if (!valid_polyline) {
         // If failed to parse as polyline expr, try to detect if
         // it is an implicit function
-        eqpos = util::find_equality(expr_str);
+        size_t eqpos = util::find_equality(expr_str);
         if (~eqpos) {
             func.type = Function::FUNC_TYPE_IMPLICIT;
             auto lhs = expr_str.substr(0, eqpos),
@@ -290,7 +290,8 @@ void Plotter::add_slider() {
     }
     sl.var_name = var_name;
     sl.var_addr = env.addr_of(sl.var_name, false);
-    env.vars[sl.var_addr] = sl.lo;
+    sl.val = 1.0;
+    env.vars[sl.var_addr] = 1.0;
     for (size_t t = 0; t < funcs.size(); ++t)
         reparse_expr(t);
     sliders_vars.insert(var_name);
@@ -451,7 +452,7 @@ void Plotter::detect_marker_click(int px, int py, bool no_passive) {
     ss << std::fixed << std::setprecision(4) <<
         PointMarker::label_repr(ptm.label) << ptm.x << ", " << ptm.y;
     marker_text = ss.str();
-    if (~ptm.rel_func && ptm.rel_func != curr_func) {
+    if (ptm.passive && ~ptm.rel_func && ptm.rel_func != curr_func) {
         // Switch to function
         set_curr_func(ptm.rel_func);
         require_update = true;

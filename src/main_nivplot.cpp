@@ -250,7 +250,7 @@ void main_loop_step() {
 
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     adaptor.next_frame(draw_list, !plot.require_update);
-    if (plot.require_update || plot.marker_text.size()) {
+    if (plot.require_update || plot.marker_text.size() || open_shell) {
         // Reset the active counter
         // (do not throttle the FPS for ACTIVE_FRAMES frames)
         active_counter = ACTIVE_FRAMES;

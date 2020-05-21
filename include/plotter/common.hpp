@@ -100,7 +100,7 @@ struct SliderData {
     // Should be set by implementation when variable name changes
     std::string var_name;
     // Should be set by implementation when value, bounds change
-    float val, lo = 0.0, hi = 1.0;
+    float val, lo = -10.0, hi = 10.0;
     // Internal
     uint32_t var_addr;
 };
@@ -265,6 +265,7 @@ public:
         // * Draw function s
         pt_markers.clear(); pt_markers.reserve(500);
         grid.clear(); grid.resize(shigh * swid, -1);
+        BEGIN_PROFILE;
         for (size_t exprid = 0; exprid < funcs.size(); ++exprid) {
             bool reinit = true;
             auto& func = funcs[exprid];
@@ -669,7 +670,7 @@ public:
                         // Find roots, asymptotes, extrema
                         if (!func.diff.is_null()) {
                             double prev_x, prev_y = 0.;
-                            for (int sx = 0; sx < swid; sx += 5) {
+                            for (int sx = 0; sx < swid; sx += 10) {
                                 const double x = sx*1. * xdiff / swid + xmin;
                                 env.vars[x_var] = x;
                                 double y = expr(env);
@@ -785,8 +786,8 @@ public:
                                     }
                                     if (discont.size() > 2 && discont.size() < 100) {
                                         if ((as_idx > 1 && sxd - prev_discont_sx < 1.) ||
-                                                (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
-                                            sxd += 0.1f;
+                                                (as_idx < discont.size() - 1 && discont_sx - sxd < 1.)) {
+                                            sxd += 0.25f;
                                         } else if ((as_idx > 1 && sxd - prev_discont_sx < 5.) ||
                                                 (as_idx < discont.size() - 1 && discont_sx - sxd < 5.)) {
                                             sxd += 0.5f;
@@ -898,7 +899,7 @@ public:
                                 diff_sub_expr.optimize();
                                 if (diff_sub_expr.is_null()) continue;
                                 std::set<double> st;
-                                for (int sxd = 0; sxd < swid; sxd += 2) {
+                                for (int sxd = 0; sxd < swid; sxd += 10) {
                                     const double x = sxd * xdiff / swid + xmin;
                                     double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
                                     push_if_valid(root, st);
@@ -932,6 +933,7 @@ public:
                     break;
             }
         }
+        PROFILE(all);
         if (loss_detail) {
             func_error = "Warning: some detail may be lost";
         } else if (prev_loss_detail) {
