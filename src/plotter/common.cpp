@@ -378,7 +378,7 @@ void Plotter::handle_key(int key, bool ctrl, bool alt) {
 }
 
 void Plotter::handle_mouse_down(int px, int py) {
-    if (!dragdown) {
+    if (!dragdown && !draglabel) {
         if (px >= 0 && py >= 0 &&
                 py * swid + px < grid.size() &&
                 ~grid[py * swid + px]) {

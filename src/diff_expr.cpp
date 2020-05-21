@@ -7,6 +7,7 @@
 #include "util.hpp"
 #include "env.hpp"
 #include "expr.hpp"
+#include "test_common.hpp"
 
 namespace nivalis {
 namespace {
@@ -447,10 +448,14 @@ double Expr::newton(uint64_t var_addr, double x0, Environment& env,
             env.vars[var_addr] = x0;
             if (i || fx0 == std::numeric_limits<double>::max()) {
                 fx0 = (*this)(env);
-                if(std::isnan(fx0)) return std::numeric_limits<double>::quiet_NaN(); // Fail
+                if(std::isnan(fx0)) {
+                    return std::numeric_limits<double>::quiet_NaN(); // Fail
+                }
             }
             dfx0 = (*deriv)(env);
-            if(std::isnan(dfx0) || dfx0 == 0.) return std::numeric_limits<double>::quiet_NaN(); // Fail
+            if(std::isnan(dfx0) || dfx0 == 0.) {
+                return std::numeric_limits<double>::quiet_NaN(); // Fail
+            }
         }
         double delta = fx0 / dfx0;
         x0 -= delta;

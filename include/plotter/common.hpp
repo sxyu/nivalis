@@ -26,9 +26,8 @@
 #include "util.hpp"
 
 #include <chrono>
-#define BEGIN_PROFILE auto start = std::chrono::high_resolution_clock::now()
-#define PROFILE(x) do{printf("%s: %f ns\n", #x, std::chrono::duration<double, std::nano>(std::chrono::high_resolution_clock::now() - start).count()); start = std::chrono::high_resolution_clock::now(); }while(false)
-
+// #include "test_common.hpp"
+//
 namespace nivalis {
 namespace util {
 // * Plotter-related utils
@@ -229,8 +228,8 @@ public:
 
         // * Constants
         // Newton's method parameters
-        static const double EPS_STEP  = 1e-8;
-        static const double EPS_ABS   = 1e-6;
+        static const double EPS_STEP  = 1e-10 * ydiff;
+        static const double EPS_ABS   = 1e-10 * ydiff;
         static const int    MAX_ITER  = 30;
         // Shorthand for Newton's method arguments
 #define NEWTON_ARGS x_var, x, env, EPS_STEP, EPS_ABS, MAX_ITER, \
@@ -242,7 +241,7 @@ public:
         static const double MIN_DIST_BETWEEN_ROOTS  = 1e-4;
         // Point marker display size / mouse selecting area size
         static const int MARKER_DISP_RADIUS = 3,
-                     MARKER_MOUSE_RADIUS = 4;
+                     MARKER_CLICKABLE_RADIUS = 5;
 
         // x-epsilon for domain bisection
         // (finding cutoff where function becomes undefined)
@@ -265,7 +264,7 @@ public:
         // * Draw function s
         pt_markers.clear(); pt_markers.reserve(500);
         grid.clear(); grid.resize(shigh * swid, -1);
-        BEGIN_PROFILE;
+        // BEGIN_PROFILE;
         for (size_t exprid = 0; exprid < funcs.size(); ++exprid) {
             bool reinit = true;
             auto& func = funcs[exprid];
@@ -303,10 +302,10 @@ public:
                                     ptm.rel_func = exprid;
                                     pt_markers.push_back(std::move(ptm));
                                 }
-                                int cmin = std::max(static_cast<int>(sx - MARKER_MOUSE_RADIUS), 0);
-                                int cmax = std::min(static_cast<int>(sx + MARKER_MOUSE_RADIUS), swid - 1);
-                                int rmin = std::max(static_cast<int>(sy - MARKER_MOUSE_RADIUS), 0);
-                                int rmax = std::min(static_cast<int>(sy + MARKER_MOUSE_RADIUS), shigh - 1);
+                                int cmin = std::max(static_cast<int>(sx - MARKER_CLICKABLE_RADIUS), 0);
+                                int cmax = std::min(static_cast<int>(sx + MARKER_CLICKABLE_RADIUS), swid - 1);
+                                int rmin = std::max(static_cast<int>(sy - MARKER_CLICKABLE_RADIUS), 0);
+                                int rmax = std::min(static_cast<int>(sy + MARKER_CLICKABLE_RADIUS), shigh - 1);
                                 if (cmin <= cmax) {
                                     for (int r = rmin; r <= rmax; ++r) {
                                         std::fill(grid.begin() + (r * swid + cmin),
@@ -527,11 +526,11 @@ public:
                                         const int sx = pm.sx, sy = pm.sy;
                                         size_t new_marker_idx = pt_markers.size();
                                         pt_markers.push_back(pm);
-                                        int cmin = std::max(sx - fine_interval + 1 - MARKER_MOUSE_RADIUS, 0);
-                                        int cmax = std::min(sx + MARKER_MOUSE_RADIUS, swid - 1);
+                                        int cmin = std::max(sx - fine_interval + 1 - MARKER_CLICKABLE_RADIUS, 0);
+                                        int cmax = std::min(sx + MARKER_CLICKABLE_RADIUS, swid - 1);
                                         if (cmin <= cmax) {
-                                            for (int r = std::max(sy - fine_interval + 1 - MARKER_MOUSE_RADIUS, 0);
-                                                    r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh - 1); ++ r) {
+                                            for (int r = std::max(sy - fine_interval + 1 - MARKER_CLICKABLE_RADIUS, 0);
+                                                    r <= std::min(sy + MARKER_CLICKABLE_RADIUS, shigh - 1); ++ r) {
                                                 std::fill(grid.begin() + (r * swid + cmin),
                                                         grid.begin() + (r * swid + cmax + 1),
                                                         new_marker_idx);
@@ -560,22 +559,22 @@ public:
                 case Function::FUNC_TYPE_EXPLICIT:
                     {
                         // explicit function
-                        //
                         env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
-                        // Store roots and extrema
-                        std::set<double> roots_and_extrema;
                         // Discontinuity type
                         // first: x-position
                         // second: DISCONT_xxx
-                        // Discontinuity type
+                        // Discontinuity/root/extremum type
                         enum {
-                            DISCONT_ASYMPT = 0, // asymptote
-                            DISCONT_DOMAIN = 1, // domain boundary (possibly asymptote)
-                            DISCONT_SCREEN = 2, // edge of screen
+                            DISCONT_ASYMPT = 0, // asymptote (in middle of domain, e.g. 0 of 1/x)
+                            DISCONT_DOMAIN,     // domain boundary (possibly asymptote, e.g. 0 of ln(x))
+                            DISCONT_SCREEN,     // edge of screen
+                            ROOT,               // root
+                            EXTREMUM,           // extremum
+                            Y_INT,              // y-intercept
                         };
-                        using Discontinuity = std::pair<double, int>;
+                        using CritPoint = std::pair<double, int>;
                         // Store discontinuities
-                        std::set<Discontinuity> discont;
+                        std::set<CritPoint> discont, roots_and_extrema;
                         size_t idx = 0;
                         // Push check helpers
                         // Push to st if no other item less than MIN_DIST_BETWEEN_ROOTS from value
@@ -594,20 +593,20 @@ public:
                         };
                         // Push (value, type) to discont if no other distcontinuity's first item
                         // is less than MIN_DIST_BETWEEN_ROOTS from value
-                        auto push_discont_if_valid = [&](double value, Discontinuity::second_type type) {
-                            auto vc = Discontinuity(value, type);
+                        auto push_critpt_if_valid = [&](double value, CritPoint::second_type type, std::set<CritPoint>& st) {
+                            auto vc = CritPoint(value, type);
                             if (!std::isnan(value) && !std::isinf(value) &&
                                     value >= xmin && value <= xmax) {
-                                auto it = discont.lower_bound(vc);
+                                auto it = st.lower_bound(vc);
                                 double cdist = 1.;
-                                if (it != discont.end())
+                                if (it != st.end())
                                     cdist = it->first - value;
-                                if (it != discont.begin()) {
+                                if (it != st.begin()) {
                                     auto itp = it; --itp;
                                     cdist = std::min(cdist, value - itp->first);
                                 }
                                 if (cdist >= MIN_DIST_BETWEEN_ROOTS) {
-                                    discont.insert(vc);
+                                    st.insert(vc);
                                 }
                             }
                         };
@@ -633,11 +632,11 @@ public:
 
                             int sxi = static_cast<int>(sx);
                             int syi = static_cast<int>(sy);
-                            int minyi = std::max(static_cast<int>(miny) - MARKER_MOUSE_RADIUS, 0);
-                            int maxyi = std::min(static_cast<int>(maxy) + MARKER_MOUSE_RADIUS, shigh-1);
+                            int minyi = std::max(static_cast<int>(miny) - MARKER_CLICKABLE_RADIUS, 0);
+                            int maxyi = std::min(static_cast<int>(maxy) + MARKER_CLICKABLE_RADIUS, shigh-1);
                             for (int r = minyi; r <= maxyi; ++r) {
-                                int cmin = std::max(sxi - MARKER_MOUSE_RADIUS, 0);
-                                int cmax = std::min(sxi + MARKER_MOUSE_RADIUS, swid-1);
+                                int cmin = std::max(sxi - MARKER_CLICKABLE_RADIUS, 0);
+                                int cmax = std::min(sxi + MARKER_CLICKABLE_RADIUS, swid-1);
                                 // Assign to grid
                                 for (int c = cmin; c <= cmax; ++c) {
                                     size_t existing_marker_idx = grid[r * swid + c];
@@ -667,7 +666,7 @@ public:
                                 curr_line.push_back({sx, sy});
                             }
                         };
-                        // Find roots, asymptotes, extrema
+                        // ** Find roots, asymptotes, extrema
                         if (!func.diff.is_null()) {
                             double prev_x, prev_y = 0.;
                             for (int sx = 0; sx < swid; sx += 10) {
@@ -680,16 +679,16 @@ public:
                                     double dy = func.diff(env);
                                     if (!std::isnan(dy)) {
                                         double root = expr.newton(NEWTON_ARGS, &func.diff, y, dy);
-                                        push_if_valid(root, roots_and_extrema);
+                                        push_critpt_if_valid(root, ROOT, roots_and_extrema);
                                         double asymp = func.recip.newton(NEWTON_ARGS,
                                                 &func.drecip, 1. / y, -dy / (y*y));
-                                        push_discont_if_valid(asymp, DISCONT_ASYMPT);
+                                        push_critpt_if_valid(asymp, DISCONT_ASYMPT, discont);
 
-                                        double ddy = func.diff(env);
+                                        double ddy = func.ddiff(env);
                                         if (!std::isnan(ddy)) {
                                             double extr = func.diff.newton(NEWTON_ARGS,
                                                     &func.ddiff, dy, ddy);
-                                            push_if_valid(extr, roots_and_extrema);
+                                            push_critpt_if_valid(extr, EXTREMUM, roots_and_extrema);
                                         }
                                     }
                                 }
@@ -708,13 +707,14 @@ public:
                                             }
                                         }
                                         double boundary_x_not_nan_side = is_prev_y_nan ? hi : lo;
-                                        push_discont_if_valid(boundary_x_not_nan_side,
-                                                DISCONT_DOMAIN);
+                                        push_critpt_if_valid(boundary_x_not_nan_side,
+                                                DISCONT_DOMAIN, discont);
                                     }
                                 }
                                 prev_x = x; prev_y = y;
                             }
                         }
+                        // cout << endl;
                         // Add screen edges to discontinuities list for convenience
                         discont.emplace(xmin, DISCONT_SCREEN);
                         discont.emplace(xmax, DISCONT_SCREEN);
@@ -726,7 +726,7 @@ public:
                         size_t as_idx = 0;
 
                         float psx = -1.f, psy = -1.f;
-                        // Draw function from discont to discont
+                        // ** Main explicit func drawing code: draw function from discont to discont
                         for (const auto& discontinuity : discont) {
                             double discont_x = discontinuity.first;
                             int discont_type = discontinuity.second;
@@ -831,20 +831,24 @@ public:
                         if (curr_line.size() > 1) {
                             graph.polyline(curr_line, func_color, curr_func == exprid ? 3 : 2.);
                         }
-                        std::vector<double> to_erase; // Save dubious points to delete from roots_and_extrama
+                        std::vector<CritPoint> to_erase; // Save dubious points to delete from roots_and_extrama
                         // Helper to draw roots/extrema/y-int and add a marker for it
-                        auto draw_extremum = [&](double x, double y) {
+                        auto draw_extremum = [&](const CritPoint& cpt, double y) {
                             double dy = func.diff(env);
                             double ddy = func.ddiff(env);
+                            double x; int type;
+                            std::tie(x, type) = cpt;
                             auto label =
-                                x == 0.0 ? PointMarker::LABEL_Y_INT :
-                                std::fabs(dy) > 2e-7 * ydiff ? PointMarker::LABEL_X_INT :
-                                ddy > 2e-7 * ydiff ? PointMarker::LABEL_LOCAL_MIN :
-                                ddy < -2e-7 * ydiff ? PointMarker::LABEL_LOCAL_MAX:
-                                PointMarker::LABEL_INFLECTION_PT;
+                                type == Y_INT ? PointMarker::LABEL_Y_INT :
+                                type == ROOT ? PointMarker::LABEL_X_INT :
+                                (type == EXTREMUM && ddy > 2e-7 * ydiff) ? PointMarker::LABEL_LOCAL_MIN :
+                                (type == EXTREMUM && ddy < -2e-7 * ydiff) ? PointMarker::LABEL_LOCAL_MAX:
+                                type == EXTREMUM ? PointMarker::LABEL_INFLECTION_PT:
+                                PointMarker::LABEL_NONE;
                             // Do not show
-                            if (label == PointMarker::LABEL_INFLECTION_PT) {
-                                to_erase.push_back(x);
+                            if (label == PointMarker::LABEL_INFLECTION_PT ||
+                                label == PointMarker::LABEL_NONE) {
+                                to_erase.push_back(cpt);
                                 return;
                             }
 
@@ -862,28 +866,29 @@ public:
                                 ptm.rel_func = exprid;
                                 pt_markers.push_back(std::move(ptm));
                             }
-                            for (int r = std::max(sy - MARKER_MOUSE_RADIUS, 0); r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh-1); ++r) {
-                                for (int c = std::max(sx - MARKER_MOUSE_RADIUS, 0); c <= std::min(sx + MARKER_MOUSE_RADIUS, swid-1); ++c) {
+                            for (int r = std::max(sy - MARKER_CLICKABLE_RADIUS, 0); r <= std::min(sy + MARKER_CLICKABLE_RADIUS, shigh-1); ++r) {
+                                for (int c = std::max(sx - MARKER_CLICKABLE_RADIUS, 0); c <= std::min(sx + MARKER_CLICKABLE_RADIUS, swid-1); ++c) {
                                     grid[r * swid + c] = idx;
                                 }
                             }
                         };
-                        for (double x : roots_and_extrema) {
-                            env.vars[x_var] = x;
+                        for (const CritPoint& cpt : roots_and_extrema) {
+                            env.vars[x_var] = cpt.first;
                             double y = expr(env);
-                            draw_extremum(x, y);
+                            draw_extremum(cpt, y);
                         }
                         // Delete the "dubious" points
-                        for (auto x : to_erase) {
+                        for (const CritPoint& x : to_erase) {
                             roots_and_extrema.erase(x);
                         }
                         if (!func.expr.is_null() && !func.diff.is_null()) {
                             env.vars[x_var] = 0;
                             double y = expr(env);
                             if (!std::isnan(y) && !std::isinf(y)) {
-                                push_if_valid(0., roots_and_extrema); // y-int
-                                if (roots_and_extrema.count(0.)) {
-                                    draw_extremum(0.0, y);
+                                push_critpt_if_valid(0., Y_INT, roots_and_extrema); // y-int
+                                auto cpt = CritPoint(0., Y_INT);
+                                if (roots_and_extrema.count(cpt)) {
+                                    draw_extremum(cpt, y);
                                 }
                             }
                         }
@@ -921,8 +926,8 @@ public:
                                         ptm.rel_func = -1;
                                         pt_markers.push_back(std::move(ptm));
                                     }
-                                    for (int r = std::max(sy - MARKER_MOUSE_RADIUS, 0); r <= std::min(sy + MARKER_MOUSE_RADIUS, shigh-1); ++r) {
-                                        for (int c = std::max(sx - MARKER_MOUSE_RADIUS, 0); c <= std::min(sx + MARKER_MOUSE_RADIUS, swid-1); ++c) {
+                                    for (int r = std::max(sy - MARKER_CLICKABLE_RADIUS, 0); r <= std::min(sy + MARKER_CLICKABLE_RADIUS, shigh-1); ++r) {
+                                        for (int c = std::max(sx - MARKER_CLICKABLE_RADIUS, 0); c <= std::min(sx + MARKER_CLICKABLE_RADIUS, swid-1); ++c) {
                                             grid[r * swid + c] = idx;
                                         }
                                     }
@@ -933,7 +938,7 @@ public:
                     break;
             }
         }
-        PROFILE(all);
+        // PROFILE(all);
         if (loss_detail) {
             func_error = "Warning: some detail may be lost";
         } else if (prev_loss_detail) {
