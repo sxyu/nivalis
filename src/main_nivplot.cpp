@@ -198,6 +198,9 @@ void main_loop_step() {
         plot.draw(adaptor);       // Draw functions
 #endif
         // Cache the draw list
+        if (draw_list_pre != nullptr) {
+            delete draw_list_pre;
+        }
         draw_list_pre = draw_list->CloneOutput();
     } else {
         // No update, load draw list from cache

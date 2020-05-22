@@ -93,7 +93,6 @@ std::istream& FuncDrawObj::from_bin(std::istream& is) {
     util::read_bin(is, c);
     util::read_bin(is, type);
 
-    std::cout << points.size() << " " << type << " R\n";
     return is;
 }
 
