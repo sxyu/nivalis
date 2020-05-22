@@ -22,20 +22,25 @@ bool is_whole_number(const std::string& expr) {
     return true;
 }
 
-size_t find_equality(const std::string& expr, char eqn_chr) {
+size_t find_equality(const std::string& expr,
+        bool allow_ineq,
+        bool enforce_no_adj_comparison) {
+    if (expr.empty()) return -1;
     size_t stkh = 0;
-    for (size_t i = 0; i < expr.size(); ++i) {
+    for (size_t i = 0; i < expr.size() - 1; ++i) {
         const char c = expr[i];
         if (is_open_bracket(c)) {
             ++stkh;
         } else if (is_close_bracket(c)) {
             --stkh;
-        } else if (stkh == 0 && c == eqn_chr &&
-                   i > 0 && i < expr.size()-1 &&
-                   !util::is_comp_operator(expr[i-1]) &&
-                   expr[i-1] != '!' &&
-                   !util::is_comp_operator(expr[i+1]) &&
-                   expr[i+1] != '!') {
+        } else if (stkh == 0 &&
+                (c == '=' || (allow_ineq && (c == '<' || c== '>')))
+                    && i > 0 &&
+                   (!enforce_no_adj_comparison ||
+                       (!util::is_comp_operator(expr[i-1]) &&
+                       expr[i-1] != '!' &&
+                       !util::is_comp_operator(expr[i+1]) &&
+                       expr[i+1] != '!'))) {
             return i;
         }
     }

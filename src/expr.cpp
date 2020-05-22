@@ -64,13 +64,24 @@ Expr Expr::constant(double val) {
     return z;
 }
 
-std::string Expr::repr(const Environment& env) const {
-    std::stringstream ss;
-    detail::print_ast(ss, ast, &env);
-    auto s = ss.str();
-    if (s.size() >= 2 &&
-        s[0] == '(' && s.back() == ')') s = s.substr(1, s.size()-2);
-    return s;
+std::ostream& Expr::repr(std::ostream& os, const Environment& env) const {
+    detail::print_ast(os, ast, &env);
+    return os;
+}
+
+std::ostream& Expr::to_bin(std::ostream& os) const {
+    util::write_bin(os, ast.size());
+    for (size_t i = 0; i < ast.size(); ++i) {
+        util::write_bin(os, ast[i]);
+    }
+    return os;
+}
+std::istream& Expr::from_bin(std::istream& is) {
+    util::resize_from_read_bin(is, ast);
+    for (size_t i = 0; i < ast.size(); ++i) {
+        util::read_bin(is, ast[i]);
+    }
+    return is;
 }
 
 bool Expr::is_null() const {

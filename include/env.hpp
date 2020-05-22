@@ -4,12 +4,16 @@
 #include<map>
 #include<string>
 #include<vector>
+#include<ostream>
+#include<istream>
 #include "expr.hpp"
 namespace nivalis {
 
 // Nivalis environment
 struct Environment {
     Environment();
+    Environment(const Environment& other) =default;
+    Environment& operator=(const Environment& other) =default;
 
     // User function representation
     struct UserFunction {
@@ -50,6 +54,10 @@ struct Environment {
 
     // Delete function
     void del_func(const std::string& func_name);
+
+    // Binary serialization (only vars/funcs)
+    std::ostream& to_bin(std::ostream& os) const;
+    std::istream& from_bin(std::istream& is);
 
     // Values of variables (by address)
     std::vector<double> vars;

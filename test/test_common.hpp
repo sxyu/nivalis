@@ -69,6 +69,10 @@ template <class T> std::ostream& operator<<(std::ostream& os, const std::unorder
 template <class T, class U> std::ostream& operator<<(std::ostream& os, const std::map<T, U> & mp){ os<<"{ "; for(const auto& ele : mp){ os << mp.first << ": " << mp.second <<" ";}; os << "}"; return os; }
 template <class T, class U> std::ostream& operator<<(std::ostream& os, const std::unordered_map<T, U> & mp){ os<<"{ "; for(const auto& ele : mp){ os << mp.first << ": " << mp.second <<" ";}; os << "}"; return os; }
 
+template <class Float> Float absrelerr(Float x, Float y) {
+    return std::min(std::fabs(x - y), std::fabs(x - y) / std::fabs(x));
+}
+
 namespace nivalis {
 namespace test {
 

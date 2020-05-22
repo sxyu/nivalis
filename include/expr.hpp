@@ -2,6 +2,7 @@
 #ifndef _EXPR_H_331EE476_6D57_4B33_8148_D5EA882BC818
 #define _EXPR_H_331EE476_6D57_4B33_8148_D5EA882BC818
 #include <ostream>
+#include <istream>
 #include <vector>
 
 #include "opcodes.hpp"
@@ -73,17 +74,23 @@ struct Expr {
     // Const expr
     static Expr constant(double val);
 
-    // Optimize expression in-place
-    void optimize();
-
     // String representation of expression (can be evaluated again)
-    std::string repr(const Environment& env) const;
+    std::ostream& repr(std::ostream& os, const Environment& env) const;
 
-    // Take the derivative wrt var with address 'var_addr' in the given environment
-    Expr diff(uint64_t var_addr, Environment& env) const;
+    // Binary serialization
+    std::ostream& to_bin(std::ostream& os) const;
+    std::istream& from_bin(std::istream& is);
 
     // Checks if this is a null expression
     bool is_null() const;
+
+    // Next section implemented optimize_expr.cpp
+    // Optimize expression in-place
+    void optimize();
+
+    // Next section implemented diff_expr.cpp
+    // Take the derivative wrt var with address 'var_addr' in the given environment
+    Expr diff(uint64_t var_addr, Environment& env) const;
 
     // Use Newton(-Raphson) method to compute root for variable with addr var_addr
     // eps_step: stopping condition, |f(x)/df(x)|
@@ -99,7 +106,7 @@ struct Expr {
                   double fx0 = std::numeric_limits<double>::max(),
                   double dfx0 = std::numeric_limits<double>::max()) const;
 
-    // Abstract syntax tree
+    // DATA: Abstract syntax tree
     AST ast;
 };
 

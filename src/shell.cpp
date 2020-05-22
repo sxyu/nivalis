@@ -123,11 +123,11 @@ void Shell::eval_line(std::string line) {
                 );
         if (do_optim) {
             expr.optimize();
-            os << expr.repr(env) << "\n";
+            expr.repr(os, env) << "\n";
         }
         if (do_diff) {
             Expr diff = expr.diff(diff_var_addr, env);
-            os << diff.repr(env) << "\n";
+            diff.repr(os, env) << "\n";
         } else {
             double output;
             if (def_fn || !std::isnan(output = expr(env))) {
@@ -146,8 +146,8 @@ void Shell::eval_line(std::string line) {
                                 if (i) os << ", ";
                                 os << "$" << i;
                             }
-                            os << ") = "  <<
-                                env.funcs[addr].expr.repr(env) << std::endl;
+                            os << ") = ";
+                            env.funcs[addr].expr.repr(os, env) << std::endl;
                         }
 
                     } else {

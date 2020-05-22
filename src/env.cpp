@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
+#include "util.hpp"
 namespace nivalis {
 namespace {
 bool check_for_cycle(const std::vector<Environment::UserFunction>& funcs,
@@ -171,5 +172,31 @@ void Environment::del_func(const std::string& func_name) {
         funcs[it->second].deps.shrink_to_fit();
         freg.erase(it);
     }
+}
+
+std::ostream& Environment::to_bin(std::ostream& os) const {
+    util::write_bin(os, vars.size());
+    for (size_t i = 0; i < vars.size(); ++i) {
+        util::write_bin(os, vars[i]);
+    }
+    util::write_bin(os, funcs.size());
+    for (size_t i = 0; i < funcs.size(); ++i) {
+        funcs[i].expr.to_bin(os);
+        util::write_bin(os, funcs[i].n_args);
+    }
+    return os;
+}
+std::istream& Environment::from_bin(std::istream& is) {
+    util::resize_from_read_bin(is, vars);
+    for (size_t i = 0; i < vars.size(); ++i) {
+        util::read_bin(is, vars[i]);
+    }
+    varname.resize(vars.size());
+    util::resize_from_read_bin(is, funcs);
+    for (size_t i = 0; i < funcs.size(); ++i) {
+        funcs[i].expr.from_bin(is);
+        util::read_bin(is, funcs[i].n_args);
+    }
+    return is;
 }
 }  // namespace nivalis

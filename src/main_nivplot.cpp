@@ -9,7 +9,6 @@
 #include <cmath>
 #include <cctype>
 #include <utility>
-#include <thread>
 
 #include "plotter/common.hpp"
 #include "imgui.h"
@@ -19,13 +18,16 @@
 #include "imgui_stdlib.h"
 
 #ifdef NIVALIS_EMSCRIPTEN
-#include <emscripten.h>
+#include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #include <GLES3/gl3.h>
+
 #define GLFW_INCLUDE_ES3
 
 #else // NIVALIS_EMSCRIPTEN
+#include <thread>
 #include <GL/glew.h>
+#include "plotter/draw_worker.hpp"
 #endif // NIVALIS_EMSCRIPTEN
 
 #include <GLFW/glfw3.h>
@@ -44,140 +46,55 @@ EM_JS(int, canvas_get_height, (), {
 EM_JS(void, resizeCanvas, (), {
         js_resizeCanvas();
         });
+worker_handle draw_worker_handle;
+bool ret_from_worker;
 #endif // NIVALIS_EMSCRIPTEN
 
 
 namespace {
 using namespace nivalis;
 // Graphics adaptor for Plotter, with caching
-struct OpenGLGraphicsAdaptor {
-    // Drawing object (line, rectangle, etc),
-    // used to store objects in last frame so they can be cached
-    // if view has not updated
-    struct DrawObj {
-        enum Type {
-            LINE, POLYLINE, RECT, RECT_FILL, STRING, CLEAR
-        };
-        DrawObj() =default;
-        DrawObj(int type, float x, float y, color::color c) :
-            type(type), x(x), y(y), c(c) {}
-
-        int type;
-        float x, y, w, h, t;
-        std::vector<std::array<float, 2> > points;
-        color::color c;
-        std::string s;
-    };
-
-    OpenGLGraphicsAdaptor() =default;
-    OpenGLGraphicsAdaptor(GLFWwindow* window) : window(window)  {}
-    void next_frame(ImDrawList* new_draw_list, bool reload_previous = false) {
-        draw_list = new_draw_list;
-        if (reload_previous) {
-            for (auto& obj : objs) {
-                switch(obj.type) {
-                    case DrawObj::Type::LINE:
-                        line(obj.x, obj.y, obj.w, obj.h, obj.c, obj.t, false);
-                        break;
-                    case DrawObj::Type::POLYLINE:
-                        polyline(obj.points, obj.c, obj.t, false);
-                        break;
-                    case DrawObj::Type::RECT:
-                    case DrawObj::Type::RECT_FILL:
-                        rectangle(obj.x, obj.y, obj.w, obj.h,
-                                obj.type == DrawObj::Type::RECT_FILL, obj.c, false);
-                        break;
-                    case DrawObj::Type::CLEAR:
-                        clear(obj.c, false);
-                        break;
-                    case DrawObj::Type::STRING:
-                        string(obj.x, obj.y, obj.s, obj.c, false);
-                        break;
-                }
-            }
-        } else {
-            objs.clear();
-        }
-    }
-
+struct ImGuiDrawListGraphicsAdaptor {
     void line(float ax, float ay, float bx, float by,
-            const color::color& c,
-            float thickness = 1., bool upd_cache = true) {
+            const color::color& c, float thickness = 1.) {
         draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
                 ImColor(c.r, c.g, c.b, c.a), thickness);
-        if (upd_cache) {
-            DrawObj obj(DrawObj::Type::LINE, ax, ay, c);
-            obj.w = bx; obj.h = by;
-            obj.t = thickness;
-            objs.push_back(obj);
-        }
     }
     void polyline(const std::vector<std::array<float, 2> >& points,
-            const color::color& c,
-            float thickness = 1., bool upd_cache = true) {
+            const color::color& c, float thickness = 1.) {
         std::vector<ImVec2> line(points.size());
         for (size_t i = 0; i < line.size(); ++i) {
             line[i].x = (float) points[i][0];
             line[i].y = (float) points[i][1];
         }
         draw_list->AddPolyline(&line[0], (int)line.size(), ImColor(c.r, c.g, c.b, c.a), false, thickness);
-        if (upd_cache) {
-            DrawObj obj(DrawObj::Type::POLYLINE, 0., 0., c);
-            obj.points = points;
-            obj.t = thickness;
-            objs.push_back(obj);
-        }
     }
-    void rectangle(float x, float y, float w, float h, bool fill, color::color c, bool upd_cache = true) {
+    void rectangle(float x, float y, float w, float h, bool fill, const color::color& c) {
         if (fill) {
             draw_list->AddRectFilled(ImVec2(x,y), ImVec2(x+w, y+h),
                     ImColor(c.r, c.g, c.b, c.a));
-        }
-        else {
+        } else {
             draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
                     ImColor(c.r, c.g, c.b, c.a));
         }
-        if (upd_cache) {
-            DrawObj obj(fill ? DrawObj::Type::RECT_FILL : DrawObj::Type::RECT, x, y, c);
-            obj.w = w; obj.h = h;
-            objs.push_back(obj);
-        }
     }
-    void clear(const color::color& c, bool upd_cache = true) {
-        glClearColor(c.r, c.g, c.b, c.a);
-        if (upd_cache) {
-            DrawObj obj(DrawObj::Type::CLEAR, 0.f, 0.f, c);
-            objs.push_back(obj);
-        }
-    }
-    void string(float x, float y, const std::string& s, const color::color& c, bool upd_cache = true) {
+    void string(float x, float y, const std::string& s, const color::color& c) {
         // String using ImGui API
         draw_list->AddText(ImVec2(x, y),
                 ImColor(c.r, c.g, c.b, c.a), s.c_str());
-        if (upd_cache) {
-            DrawObj obj(DrawObj::Type::STRING, x, y, c);
-            obj.s = s;
-            objs.push_back(obj);
-        }
     }
 
-    // Cache
-    std::vector<DrawObj> objs;
-
-    GLFWwindow* window;
-    ImDrawList* draw_list;
+    ImDrawList* draw_list = nullptr;
 };
 
 // * Constants
-// Screen size
-const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
 // FPS restriction when not moving (to reduce CPU usage)
 const int RESTING_FPS = 12;
 // Frames to stay active after update
 const int ACTIVE_FRAMES = 60;
 
-Environment env; // Main environment
-Plotter plot(env, "", SCREEN_WIDTH, SCREEN_HEIGHT); // Main plotter
+Plotter plot; // Main plotter
+Environment& env = plot.env; // Main environment
 GLFWwindow* window; // GLFW window
 
 // MAIN LOOP: Run single step of main loop
@@ -197,21 +114,21 @@ void main_loop_step() {
     // * State
     // Do not throttle the FPS for active_counter frames
     // (decreases 1 each frame)
-    thread_local int active_counter;
+    static int active_counter;
     // Only true on first loop (places and resizes windows)
-    thread_local bool init = true;
+    static bool init = true;
 
     // Set to open popups
-    thread_local bool open_color_picker = false,
-                      open_reference = false,
-                      open_shell = false;
+    static bool open_color_picker = false,
+                open_reference = false,
+                open_shell = false;
 
     // Main graphics adaptor for plot.draw
-    thread_local OpenGLGraphicsAdaptor adaptor(window);
+    static ImGuiDrawListGraphicsAdaptor adaptor;
 
     // Color picker func index: function whose color
     // the color editor is changing (not necessarily curr_func)
-    thread_local size_t curr_edit_color_idx;
+    static size_t curr_edit_color_idx;
 
 #ifdef NIVALIS_EMSCRIPTEN
     int ems_js_canvas_width = canvas_get_width();
@@ -243,13 +160,14 @@ void main_loop_step() {
     // Handle resize
     int wwidth, wheight, pwwidth = -1, pwheight;
     glfwGetWindowSize(window, &wwidth, &wheight);
-    if (wwidth != plot.swid || wheight != plot.shigh) {
-        pwwidth = plot.swid; pwheight = plot.shigh;
+    if (wwidth != plot.view.swid || wheight != plot.view.shigh) {
+        pwwidth = plot.view.swid; pwheight = plot.view.shigh;
         plot.resize(wwidth, wheight);
     }
 
+    static ImDrawList* draw_list_pre = nullptr;
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
-    adaptor.next_frame(draw_list, !plot.require_update);
+    adaptor.draw_list = draw_list;
     if (plot.require_update || plot.marker_text.size() || open_shell) {
         // Reset the active counter
         // (do not throttle the FPS for ACTIVE_FRAMES frames)
@@ -258,18 +176,49 @@ void main_loop_step() {
     if (plot.require_update) {
         plot.require_update = false;
         // Redraw the grid and functions
-        plot.draw<OpenGLGraphicsAdaptor>(adaptor);
-    } else if (active_counter > 0) {
-        --active_counter;
+        glClearColor(1., 1., 1., 1.); // Clear white
+        plot.draw_grid(adaptor);      // Draw axes and grid
+#ifndef NIVALIS_EMSCRIPTEN
+        {
+            // Need lock since worker thread asynchroneously
+            // swaps back buffer to front
+            std::lock_guard<std::mutex> lock(worker_mtx);
+            plot.draw(adaptor);       // Draw functions
+        }
+        // Run worker if not already running AND either:
+        // this update was not from the worker or
+        // view has changed since last worker run
+        maybe_run_worker(plot);
+        // In Emscripten threads are not supported, and we use
+        // WebWorker instead; this is not need then
+#else
+        // Synchronous, since threading not supported
+        plot.recalc();
+        plot.swap();
+        plot.draw(adaptor);       // Draw functions
+#endif
+        // Cache the draw list
+        draw_list_pre = draw_list->CloneOutput();
     } else {
-        // Sleep to throttle FPS
-        std::this_thread::sleep_for(std::chrono::microseconds(
-                    1000000 / RESTING_FPS
-                    ));
+        // No update, load draw list from cache
+        if (draw_list_pre) *draw_list = *draw_list_pre;
+        if (active_counter > 0) {
+            --active_counter;
+        } else {
+            // Sleep to throttle FPS
+#ifdef NIVALIS_EMSCRIPTEN
+            // emscripten_sleep(1000 / RESTING_FPS);
+#else
+            std::this_thread::sleep_for(std::chrono::microseconds(
+                        1000000 / RESTING_FPS
+                        ));
+#endif
+
+        }
     }
 
     // Set to set current function to 'change_curr_func' at next loop step
-    thread_local int change_curr_func = -1;
+    static int change_curr_func = -1;
     // Change current function
     if (~change_curr_func) {
         // Seek to previous/next function after up/down arrow on textbox
@@ -341,7 +290,7 @@ void main_loop_step() {
 
     if (init) {
         ImGui::SetNextWindowPos(ImVec2(10,
-                    static_cast<float>(plot.shigh - 140)));
+                    static_cast<float>(plot.view.shigh - 140)));
         ImGui::SetNextWindowSize(ImVec2(333, 130));
     }
     ImGui::Begin("Sliders", NULL);
@@ -401,7 +350,7 @@ void main_loop_step() {
 
     if (init) {
         ImGui::SetNextWindowPos(ImVec2(
-                    static_cast<float>(plot.swid - 182), 10));
+                    static_cast<float>(plot.view.swid - 182), 10));
         ImGui::SetNextWindowSize(ImVec2(175, 105));
     }
     ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
@@ -413,15 +362,15 @@ void main_loop_step() {
                     pos.y));
     }
     ImGui::PushItemWidth(60.);
-    if (ImGui::InputDouble(" <x<", &plot.xmin)) plot.require_update = true;
+    if (ImGui::InputDouble(" <x<", &plot.view.xmin)) plot.require_update = true;
     ImGui::SameLine();
     ImGui::PushItemWidth(60.);
-    if(ImGui::InputDouble("##xm", &plot.xmax)) plot.require_update = true;
+    if(ImGui::InputDouble("##xm", &plot.view.xmax)) plot.require_update = true;
     ImGui::PushItemWidth(60.);
-    if (ImGui::InputDouble(" <y<", &plot.ymin)) plot.require_update = true;
+    if (ImGui::InputDouble(" <y<", &plot.view.ymin)) plot.require_update = true;
     ImGui::SameLine();
     ImGui::PushItemWidth(60.);
-    if(ImGui::InputDouble("##ym", &plot.ymax)) plot.require_update = true;
+    if(ImGui::InputDouble("##ym", &plot.view.ymax)) plot.require_update = true;
     if (ImGui::Button("Reset view")) plot.reset_view();
     ImGui::End(); // View
 
@@ -467,8 +416,8 @@ void main_loop_step() {
         ImGui::EndPopup();
     }
 
-    ImGui::SetNextWindowSize(ImVec2(std::min(600, plot.swid),
-                std::min(400, plot.shigh)));
+    ImGui::SetNextWindowSize(ImVec2(std::min(600, plot.view.swid),
+                std::min(400, plot.view.shigh)));
     if (ImGui::BeginPopupModal("Reference", &open_reference,
                 ImGuiWindowFlags_NoResize)) {
         // Reference popup
@@ -555,8 +504,8 @@ void main_loop_step() {
         ImGui::EndPopup();
     }
 
-    ImGui::SetNextWindowSize(ImVec2(std::min(700, plot.swid),
-                std::min(500, plot.shigh)));
+    ImGui::SetNextWindowSize(ImVec2(std::min(700, plot.view.swid),
+                std::min(500, plot.view.shigh)));
     if (ImGui::BeginPopupModal("Shell", &open_shell,
                 ImGuiWindowFlags_NoResize)) {
         // Shell popup
@@ -565,17 +514,17 @@ void main_loop_step() {
         ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 85));
         // * Virtual shell state
         // Shell output stream (replaces cout)
-        thread_local std::stringstream shell_ss;
+        static std::stringstream shell_ss;
         // Hidden shell backend
-        thread_local Shell shell(env, shell_ss);
+        static Shell shell(env, shell_ss);
         // Shell command buffer
-        thread_local std::string shell_curr_cmd;
+        static std::string shell_curr_cmd;
         // If true, scrolls the shell to bottom on next frame
         // (used after command exec to scroll to bottom)
-        thread_local bool shell_scroll = false;
+        static bool shell_scroll = false;
         // Shell history implementation
-        thread_local std::vector<std::string> shell_hist;
-        thread_local size_t shell_hist_pos = -1;
+        static std::vector<std::string> shell_hist;
+        static size_t shell_hist_pos = -1;
         // * End virtual shell state
 
         ImGui::TextWrapped("%s\n", shell_ss.str().c_str());
@@ -649,7 +598,7 @@ void main_loop_step() {
         if (io.MouseReleased[0]) {
             plot.handle_mouse_up(mouse_x, mouse_y);
         }
-        thread_local int mouse_prev_x = -1, mouse_prev_y = -1;
+        static int mouse_prev_x = -1, mouse_prev_y = -1;
         if (mouse_x != mouse_prev_x || mouse_y != mouse_prev_y) {
             plot.handle_mouse_move(mouse_x, mouse_y);
         }
@@ -710,7 +659,7 @@ extern "C" {
         if (!glfwInit()) return false;
 
         /* Create a windowed mode window and its OpenGL context */
-        window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT,
+        window = glfwCreateWindow(plot.view.swid, plot.view.shigh,
                 "Nivalis Plotter", NULL, NULL);
         // Init glfw
         if (!window)
@@ -758,6 +707,7 @@ extern "C" {
         ImGui::StyleColorsLight();
 
 #ifdef NIVALIS_EMSCRIPTEN
+        // Set initial window size according to HTML canvas size
         int ems_js_canvas_width = canvas_get_width();
         int ems_js_canvas_height = canvas_get_height();
         glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
@@ -765,6 +715,10 @@ extern "C" {
         // Set handlers and start emscripten main loop
         emscripten_set_main_loop(emscripten_loop, 0, 1);
 #else
+        // Start worker thread
+        std::thread thd(draw_worker, std::ref(plot));
+        thd.detach();
+
         // Main GLFW loop (desktop)
         while (!glfwWindowShouldClose(window)) {
             main_loop_step();
@@ -774,6 +728,5 @@ extern "C" {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
-        return 0;
     }
 } // extern "C"

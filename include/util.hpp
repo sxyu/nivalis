@@ -3,6 +3,8 @@
 #define _UTIL_H_4EB09B11_F909_45C4_AD5D_8AA7A6644106
 #include <string>
 #include <vector>
+#include <ostream>
+#include <istream>
 namespace nivalis {
 namespace util {
 
@@ -58,12 +60,15 @@ constexpr bool is_bracket(char c) {
 bool is_varname(const std::string& expr);
 // checks if string is a nonnegative integer (only 0-9)
 bool is_whole_number(const std::string& expr);
-// returns position of = in equality, or -1 else
+// returns position of = (or </> if allow_ineq) in string, or -1 else
 // where = must:
 // 1. not be at index 0 or expr.size()-1
 // 2. at top bracket level wrt ([{
-// 3. not be followed/preceded by any comparison operator or !
-size_t find_equality(const std::string& expr, char eqn_chr = '=');
+// 3. (if enforce_no_adj_comparison)
+//     not be followed/preceded by any comparison operator or !
+size_t find_equality(const std::string& expr,
+                     bool allow_ineq = false,
+                     bool enforce_no_adj_comparison = true);
 
 // string trimming/strip
 void ltrim(std::string &s);
@@ -77,6 +82,26 @@ double as_double(const uint32_t* ast);
 
 // Squared distance
 int sqr_dist(int ax, int ay, int bx, int by);
+
+
+template<class T>
+/** Write binary to ostream */
+inline void write_bin(std::ostream& os, T val) {
+    os.write(reinterpret_cast<char*>(&val), sizeof(T));
+}
+
+template<class T>
+/** Read binary from istream */
+inline void read_bin(std::istream& is, T& val) {
+    is.read(reinterpret_cast<char*>(&val), sizeof(T));
+}
+
+template<class Resizable>
+/** Read a size_t from istream and resize v (vector/string) to it */
+inline void resize_from_read_bin(std::istream& is, Resizable& v) {
+    size_t sz; read_bin(is, sz);
+    v.resize(sz);
+}
 
 }  // namespace util
 }  // namespace nivalis
