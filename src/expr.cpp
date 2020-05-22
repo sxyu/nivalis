@@ -148,7 +148,7 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
                           break;
                       } os << env->varname.at(ast[idx].ref);
                   }
-                  else os << "&" << ast[idx].ref;
+                  else os << "@" << ast[idx].ref;
                   break; // ref
             case '%':
                   if (env != nullptr) {

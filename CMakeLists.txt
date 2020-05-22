@@ -61,13 +61,13 @@ set(
 
 set(
   HEADERS
-  version.hpp
   parser.hpp
   env.hpp
   expr.hpp
   util.hpp
   opcodes.hpp
   plotter/common.hpp
+  plotter/draw_worker.hpp
   shell.hpp
   color.hpp
 )
@@ -97,6 +97,7 @@ list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 
 include_directories(
     ${INCLUDE_DIR}
+    ${PROJECT_BINARY_DIR}/include
     ${X11_INCLUDE_DIR}
     ${Fontconfig_INCLUDE_DIRS}
     ${IMGUI_DIR}
@@ -186,7 +187,7 @@ endif (EMSCRIPTEN)
 
 message ( STATUS "Using OpenGL with ImGui as plotter backend" )
 
-configure_file( version.hpp.in "${INCLUDE_DIR}/version.hpp" )
+configure_file( version.hpp.in "${PROJECT_BINARY_DIR}/include/version.hpp" )
 
 if ( BOOST_ENABLED )
     include_directories( ${Boost_INCLUDE_DIRS} )

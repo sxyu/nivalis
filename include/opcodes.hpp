@@ -78,9 +78,13 @@ constexpr bool has_ref(uint32_t opcode) {
 // #: replace with value in next 8 bytes (double)
 const char* repr(uint32_t opcode);
 
-// Get opcode of operator from char e.g. '+' -> 32
-// If not a valid operator, returns bsel
+// Get opcode of binary operator from char e.g. '+' -> 32
+// If not a valid binary operator, returns bsel
 uint32_t from_char(char opchar);
+
+// Binary operator character from opcode e.g. 32 -> '+'
+// If not a valid binary operator, returns 0
+char to_char(uint32_t opcode);
 
 // Get map from function name to opcode
 const std::map<std::string, uint32_t>& funcname_to_opcode_map();

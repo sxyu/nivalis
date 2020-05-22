@@ -3,7 +3,12 @@
 #include <iostream>
 
 namespace {
-const unsigned NUM_THREADS = std::thread::hardware_concurrency();
+const unsigned NUM_THREADS =
+#ifdef NIVALIS_EMSCRIPTEN
+    1;  // Multithreading not supported
+#else
+    std::thread::hardware_concurrency();
+#endif
 // Initial screen size
 const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
 }
@@ -78,7 +83,7 @@ std::ostream& FuncDrawObj::to_bin(std::ostream& os) const {
     for (size_t i = 0; i < points.size(); ++i) {
         util::write_bin(os, points[i]);
     }
-    util::write_bin(os, t);
+    util::write_bin(os, thickness);
     util::write_bin(os, c);
     util::write_bin(os, type);
     return os;
@@ -89,7 +94,7 @@ std::istream& FuncDrawObj::from_bin(std::istream& is) {
         util::read_bin(is, points[i]);
     }
 
-    util::read_bin(is, t);
+    util::read_bin(is, thickness);
     util::read_bin(is, c);
     util::read_bin(is, type);
 
@@ -260,6 +265,13 @@ void Plotter::recalc(const View& view) {
             case Function::FUNC_TYPE_IMPLICIT_INEQ_STRICT:
                 {
                     // Implicit function
+                    if (func.expr.is_null() ||
+                        (func.expr.ast[0].opcode == OpCode::val &&
+                         func.type == Function::FUNC_TYPE_IMPLICIT)) {
+                        // Either 0=0 or c=0 for some c, do not draw
+                        continue;
+                    }
+
                     // Inequality color
                     color::color ineq_color(func_color.r, func_color.g, func_color.b, 0.25);
 
@@ -281,7 +293,8 @@ void Plotter::recalc(const View& view) {
                     std::vector<Square> interest_squares;
 
                     // Increase interval per x pixels
-                    static const size_t HIGH_PIX_LIMIT = 25000;
+                    static const size_t HIGH_PIX_LIMIT =
+                        std::max<size_t>(50000 / NUM_THREADS, 20000);
                     // Maximum number of pixels to draw (stops drawing)
                     static const size_t MAX_PIXELS = 300000;
                     // Epsilon for bisection
@@ -374,8 +387,9 @@ void Plotter::recalc(const View& view) {
 
                                 if (tpix_cnt > MAX_PIXELS) break;
                                 // Update interval based on point count
-                                fine_interval = std::min(static_cast<int>(tpix_cnt /
-                                            HIGH_PIX_LIMIT) + 1, COARSE_INTERVAL);
+                                fine_interval = static_cast<int>(tpix_cnt /
+                                            HIGH_PIX_LIMIT) + 1;
+                                if (fine_interval >= 4) fine_interval = 6;
 
                                 int ylo, yhi, xlo, xhi; double z_at_xy_hi;
                                 std::tie(ylo, yhi, xlo, xhi, z_at_xy_hi) = sqr;
@@ -695,7 +709,6 @@ void Plotter::recalc(const View& view) {
                             prev_x = x; prev_y = y;
                         }
                     }
-                    // cout << endl;
                     // Add screen edges to discontinuities list for convenience
                     discont.emplace(view.xmin, DISCONT_SCREEN);
                     discont.emplace(view.xmax, DISCONT_SCREEN);
@@ -1075,11 +1088,11 @@ void Plotter::reparse_expr(size_t idx) {
                 // If still valid, set expression to difference
                 // i.e. rearrange so RHS is 0
                 if (flip) {
-                    expr = parser(rhs, env, true, true)
-                        - parser(lhs, env, true, true);
+                    expr = parser("(" + rhs + ")-(" + lhs + ")",
+                            env, true, true);
                 } else {
-                    expr = parser(lhs, env, true, true)
-                        - parser(rhs, env, true, true);
+                    expr = parser("(" + lhs + ")-(" + rhs + ")",
+                            env, true, true);
                 }
             }
         } else {
@@ -1423,20 +1436,42 @@ void Plotter::buf_add_polyline(const View& recalc_view,
     }
     obj.type = FuncDrawObj::POLYLINE;
     obj.c = c;
-    obj.t = thickness;
+    obj.thickness = thickness;
     draw_back_buf.push_back(std::move(obj));
 }
 void Plotter::buf_add_rectangle(const View& recalc_view,
         float x, float y, float w, float h, bool fill, const color::color& c) {
-        FuncDrawObj obj;
-        obj.type = fill ? FuncDrawObj::FILLED_RECT : FuncDrawObj::RECT;
-        obj.points = {{(double)x, (double)y}, {(double)(x+w), (double)(y+h)}};
-        for (size_t i = 0; i < obj.points.size(); ++i) {
-            obj.points[i][0] = obj.points[i][0]*1. / recalc_view.swid * (recalc_view.xmax - recalc_view.xmin) + recalc_view.xmin;
-            obj.points[i][1] = (recalc_view.shigh - obj.points[i][1])*1. / recalc_view.shigh * (recalc_view.ymax - recalc_view.ymin) + recalc_view.ymin;
+        FuncDrawObj rect;
+        rect.type = fill ? FuncDrawObj::FILLED_RECT : FuncDrawObj::RECT;
+        rect.points = {{(double)x, (double)y}, {(double)(x+w), (double)(y+h)}};
+        auto xdiff = recalc_view.xmax - recalc_view.xmin;
+        auto ydiff = recalc_view.ymax - recalc_view.ymin;
+        for (size_t i = 0; i < rect.points.size(); ++i) {
+            rect.points[i][0] = rect.points[i][0]*1. / recalc_view.swid * xdiff + recalc_view.xmin;
+            rect.points[i][1] = (recalc_view.shigh - rect.points[i][1])*1. / recalc_view.shigh * ydiff + recalc_view.ymin;
         }
-        obj.c = c;
-        draw_back_buf.push_back(std::move(obj));
+        if (fill && draw_back_buf.size()) {
+            auto& last_rect = draw_back_buf.back();
+            if (last_rect.type == FuncDrawObj::FILLED_RECT &&
+                std::fabs(last_rect.points[0][1] - rect.points[0][1]) < 1e-6 * ydiff &&
+                std::fabs(last_rect.points[1][1] - rect.points[1][1]) < 1e-6 * ydiff &&
+                std::fabs(last_rect.points[1][0] - rect.points[0][0]) < 1e-6 * xdiff &&
+                last_rect.c == c) {
+                // Reduce shape count by merging with rectangle to left
+                last_rect.points[1][0] = rect.points[1][0];
+                return;
+            } else if (last_rect.type == FuncDrawObj::FILLED_RECT &&
+                std::fabs(last_rect.points[0][0] - rect.points[0][0]) < 1e-6 * xdiff &&
+                std::fabs(last_rect.points[1][0] - rect.points[1][0]) < 1e-6 * xdiff &&
+                std::fabs(last_rect.points[1][1] - rect.points[0][1]) < 1e-6 * ydiff &&
+                last_rect.c == c) {
+                // Reduce shape count by merging with rectangle above
+                last_rect.points[1][1] = rect.points[1][1];
+                return;
+            }
+        }
+        rect.c = c;
+        draw_back_buf.push_back(std::move(rect));
     }
 
 }  // namespace nivalis

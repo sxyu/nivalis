@@ -16,7 +16,7 @@ constexpr bool is_literal(char c) {
         (c >= '0' && c <= '9') ||
         c == '_' || c == '$' ||
         c == '\'' || c == '.' || c == '#' ||
-        c == '&';
+        c == '@';
 }
 
 // true if can be first char of a variable name
@@ -31,6 +31,10 @@ constexpr bool is_varname_first(char c) {
 constexpr bool is_comp_operator(char c) {
     return c == '>' || c == '=' || c == '<';
 }
+// true if is logical operator character
+constexpr bool is_logic_operator(char c) {
+    return c == '&' || c == '|';
+}
 // true if is arithmetic operator character
 constexpr bool is_arith_operator(char c) {
     return c == '+' || c == '-' || c == '*' ||
@@ -39,7 +43,9 @@ constexpr bool is_arith_operator(char c) {
 
 // true if is operator character
 constexpr bool is_operator(char c) {
-    return is_comp_operator(c) || is_arith_operator(c);
+    return is_comp_operator(c) ||
+        is_logic_operator(c) ||
+        is_arith_operator(c);
 }
 
 // true if is open bracket

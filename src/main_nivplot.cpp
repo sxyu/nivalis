@@ -192,7 +192,7 @@ void main_loop_step() {
         // In Emscripten threads are not supported, and we use
         // WebWorker instead; this is not need then
 #else
-        // Synchronous, since threading not supported
+        // Threading not supported in browser
         plot.recalc();
         plot.swap();
         plot.draw(adaptor);       // Draw functions
@@ -206,11 +206,14 @@ void main_loop_step() {
         // No update, load draw list from cache
         if (draw_list_pre) *draw_list = *draw_list_pre;
         if (active_counter > 0) {
+#ifdef NIVALIS_EMSCRIPTEN
+            emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
+#endif
             --active_counter;
         } else {
             // Sleep to throttle FPS
 #ifdef NIVALIS_EMSCRIPTEN
-            // emscripten_sleep(1000 / RESTING_FPS);
+            emscripten_set_main_loop_timing(EM_TIMING_RAF, 5);
 #else
             std::this_thread::sleep_for(std::chrono::microseconds(
                         1000000 / RESTING_FPS
@@ -430,6 +433,7 @@ void main_loop_step() {
         ImGui::Indent();
         ImGui::BulletText("%s", "Explicit functions: Simply enter an expression with x in the textbox\ne.g. x^2");
         ImGui::BulletText("%s", "Implicit functions: Enter an equation with x, y in the textbox, e.g. cos(x*y)=0");
+        ImGui::BulletText("%s", "(Implicit) inequalities: e.g. x<y, cos(y)<sin(y), x^2>y");
         ImGui::BulletText("%s", "'Polylines' (points and lines)");
         ImGui::Indent();
         ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>)\ne.g. (1, 2). Coords can have variables.");
@@ -457,6 +461,7 @@ void main_loop_step() {
         ImGui::TextUnformatted("Expressions: Operators");
         ImGui::Indent();
         ImGui::BulletText("%s", "+- */% ^\nWhere ^ is exponentiation (right-assoc)");
+        ImGui::BulletText("%s", "Logical and/or: & |");
         ImGui::BulletText("%s", "Parentheses: () and [] are equivalent (but match separately)");
         ImGui::BulletText("%s", "Comparison: < > <= >= == output 0,1\n(= equivalent to == except in assignment/equality statement)");
         ImGui::Unindent();
@@ -514,7 +519,7 @@ void main_loop_step() {
         // Shell popup
         if (init) ImGui::SetWindowCollapsed(true);
 
-        ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 85));
+        ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 60));
         // * Virtual shell state
         // Shell output stream (replaces cout)
         static std::stringstream shell_ss;
@@ -674,6 +679,7 @@ extern "C" {
         glfwSwapInterval(1);
 
 #ifdef NIVALIS_EMSCRIPTEN
+        emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
         // Resize the canvas to fill the browser window
         resizeCanvas();
 #else

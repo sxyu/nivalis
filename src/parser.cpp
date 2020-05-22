@@ -21,6 +21,8 @@ namespace nivalis {
 
 struct ParseSession {
     enum Priority {
+        PRI_OR,
+        PRI_AND,
         PRI_COMPARISON,
         PRI_ADD_SUB,
         PRI_MUL_DIV,
@@ -97,9 +99,39 @@ private:
 
     // Recursive parse procedure
     bool _parse(int64_t left, int64_t right, int pri) {
+        // Remove spaces
         while (std::isspace(expr[right-1])) --right;
         while (std::isspace(expr[left])) ++left;
         switch(pri) {
+            case PRI_AND: case PRI_OR: case PRI_POW:
+                {
+                    if (pri == PRI_POW) {
+                        // Deal with unary +-
+                        while (left < right &&
+                                (expr[left] == '+' || expr[left] == '-')) {
+                            if (expr[left] == '-')
+                                result.ast.push_back(OpCode::unaryminus);
+                            ++left;
+                        }
+                    }
+                    const uint32_t opc =
+                        pri == PRI_AND ? OpCode::land :
+                        pri == PRI_OR ? OpCode::lor :
+                        OpCode::power;
+                    const char pat = OpCode::to_char(opc);
+                    for (int64_t i = left; i < right; ++i) {
+                        const char c = expr[i];
+                        if (c == pat) {
+                            result.ast.push_back(opc);
+                            return _parse(left, i, pri + 1) &&
+                                   _parse(i + 1, right, pri);
+                        }
+                        else if (tok_link[i] > i) {
+                            i = tok_link[i];
+                        }
+                    }
+                }
+                break;
             case PRI_COMPARISON:
                 for (int64_t i = right - 1; i >= left; --i) {
                     const char c = expr[i];
@@ -131,7 +163,7 @@ private:
                         i = tok_link[i];
                     }
                 }
-
+                break;
             case PRI_ADD_SUB:
                 for (int64_t i = right - 1; i >= left; --i) {
                     const char c = expr[i];
@@ -155,24 +187,6 @@ private:
                         return _parse(left, i, pri) && _parse(i + 1, right, pri + 1);
                     }
                     else if (~tok_link[i] && tok_link[i] < i) {
-                        i = tok_link[i];
-                    }
-                }
-                break;
-            case PRI_POW:
-                while (left < right &&
-                        (expr[left] == '+' || expr[left] == '-')) {
-                    if (expr[left] == '-')
-                        result.ast.push_back(OpCode::unaryminus);
-                    ++left;
-                }
-                for (int64_t i = left; i < right; ++i) {
-                    const char c = expr[i];
-                    if (c == '^') {
-                        result.ast.push_back(OpCode::power);
-                        return _parse(left, i, pri + 1) && _parse(i + 1, right, pri);
-                    }
-                    else if (tok_link[i] > i) {
                         i = tok_link[i];
                     }
                 }
@@ -408,7 +422,7 @@ private:
                     }
                     return true;
                 } else if ((util::is_varname_first(c) ||
-                            (c=='&' && left < right - 1)) &&
+                            (c=='@' && left < right - 1)) &&
                            util::is_literal(cr)) {
                     // Variable name
                     const std::string varname =

@@ -11,6 +11,14 @@ color color::color::operator=(const color& other) {
     return *this;
 }
 
+bool color::operator==(const color& other) const {
+    return r == other.r && g == other.g &&
+        b == other.b && a == other.a;
+}
+bool color::operator!=(const color& other) const {
+    return !(*this == other);
+}
+
 // From hex
 color::color(unsigned clr)
     : color((clr& 0xFF0000) >> 16,

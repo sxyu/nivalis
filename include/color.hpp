@@ -11,6 +11,8 @@ namespace color {
         color();
         color(const color& other);
         color operator=(const color& other);
+        bool operator==(const color& other) const;
+        bool operator!=(const color& other) const;
         // From hex (e.g. 0xffffff)
         color(unsigned clr);
         // From rgba (0-255)
@@ -36,6 +38,7 @@ namespace color {
         PURPLE = 0x800080,
         YELLOW = 0xFFFF00
     };
+    const color TRANSPARENT = color(0.f, 0.f, 0.f, 0.f);
 
     // Get a color corresponding to an integer,
     // from a pre-defined list of colors

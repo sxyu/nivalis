@@ -111,7 +111,7 @@ struct SliderData {
 
 struct FuncDrawObj {
     std::vector<std::array<double, 2> > points;
-    float t;
+    float thickness;
     color::color c;
     enum{
         POLYLINE,
@@ -274,7 +274,7 @@ public:
             // Draw the object
             if (obj.type == FuncDrawObj::POLYLINE) {
                 // Polyline
-                graph.polyline(points, obj.c, obj.t);
+                graph.polyline(points, obj.c, obj.thickness);
             } else {
                 // Rectangle
                 graph.rectangle(points[0][0], points[0][1],
@@ -407,6 +407,9 @@ private:
                                               // swap() swaps this to draw_buf
     std::vector<FuncDrawObj> draw_buf;        // Function draw buffer
                                               // draw() draws these shapes to an adaptor
+    std::vector<color::color> rect_opt_grid; // Grid of rectangle colors 
+                                             // used by recalc,
+                                             // for optimizing drawing
 
     std::vector<PointMarker> pt_markers;    // Point markers
     std::vector<size_t> grid;               // Grid containing marker id

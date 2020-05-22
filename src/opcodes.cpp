@@ -102,8 +102,8 @@ const char* repr(uint32_t opcode) {
 }
 
 // Used only for operator assignment (not important)
-uint32_t from_char(char c) {
-    switch (c) {
+uint32_t from_char(char opchar) {
+    switch (opchar) {
         case '+': return OpCode::add;
         case '-': return OpCode::sub;
         case '*': return OpCode::mul;
@@ -113,7 +113,27 @@ uint32_t from_char(char c) {
         case '<': return OpCode::lt;
         case '>': return OpCode::gt;
         case '=': return OpCode::eq;
+        case '&': return OpCode::land;
+        case '|': return OpCode::lor;
         default: return OpCode::bsel;
+    };
+}
+
+// Inverse of above
+char to_char(uint32_t opcode) {
+    switch (opcode) {
+        case OpCode::add: return '+';
+        case OpCode::sub: return '-';
+        case OpCode::mul: return '*';
+        case OpCode::divi: return '/';
+        case OpCode::mod: return '%';
+        case OpCode::power: return '^';
+        case OpCode::lt: return '<';
+        case OpCode::gt: return '>';
+        case OpCode::eq: return '=';
+        case OpCode::land: return '&';
+        case OpCode::lor: return '|';
+        default: return 0;
     };
 }
 
