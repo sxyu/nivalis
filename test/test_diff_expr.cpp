@@ -6,7 +6,6 @@
 
 using namespace nivalis;
 namespace {
-    Parser parse;
     Environment env;
 
     // Automatically test if derivative equals expected derivative

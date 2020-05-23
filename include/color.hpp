@@ -3,6 +3,7 @@
 #define _COLOR_H_400B07C2_2177_405C_AA65_BECF37F3C9FC
 #include <cstddef>
 #include <cstdint>
+#include <string>
 namespace nivalis {
 
 namespace color {
@@ -19,6 +20,8 @@ namespace color {
         color(int r, int g, int b, int a = 255);
         // From rgba (0.-1.)
         color(float r, float g, float b, float a = 1.0f);
+        // To hex string (ignores alpha)
+        std::string to_hex() const;
         float data[4];
         float &r, &g, &b, &a;
     };
@@ -39,6 +42,9 @@ namespace color {
         YELLOW = 0xFFFF00
     };
     const color TRANSPARENT = color(0.f, 0.f, 0.f, 0.f);
+
+    // From hex string e.g. FFFFFF (no alpha)
+    color from_hex(const std::string& hex);
 
     // Get a color corresponding to an integer,
     // from a pre-defined list of colors

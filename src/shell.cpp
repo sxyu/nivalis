@@ -7,6 +7,7 @@
 #include <cmath>
 #include "opcodes.hpp"
 #include "env.hpp"
+#include "parser.hpp"
 #include "util.hpp"
 
 namespace {
@@ -94,8 +95,11 @@ void Shell::eval_line(std::string line) {
                                 def_fn_args.push_back(var.substr(
                                             prev_comma, i - prev_comma));
                                 util::trim(def_fn_args.back());
-                                if (!util::is_varname(def_fn_args[0])) {
-                                    os << def_fn_args[0] << ": invalid variable name\n";
+                                if (def_fn_args[0].empty() ||
+                                    (def_fn_args[0][0] != '$' &&
+                                    !util::is_varname(def_fn_args[0]))) {
+                                    os << "'" << def_fn_args[0] <<
+                                        "': invalid argument variable name\n";
                                     def_fn = false;
                                     break;
                                 }
@@ -117,10 +121,11 @@ void Shell::eval_line(std::string line) {
             // Pre-register variables
             env.addr_of(def_fn_args[i], false);
         }
+        std::string parse_err;
         auto expr = parse(str_to_parse, env, !(do_diff || do_optim), // expicit
                 false, // quiet
-                def_fn_args.size() // max args
-                );
+                def_fn_args.size(), // max args
+                &parse_err);
         if (do_optim) {
             expr.optimize();
             expr.repr(os, env) << "\n";
@@ -132,12 +137,14 @@ void Shell::eval_line(std::string line) {
             double output;
             if (def_fn || !std::isnan(output = expr(env))) {
                 // Assignment statement
-                if (var.size() && parse.error_msg.empty()) {
+                if (var.size() && parse_err.empty()) {
                     if (def_fn) {
                         // Define function
                         std::vector<uint64_t> bindings;
                         for (size_t i = 0; i < def_fn_args.size(); ++i) {
-                            bindings.push_back(env.addr_of(def_fn_args[i]));
+                            bindings.push_back(
+                                    def_fn_args[i][0] == '$' ? -1 :
+                                    env.addr_of(def_fn_args[i]));
                         }
                         auto addr = env.def_func(var, expr, bindings);
                         if (~addr) {

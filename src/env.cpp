@@ -1,7 +1,6 @@
 #include "env.hpp"
 #include <cmath>
 #include <unordered_set>
-#include <iostream>
 #include <algorithm>
 #include "util.hpp"
 namespace nivalis {
@@ -31,10 +30,12 @@ bool Environment::is_set(const std::string& var_name) {
 }
 uint64_t Environment::addr_of(const std::string& var_name, bool mode_explicit) {
     error_msg.clear();
-    if (var_name[0] == '&') {
+    if (var_name[0] == '@') {
         // Address
         int64_t addr = std::atoll(var_name.substr(1).c_str());
-        return (addr < 0 || static_cast<size_t>(addr) >= vars.size()) ? -1 : static_cast<uint64_t>(addr);
+        return (addr < 0 ||
+                static_cast<size_t>(addr) >= vars.size()) ?
+            -1 : static_cast<uint64_t>(addr);
     }
     auto it = vreg.find(var_name);
     if (it != vreg.end()) {
@@ -117,7 +118,9 @@ uint64_t Environment::def_func(const std::string& func_name,
     // Invert argument mapping
     std::vector<uint64_t> arg_vars(vars.size(), -1);
     for (size_t i = 0; i < arg_bindings.size(); ++i) {
-        arg_vars[arg_bindings[i]] = i;
+        if (~arg_bindings[i]) {
+            arg_vars[arg_bindings[i]] = i;
+        }
     }
     // Sub arguments
     for (size_t i = 0; i < ast.size(); ++i) {
@@ -172,6 +175,16 @@ void Environment::del_func(const std::string& func_name) {
         funcs[it->second].deps.shrink_to_fit();
         freg.erase(it);
     }
+}
+
+void Environment::clear() {
+    funcs.clear();
+    vars.clear();
+    varname.clear();
+    vreg.clear();
+    freg.clear();
+    error_msg.clear();
+    free_addrs.clear();
 }
 
 std::ostream& Environment::to_bin(std::ostream& os) const {

@@ -4,7 +4,6 @@
 #include <string>
 #include <ostream>
 #include "env.hpp"
-#include "parser.hpp"
 
 namespace nivalis {
 
@@ -18,7 +17,6 @@ public:
 private:
     std::ostream& os;
     Environment& env;
-    Parser parse;
 };
 
 }  // namespace nivalis

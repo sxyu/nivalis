@@ -8,7 +8,6 @@
 using namespace nivalis;
 using namespace nivalis::test;
 namespace {
-    Parser parse;
     Environment env;
 
     // Automatically test if optimization leaves expression intact

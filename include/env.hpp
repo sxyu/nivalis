@@ -55,6 +55,9 @@ struct Environment {
     // Delete function
     void del_func(const std::string& func_name);
 
+    // Clear all vars/funcs
+    void clear();
+
     // Binary serialization (only vars/funcs)
     std::ostream& to_bin(std::ostream& os) const;
     std::istream& from_bin(std::istream& is);

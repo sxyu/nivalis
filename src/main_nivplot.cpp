@@ -3,8 +3,10 @@
 #include "version.hpp"
 #include "util.hpp"
 #include <string>
+#include <sstream>
 #include <vector>
 #include <iostream>
+#include <fstream>
 #include <iomanip>
 #include <cmath>
 #include <cctype>
@@ -19,6 +21,7 @@
 
 #ifdef NIVALIS_EMSCRIPTEN
 #include <emscripten/emscripten.h>
+#include <emscripten/bind.h>
 #include <emscripten/html5.h>
 #include <GLES3/gl3.h>
 
@@ -28,6 +31,7 @@
 #include <thread>
 #include <GL/glew.h>
 #include "plotter/draw_worker.hpp"
+#include "imfilebrowser.h"
 #endif // NIVALIS_EMSCRIPTEN
 
 #include <GLFW/glfw3.h>
@@ -107,12 +111,6 @@ struct ImGuiDrawListGraphicsAdaptor {
     ImDrawList* draw_list = nullptr;
 };
 
-// * Constants
-// FPS restriction when not moving (to reduce CPU usage)
-const int RESTING_FPS = 12;
-// Frames to stay active after update
-const int ACTIVE_FRAMES = 60;
-
 Plotter plot; // Main plotter
 Environment& env = plot.env; // Main environment
 GLFWwindow* window; // GLFW window
@@ -135,8 +133,6 @@ void main_loop_step() {
     // Do not throttle the FPS for active_counter frames
     // (decreases 1 each frame)
     static int active_counter;
-    // Only true on first loop (places and resizes windows)
-    static bool init = true;
 
     // Set to open popups
     static bool open_color_picker = false,
@@ -155,11 +151,30 @@ void main_loop_step() {
     int ems_js_canvas_height = canvas_get_height();
     glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
 #else
-    double frame_time = glfwGetTime();
+    // File dialog
+    static ImGui::FileBrowser open_file_dialog;
+    static ImGui::FileBrowser save_file_dialog(
+            ImGuiFileBrowserFlags_EnterNewFilename);
+    if (open_file_dialog.GetTitle().empty()) {
+        open_file_dialog.SetTypeFilters({ ".json" });
+        open_file_dialog.SetTitle("Import JSON");
+        save_file_dialog.SetTypeFilters({ ".json" });
+        save_file_dialog.SetTitle("Export JSON");
+    }
 #endif
 
-    glfwPollEvents();
-    // Clear
+    if (active_counter > 0) {
+        // After move, keep updating for a while to
+        // prevent UI freeze
+        glfwPollEvents();
+        --active_counter;
+    } else {
+        // Wait until mouse/keyboard event
+        // to reduce CPU usage
+        glfwWaitEvents();
+        active_counter = 40;
+    }
+    // Clear plot
     glClear(GL_COLOR_BUFFER_BIT);
 #ifndef NIVALIS_EMSCRIPTEN
     glMatrixMode(GL_PROJECTION);
@@ -185,18 +200,13 @@ void main_loop_step() {
         plot.resize(wwidth, wheight);
     }
 
-    static ImDrawList* draw_list_pre = nullptr;
+    static ImDrawList draw_list_pre(ImGui::GetDrawListSharedData());
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     adaptor.draw_list = draw_list;
-    if (plot.require_update || plot.marker_text.size() || open_shell) {
-        // Reset the active counter
-        // (do not throttle the FPS for ACTIVE_FRAMES frames)
-        active_counter = ACTIVE_FRAMES;
-    }
     if (plot.require_update) {
+        // Redraw
         plot.require_update = false;
         // Redraw the grid and functions
-        glClearColor(1., 1., 1., 1.); // Clear white
         plot.draw_grid(adaptor);      // Draw axes and grid
 #ifndef NIVALIS_EMSCRIPTEN
         {
@@ -218,29 +228,14 @@ void main_loop_step() {
         plot.draw(adaptor);       // Draw functions
 #endif
         // Cache the draw list
-        if (draw_list_pre != nullptr) {
-            free(draw_list_pre);
-        }
-        draw_list_pre = draw_list->CloneOutput();
+        draw_list_pre.CmdBuffer = draw_list->CmdBuffer;
+        draw_list_pre.IdxBuffer = draw_list->IdxBuffer;
+        draw_list_pre.VtxBuffer = draw_list->VtxBuffer;
+        draw_list_pre.Flags = draw_list->Flags;
     } else {
+        // Load cache
         // No update, load draw list from cache
-        if (draw_list_pre) *draw_list = *draw_list_pre;
-        if (active_counter > 0) {
-#ifdef NIVALIS_EMSCRIPTEN
-            emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
-#endif
-            --active_counter;
-        } else {
-            // Sleep to throttle FPS
-#ifdef NIVALIS_EMSCRIPTEN
-            emscripten_set_main_loop_timing(EM_TIMING_RAF, 5);
-#else
-            std::this_thread::sleep_for(std::chrono::microseconds(
-                        1000000 / RESTING_FPS
-                        ));
-#endif
-
-        }
+        *draw_list = draw_list_pre;
     }
 
     // Set to set current function to 'change_curr_func' at next loop step
@@ -253,12 +248,10 @@ void main_loop_step() {
     }
 
     // Render GUI
-    if (init) {
-        ImGui::SetNextWindowPos(ImVec2(10, 10));
-        ImGui::SetNextWindowSize(ImVec2(400, 130));
-    }
-    ImGui::Begin("Functions", NULL);
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(412, 130), ImGuiCond_Once);
     ImGui::PushFont(font_md);
+    ImGui::Begin("Functions", NULL);
 
     for (size_t fidx = 0; fidx < plot.funcs.size(); ++fidx) {
         auto& func = plot.funcs[fidx];
@@ -281,6 +274,7 @@ void main_loop_step() {
                     })) {
             plot.reparse_expr(fidx);
         }
+        ImGui::PopItemWidth();
         if (ImGui::IsItemActive() && !plot.focus_on_editor) {
             if (fidx != plot.curr_func) change_curr_func = fidx;
         }
@@ -303,12 +297,14 @@ void main_loop_step() {
                 plot.require_update = true;
                 if (func.tmax <= func.tmin) func.tmin = func.tmax - 1e-9f;
             }
+            ImGui::PopItemWidth();
             ImGui::SameLine();
             ImGui::PushItemWidth(100);
             if (ImGui::InputFloat(("##tmin" + fid).c_str(), &func.tmin)) {
                 plot.require_update = true;
                 if (func.tmax <= func.tmin) func.tmin = func.tmax - 1e-9f;
             }
+            ImGui::PopItemWidth();
 
             ImGui::SameLine();
             ImGui::PushItemWidth(50);
@@ -317,6 +313,7 @@ void main_loop_step() {
                 plot.require_update = true;
                 if (func.tmax <= func.tmin) func.tmax = func.tmin + 1e-9;
             }
+            ImGui::PopItemWidth();
 
             ImGui::SameLine();
             ImGui::PushItemWidth(100);
@@ -324,6 +321,7 @@ void main_loop_step() {
                 plot.require_update = true;
                 if (func.tmax <= func.tmin) func.tmax = func.tmin + 1e-9f;
             }
+            ImGui::PopItemWidth();
 
         }
     }
@@ -334,26 +332,36 @@ void main_loop_step() {
         if (ImGui::Button("+ New function")) plot.add_func();
         ImGui::SameLine();
     }
-    if (ImGui::Button("? Help")) {
-        open_reference = true;
+#ifndef NIVALIS_EMSCRIPTEN
+    if (ImGui::Button("Import")) {
+        open_file_dialog.Open();
     }
     ImGui::SameLine();
+    if (ImGui::Button("Export")) {
+        save_file_dialog.Open();
+    }
+    ImGui::SameLine();
+#endif
     if (ImGui::Button("# Shell")) {
         open_shell = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("? Help")) {
+        open_reference = true;
     }
     ImGui::PushFont(font_sm);
     ImGui::TextColored(ImColor(255, 50, 50, 255), "%s",
             plot.func_error.c_str());
-    ImGui::PushFont(font_md);
+    ImGui::PopFont();
     ImGui::End(); //  Functions
 
-    if (init) {
-        ImGui::SetNextWindowPos(ImVec2(10,
-                    static_cast<float>(plot.view.shigh - 140)));
-        ImGui::SetNextWindowSize(ImVec2(333, 130));
-    }
+    ImGui::SetNextWindowPos(ImVec2(10,
+                static_cast<float>(
+                    (~pwwidth ? pwheight : plot.view.shigh) - 140)),
+            ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(333, 130), ImGuiCond_Once);
     ImGui::Begin("Sliders", NULL);
-    if (~pwwidth && !init) {
+    if (~pwwidth) {
         // Outer window was resized
         ImVec2 pos = ImGui::GetWindowPos();
         ImGui::SetWindowPos(ImVec2(pos.x,
@@ -361,9 +369,9 @@ void main_loop_step() {
     }
 
     for (size_t sidx = 0; sidx < plot.sliders.size(); ++sidx) {
-        ImGui::PushItemWidth(50.);
         auto& sl = plot.sliders[sidx];
         std::string slid = std::to_string(sidx);
+        ImGui::PushItemWidth(50.);
         if (ImGui::InputText(("=##vsl-" + slid).c_str(), &sl.var_name)) {
             plot.update_slider_var(sidx);
         }
@@ -378,6 +386,7 @@ void main_loop_step() {
         ImGui::InputFloat(("min##vsl-"+slid).c_str(), &sl.lo);
         ImGui::SameLine();
         ImGui::InputFloat(("max##vsl-"+slid).c_str(), &sl.hi);
+        ImGui::PopItemWidth();
 
         ImGui::SameLine();
         if (ImGui::Button(("x##delvsl-" + slid).c_str())) {
@@ -390,30 +399,24 @@ void main_loop_step() {
                     &sl.val, sl.lo, sl.hi)) {
             plot.copy_slider_value_to_env(sidx);
         }
+        ImGui::PopItemWidth();
     }
 
     if (ImGui::Button("+ New slider")) plot.add_slider();
     ImGui::PushFont(font_sm);
     ImGui::TextColored(ImColor(255, 50, 50, 255), "%s",
             plot.slider_error.c_str());
-    ImGui::PushFont(font_md);
+    ImGui::PopFont();
 
     ImGui::End(); // Sliders
 
-    if (init) {
-        ImGui::SetNextWindowPos(ImVec2(
-                    static_cast<float>(10),
-                    static_cast<float>(10)));
-        ImGui::SetNextWindowSize(ImVec2(350, 150));
-    }
-
-    if (init) {
-        ImGui::SetNextWindowPos(ImVec2(
-                    static_cast<float>(plot.view.swid - 182), 10));
-        ImGui::SetNextWindowSize(ImVec2(175, 135));
-    }
+    ImGui::SetNextWindowPos(ImVec2(
+                static_cast<float>(
+                    (~pwwidth ? pwwidth : plot.view.swid) - 182), 10),
+            ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(175, 135), ImGuiCond_Once);
     ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
-    if (~pwwidth && !init) {
+    if (~pwwidth) {
         // Outer window was resized
         ImVec2 pos = ImGui::GetWindowPos();
         ImGui::SetWindowPos(ImVec2(
@@ -423,15 +426,13 @@ void main_loop_step() {
     ImGui::PushItemWidth(60.);
     if (ImGui::InputDouble(" <x<", &plot.view.xmin)) plot.require_update = true;
     ImGui::SameLine();
-    ImGui::PushItemWidth(60.);
     if(ImGui::InputDouble("##xm", &plot.view.xmax)) plot.require_update = true;
-    ImGui::PushItemWidth(60.);
     if (ImGui::InputDouble(" <y<", &plot.view.ymin)) plot.require_update = true;
     ImGui::SameLine();
-    ImGui::PushItemWidth(60.);
     if(ImGui::InputDouble("##ym", &plot.view.ymax)) plot.require_update = true;
     if (ImGui::Button("Reset view")) plot.reset_view();
     if (ImGui::Checkbox("Polar grid", &plot.polar_grid)) plot.require_update = true;
+    ImGui::PopItemWidth();
     ImGui::End(); // View
 
     // Show the marker window
@@ -439,7 +440,8 @@ void main_loop_step() {
         ImGui::SetNextWindowPos(ImVec2(static_cast<float>(plot.marker_posx),
                     static_cast<float>(plot.marker_posy)));
         ImGui::SetNextWindowSize(ImVec2(250, 50));
-        ImGui::Begin("Marker", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
+        ImGui::Begin("Marker", NULL, ImGuiWindowFlags_NoTitleBar |
+                ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
                 ImGuiWindowFlags_NoFocusOnAppearing);
         ImGui::TextUnformatted(plot.marker_text.c_str());
         ImGui::End();
@@ -611,8 +613,6 @@ void main_loop_step() {
     if (ImGui::BeginPopupModal("Shell", &open_shell,
                 ImGuiWindowFlags_NoResize)) {
         // Shell popup
-        if (init) ImGui::SetWindowCollapsed(true);
-
         ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 60));
         // * Virtual shell state
         // Shell output stream (replaces cout)
@@ -684,10 +684,38 @@ void main_loop_step() {
                 // If part
                 exec_shell();
             }
+        ImGui::PopItemWidth();
         ImGui::SameLine();
         if (ImGui::Button("Submit")) exec_shell();
         ImGui::EndPopup();
     }
+#ifndef NIVALIS_EMSCRIPTEN
+    // File dialogs; not available on web version
+    open_file_dialog.Display();
+    if(open_file_dialog.HasSelected())
+    {
+        std::string fname = open_file_dialog.GetSelected().string();
+        open_file_dialog.ClearSelected();
+        std::ifstream ifs(fname);
+        std::string err;
+        plot.import_json(ifs, &err);
+        if (err.size()) {
+            plot.func_error = "JSON import failed";
+            std::cout << err << "\n";
+        }
+    }
+    save_file_dialog.Display();
+    if(save_file_dialog.HasSelected())
+    {
+        std::string fname = save_file_dialog.GetSelected().string();
+        if (fname.size() > 5 && fname.substr(fname.size() - 5) != ".json") {
+            fname.append(".json");
+        }
+        save_file_dialog.ClearSelected();
+        std::ofstream ofs(fname);
+        plot.export_json(ofs, true);
+    }
+#endif
 
     // * Handle IO events
     ImGuiIO &io = ImGui::GetIO();
@@ -729,118 +757,130 @@ void main_loop_step() {
 
     glfwSwapBuffers(window);
     glfwPollEvents();
-    init = false;
 }  // void main_loop_step()
 }  // namespace
 
-// Need to use global state since
-// emscripten main loop takes a C function ptr...
-extern "C" {
 #ifdef NIVALIS_EMSCRIPTEN
-    void emscripten_loop() {
-        main_loop_step();
-    }
-    int emscripten_keypress(int k, int delv) {
-        if (delv == 0) {
-            ImGui::GetIO().AddInputCharacter(k);
-        } else if (delv == 1) {
-            ImGui::GetIO().KeysDown[
-                ImGui::GetIO().KeyMap[ImGuiKey_Backspace]] = k;
+// Emscripten access methods
+int emscripten_keypress(int k, int delv) {
+    if (delv == 0) {
+        ImGui::GetIO().AddInputCharacter(k);
+    } else if (delv == 1) {
+        ImGui::GetIO().KeysDown[
+            ImGui::GetIO().KeyMap[ImGuiKey_Backspace]] = k;
 
-        } else if (delv == 2) {
-            ImGui::GetIO().KeysDown[
-                ImGui::GetIO().KeyMap[ImGuiKey_Delete]] = k;
-        }
-        return 0;
+    } else if (delv == 2) {
+        ImGui::GetIO().KeysDown[
+            ImGui::GetIO().KeyMap[ImGuiKey_Delete]] = k;
     }
+    return 0;
+}
+std::string export_json() {
+    std::ostringstream ss;
+    plot.export_json(ss);
+    return ss.str();
+}
+// Returns error
+std::string import_json(const std::string& data) {
+    std::stringstream ss;
+    ss.write(data.c_str(), data.size());
+    std::string err;
+    plot.import_json(ss, &err);
+    return err;
+}
+EMSCRIPTEN_BINDINGS(nivplot) {
+    emscripten::function("on_keypress", &emscripten_keypress);
+    emscripten::function("export_json", &export_json);
+    emscripten::function("import_json", &import_json);
+}
 #endif  // NIVALIS_EMSCRIPTEN
 
-    // Helper for Initializing OpenGL
-    bool init_gl() {
-        /* Initialize the library */
-        if (!glfwInit()) return false;
+// Helper for Initializing OpenGL
+bool init_gl() {
+    /* Initialize the library */
+    if (!glfwInit()) return false;
 
-        /* Create a windowed mode window and its OpenGL context */
-        window = glfwCreateWindow(plot.view.swid, plot.view.shigh,
-                "Nivalis Plotter", NULL, NULL);
-        // Init glfw
-        if (!window)
-        {
-            glfwTerminate();
-            return false;
-        }
-        glfwMakeContextCurrent(window);
-        glfwSwapInterval(1);
+    /* Create a windowed mode window and its OpenGL context */
+    window = glfwCreateWindow(plot.view.swid, plot.view.shigh,
+            "Nivalis Plotter", NULL, NULL);
+    // Init glfw
+    if (!window)
+    {
+        glfwTerminate();
+        return false;
+    }
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
 
 #ifdef NIVALIS_EMSCRIPTEN
-        emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
-        // Resize the canvas to fill the browser window
-        resizeCanvas();
+    emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
+    // Resize the canvas to fill the browser window
+    resizeCanvas();
 #else
-        // Init glew context
-        if (glewInit() != GLEW_OK)
-        {
-            fprintf(stderr, "Failed to initialize OpenGL loader!\n");
-            return false;
-        }
-#endif
-        return true;
+    // Init glew context
+    if (glewInit() != GLEW_OK)
+    {
+        fprintf(stderr, "Failed to initialize OpenGL loader!\n");
+        return false;
     }
+#endif
+    glClearColor(1., 1., 1., 1.); // Clear white
+    return true;
+}
 
     // Main method
-    int main(int argc, char ** argv) {
-        using namespace nivalis;
-        for (int i = 1; i < argc; ++i) {
-            if (i > 1) plot.add_func();
-            // Load the expression
-            plot.funcs[i - 1].expr_str = argv[i];
-            plot.reparse_expr(i);
-        }
-        if (!init_gl()) return 1; // GL initialization failed
+int main(int argc, char ** argv) {
+    using namespace nivalis;
+    for (int i = 1; i < argc; ++i) {
+        if (i > 1) plot.add_func();
+        // Load the expression
+        plot.funcs[i - 1].expr_str = argv[i];
+        plot.reparse_expr(i - 1);
+    }
+    if (!init_gl()) return 1; // GL initialization failed
 
-        // Setup Dear ImGUI context
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-        // Setup Platform/Renderer bindings
-        ImGui_ImplGlfw_InitForOpenGL(window, true);
-        char* glsl_version = NULL;
-        ImGui_ImplOpenGL3_Init(glsl_version);
-        // Setup Dear ImGui style
-        ImGui::StyleColorsLight();
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 0.;
-        style.WindowBorderSize = 1.;
-        style.FrameBorderSize = 0.;
-        style.Colors[ImGuiCol_Border]         = ImVec4(0.8f, 0.8f, 0.8f, 1.f);
-        style.Colors[ImGuiCol_BorderShadow]   = ImVec4(0.f, 0.f, 0.f, 0.f);
-        style.Colors[ImGuiCol_TitleBg]        = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
-        style.Colors[ImGuiCol_TitleBgActive]    = ImVec4(0.7f, 0.7f, 0.7f, 1.f);
-        style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.75, 0.75f, 0.75f, 1.f);
-        style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.99f, 0.99f, 0.99f, 1.f);
-        style.Colors[ImGuiCol_FrameBg]       = ImVec4(0.94f, 0.94f, 0.94f, 1.f);
+    // Setup Dear ImGUI context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    // Setup Platform/Renderer bindings
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    char* glsl_version = NULL;
+    ImGui_ImplOpenGL3_Init(glsl_version);
+    // Setup Dear ImGui style
+    ImGui::StyleColorsLight();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 0.;
+    style.WindowBorderSize = 1.;
+    style.FrameBorderSize = 0.;
+    style.Colors[ImGuiCol_Border]         = ImVec4(0.8f, 0.8f, 0.8f, 1.f);
+    style.Colors[ImGuiCol_BorderShadow]   = ImVec4(0.f, 0.f, 0.f, 0.f);
+    style.Colors[ImGuiCol_TitleBg]        = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+    style.Colors[ImGuiCol_TitleBgActive]    = ImVec4(0.7f, 0.7f, 0.7f, 1.f);
+    style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.75, 0.75f, 0.75f, 1.f);
+    style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.99f, 0.99f, 0.99f, 1.f);
+    style.Colors[ImGuiCol_FrameBg]       = ImVec4(0.94f, 0.94f, 0.94f, 1.f);
 
 #ifdef NIVALIS_EMSCRIPTEN
-        // Set initial window size according to HTML canvas size
-        int ems_js_canvas_width = canvas_get_width();
-        int ems_js_canvas_height = canvas_get_height();
-        glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
+    // Set initial window size according to HTML canvas size
+    int ems_js_canvas_width = canvas_get_width();
+    int ems_js_canvas_height = canvas_get_height();
+    glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
 
-        // Set handlers and start emscripten main loop
-        emscripten_set_main_loop(emscripten_loop, 0, 1);
+    // Set handlers and start emscripten main loop
+    emscripten_set_main_loop(main_loop_step, 0, 1);
 #else
-        // Start worker thread
-        std::thread thd(draw_worker, std::ref(plot));
-        thd.detach();
+    // Start worker thread
+    std::thread thd(draw_worker, std::ref(plot));
+    thd.detach();
 
-        // Main GLFW loop (desktop)
-        while (!glfwWindowShouldClose(window)) {
-            main_loop_step();
-        } // Main loop
+    // Main GLFW loop (desktop)
+    while (!glfwWindowShouldClose(window)) {
+        main_loop_step();
+    } // Main loop
 #endif
-        // Cleanup
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
-    }
-} // extern "C"
+    // Cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+}

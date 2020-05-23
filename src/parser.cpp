@@ -14,8 +14,8 @@ namespace nivalis {
 #define PARSE_ERR(errmsg) do { \
      std::stringstream error_msg_stream; \
      error_msg_stream << errmsg;\
-     error_msg = error_msg_stream.str(); \
-     if(!quiet) std::cout << error_msg; \
+     if (error_msg) *error_msg = error_msg_stream.str(); \
+     if(!quiet) std::cout << error_msg_stream.str(); \
      return false; \
    } while(false)
 
@@ -36,10 +36,11 @@ struct ParseSession {
     // env: parsing environment (to check/define variables)
     // mode_explicit: if true, errors when encounters undefined variable;
     //                else defines it
-    ParseSession(const std::string& expr, Environment& env, std::string& error_msg,
+    ParseSession(const std::string& expr, Environment& env, std::string* error_msg,
                  bool mode_explicit, bool quiet, size_t max_args)
         : env(env), expr(expr), error_msg(error_msg),
-            mode_explicit(mode_explicit), quiet(quiet), max_args(max_args) { }
+            mode_explicit(mode_explicit), quiet(quiet), max_args(max_args) {
+    }
 
     Expr parse() {
         tok_link.resize(expr.size(), -1);
@@ -469,7 +470,7 @@ private:
                     }
                     result.ast.emplace_back(OpCode::arg, idx);
                     return true;
-                } else if (c == '#' &&
+                } else if (c == '`' &&
                            util::is_varname_first(expr[left + 1])) {
                     // Embed variable value as constant
                     const std::string varname =
@@ -491,7 +492,7 @@ private:
     }
     Environment& env;
     const std::string& expr;
-    std::string& error_msg;
+    std::string* error_msg;
     Expr result;
     bool mode_explicit, quiet;
     size_t max_args;
@@ -518,11 +519,14 @@ private:
 };
 
 // Parse an expression
-Expr Parser::operator()(const std::string& expr, Environment& env,
-                        bool mode_explicit, bool quiet, size_t max_args) const {
-    error_msg.clear();
+Expr parse(const std::string& expr, Environment& env,
+        bool mode_explicit, bool quiet, size_t max_args,
+        std::string* error_msg) {
     if (expr.empty()) return Expr();
-    ParseSession sess(expr, env, error_msg, mode_explicit, quiet, max_args);
+    if (error_msg) error_msg->clear();
+    if (expr.size() && expr[0] == '#') return Expr::AST(1); // Comment
+    ParseSession sess(
+            expr, env, error_msg, mode_explicit, quiet, max_args);
     return sess.parse();
 }
 

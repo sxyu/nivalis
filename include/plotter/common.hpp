@@ -13,7 +13,7 @@
 #include <cmath>
 #include <string>
 #include <sstream>
-#include <queue>
+#include <deque>
 #include <array>
 #include <vector>
 #include <set>
@@ -23,9 +23,8 @@
 #include <mutex>
 #include <atomic>
 #endif
-#include <iostream>
+#include "env.hpp"
 #include "expr.hpp"
-#include "parser.hpp"
 #include "color.hpp"
 #include "util.hpp"
 
@@ -199,7 +198,7 @@ public:
 
         // round
         thread_local auto prec4 = [](double v) -> std::string {
-            thread_local std::stringstream sstm;
+           thread_local std::ostringstream sstm;
             sstm.str("");
             sstm << std::setprecision(4) << v;
             return sstm.str();
@@ -508,13 +507,9 @@ public:
     // distance = magnitude of amount scrolled
     void handle_mouse_wheel(bool upwards, int distance, int px, int py);
 
-    // Binary serialization for functions
-    std::ostream& funcs_to_bin(std::ostream& os) const;
-    std::istream& funcs_from_bin(std::istream& is);
-
-    // Binary serialization for draw_buf, pt_markers, grid
-    std::ostream& bufs_to_bin(std::ostream& os) const;
-    std::istream& bufs_from_bin(std::istream& is);
+    // JSON serialization
+    std::ostream& export_json(std::ostream& os, bool pretty = false) const;
+    std::istream& import_json(std::istream& is, std::string* error_msg = nullptr);
 private:
     // Helper for detecting if px, py activates a marker (in grid);
     // if so sets marker_* and current function
@@ -566,8 +561,6 @@ public:
     std::mutex mtx;
 #endif
 private:
-    Parser parser;                            // Parser instance, for parsing func expressions
-
     std::vector<FuncDrawObj> draw_back_buf;   // Function draw back buffer
                                               // recalc() adds shapes to here
                                               // swap() swaps this to draw_buf
@@ -585,7 +578,7 @@ private:
     std::vector<PointMarker> pt_markers_back;    // Point markers copy, filled  by recalc(),
                                                  // swapped to grid by swap()
 
-    std::queue<color::color> reuse_colors;    // Reusable colors
+    std::deque<color::color> reuse_colors;    // Reusable colors
     size_t last_expr_color = 0;               // Next available color index if no reusable
                                               // one present(by color::from_int)
     uint32_t x_var, y_var, t_var, r_var;      // x,y,t,r variable addresses

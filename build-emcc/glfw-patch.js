@@ -201,7 +201,7 @@ document.addEventListener('keydown',function(e){
             event.which == '173' || event.which == '109'  || event.which == '187'  ||
             event.which == '189' ||
             event.which == '72' || event.which == '67' || event.which == '86' ||
-            event.which == '88')) {
+            event.which == '88' || event.which == '79' || event.which == '80')) {
         event.preventDefault();
     }
 });
@@ -216,3 +216,15 @@ if (is_mobile) {
         text_input.click();
     }, true);
 }
+var download = function(filename, text) {
+    var element = document.createElement('a');
+    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+    element.setAttribute('download', filename);
+
+    element.style.display = 'none';
+    document.body.appendChild(element);
+
+    element.click();
+
+    document.body.removeChild(element);
+};

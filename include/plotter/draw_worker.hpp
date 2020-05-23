@@ -33,6 +33,7 @@ void draw_worker(nivalis::Plotter& plot) {
         plot.recalc(view);
         std::lock_guard<std::mutex> lock(worker_mtx);
         plot.swap();
+        plot.require_update = true;
         worker_req_update = true;
     }
 }

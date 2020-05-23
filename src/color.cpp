@@ -1,6 +1,8 @@
 #include "color.hpp"
 
 #include <cstring>
+#include <cmath>
+#include <sstream>
 namespace nivalis {
 namespace color {
 color::color() : color(0.0f, 0.0f, 0.0f) {}
@@ -45,6 +47,23 @@ color from_int(size_t color_index) {
         color{170, 170, 170}, color{225, 30, 42}
     };
     return palette[color_index % (sizeof palette / sizeof palette[0])];
+}
+
+color from_hex(const std::string& hex) {
+    if (hex.empty()) return BLACK;
+    if (hex[0] == '#') return from_hex(hex.substr(1));
+    return color((unsigned) std::stoul(hex, 0, 16));
+}
+
+std::string color::to_hex() const {
+    static auto trunc = [](float f) -> int{
+        return std::min(std::max((int)std::round(f * 255.), 0), 255);
+    };
+    int tr = trunc(r), tg = trunc(g), tb = trunc(b);
+    int t = (tr << 16) + (tg << 8) + tb;
+    std::stringstream strm;
+    strm << std::hex << t;
+    return strm.str();
 }
 }  // namespace color
 }  // namespace nivalis

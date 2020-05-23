@@ -145,7 +145,7 @@ endif()
 
 set(_EMSCRIPTEN_ "//")
 if (EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -s EXTRA_EXPORTED_RUNTIME_METHODS='[\"cwrap\"]' -std=c++17 -g3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 --bind -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -s EXTRA_EXPORTED_RUNTIME_METHODS='[\"cwrap\"]' -std=c++17")
     set(_EMSCRIPTEN_ "")
 else ()
     set (SOURCES ${SOURCES} "../${GLEW_DIR}/glew.c")
@@ -261,12 +261,7 @@ else ()
     message ( STATUS "NOT building tests" )
 endif ((BUILD_TESTS) AND (NOT EMSCRIPTEN))
 
-if (EMSCRIPTEN)
-    set_target_properties(${PLOT_GUI_PROJ_NAME}
-        PROPERTIES COMPILE_FLAGS "-s EXPORTED_FUNCTIONS='[\"_main\",\"_emscripten_keypress\"]'")
-    set_target_properties(${PLOT_GUI_PROJ_NAME}
-        PROPERTIES LINK_FLAGS "-s EXPORTED_FUNCTIONS='[\"_main\",\"_emscripten_keypress\"]'")
-else()
+if (NOT EMSCRIPTEN)
     install(TARGETS ${PROJ_EXECUTABLES} DESTINATION bin)
 endif()
 

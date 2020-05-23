@@ -1,8 +1,15 @@
 #include "plotter/common.hpp"
+
+#include "parser.hpp"
 #include "util.hpp"
-#include <iostream>
+
+#include "json.hpp"
+#include "shell.hpp"
+#include <iomanip>
 
 namespace {
+using json = nlohmann::json;
+
 const unsigned NUM_THREADS =
 #ifdef NIVALIS_EMSCRIPTEN
     1;  // Multithreading not supported
@@ -88,6 +95,7 @@ std::istream& Function::from_bin(std::istream& is) {
     }
     return is;
 }
+
 std::ostream& FuncDrawObj::to_bin(std::ostream& os) const {
     util::write_bin(os, points.size());
     for (size_t i = 0; i < points.size(); ++i) {
@@ -114,37 +122,6 @@ std::istream& FuncDrawObj::from_bin(std::istream& is) {
     util::read_bin(is, c);
     util::read_bin(is, type);
 
-    return is;
-}
-
-std::ostream& Plotter::bufs_to_bin(std::ostream& os) const {
-    util::write_bin(os, draw_buf.size());
-    for (size_t i = 0; i < draw_buf.size(); ++i) {
-        draw_buf[i].to_bin(os);
-    }
-    util::write_bin(os, grid.size());
-    for (size_t i = 0; i < grid.size(); ++i) {
-        util::write_bin(os, grid[i]);
-    }
-    util::write_bin(os, pt_markers.size());
-    for (size_t i = 0; i < pt_markers.size(); ++i) {
-        util::write_bin(os, pt_markers[i]);
-    }
-    return os;
-}
-std::istream& Plotter::bufs_from_bin(std::istream& is) {
-    util::resize_from_read_bin(is, draw_buf);
-    for (size_t i = 0; i < draw_buf.size(); ++i) {
-        draw_buf[i].from_bin(is);
-    }
-    util::resize_from_read_bin(is, grid);
-    for (size_t i = 0; i < grid.size(); ++i) {
-        util::read_bin(is, grid[i]);
-    }
-    util::resize_from_read_bin(is, pt_markers);
-    for (size_t i = 0; i < pt_markers.size(); ++i) {
-        util::read_bin(is, pt_markers[i]);
-    }
     return is;
 }
 
@@ -1016,7 +993,6 @@ void Plotter::swap() {
     draw_buf.swap(draw_back_buf);
     grid.swap(grid_back);
     pt_markers.swap(pt_markers_back);
-    require_update = true;
 }
 
 void Plotter::reparse_expr(size_t idx) {
@@ -1024,6 +1000,8 @@ void Plotter::reparse_expr(size_t idx) {
     auto& func = funcs[idx];
     auto& expr = func.expr;
     auto& expr_str = func.expr_str;
+    std::string parse_err, polyline_err;
+
     // Ugly code to try and determine the type of function
     func.polyline.clear();
     // Marks whether this is a vlaid polyline expr
@@ -1034,7 +1012,6 @@ void Plotter::reparse_expr(size_t idx) {
             expr_str[0] == '(' && expr_str.back() == ')') {
         // Only try if of form (...)
         valid_polyline = true;
-        std::string polyline_err;
 
         // Try to parse function as polyline expr
         size_t last_begin = 0, stkh = 0;
@@ -1053,11 +1030,11 @@ void Plotter::reparse_expr(size_t idx) {
                     break;
                 case ',':
                     if (stkh == 1) {
-                        func.polyline.push_back(parser(
+                        func.polyline.push_back(parse(
                                     expr_str.substr(last_begin,
                                         i - last_begin), env,
-                                    true, true));
-                        if (parser.error_msg.size()) polyline_err = parser.error_msg;
+                                    true, true, 0, &parse_err));
+                        if (parse_err.size()) polyline_err = parse_err;
                         last_begin = i + 1;
                         has_comma = true;
                     }
@@ -1069,11 +1046,11 @@ void Plotter::reparse_expr(size_t idx) {
                             valid_polyline = false;
                             break;
                         }
-                        func.polyline.push_back(parser(
+                        func.polyline.push_back(parse(
                                     expr_str.substr(last_begin,
                                         i - last_begin), env,
-                                    true, true));
-                        if (parser.error_msg.size()) polyline_err = parser.error_msg;
+                                    true, true, 0, &parse_err));
+                        if (parse_err.size()) polyline_err = parse_err;
                         has_comma = false;
                     }
                     break;
@@ -1139,10 +1116,10 @@ void Plotter::reparse_expr(size_t idx) {
             util::trim(lhs); util::trim(rhs);
             if (func.type == Function::FUNC_TYPE_IMPLICIT
                     && (lhs == "y" || rhs == "y")) {
-                expr = parser(lhs == "y" ? rhs : lhs, env,
+                expr = parse(lhs == "y" ? rhs : lhs, env,
                         true, // explicit
-                        true  // quiet
-                        );
+                        true,  // quiet
+                        0, &parse_err);
                 if (!expr.has_var(y_var)) {
                     // if one side is y and other side has no y,
                     // treat as explicit function
@@ -1152,9 +1129,10 @@ void Plotter::reparse_expr(size_t idx) {
             }
             if (func.type == Function::FUNC_TYPE_IMPLICIT
                     && (lhs == "r" || rhs == "r")) {
-                expr = parser(lhs == "r" ? rhs : lhs, env,
+                expr = parse(lhs == "r" ? rhs : lhs, env,
                         true, // explicit
-                        true  // quiet
+                        true,  // quiet
+                        0, &parse_err
                       );
                 if (!expr.has_var(x_var) &&
                     !expr.has_var(y_var)) {
@@ -1168,16 +1146,16 @@ void Plotter::reparse_expr(size_t idx) {
                 // If none of these apply, set expression to difference
                 // i.e. rearrange so RHS is 0
                 if (flip) {
-                    expr = parser("(" + rhs + ")-(" + lhs + ")",
-                            env, true, true);
+                    expr = parse("(" + rhs + ")-(" + lhs + ")",
+                            env, true, true, 0, &parse_err);
                 } else {
-                    expr = parser("(" + lhs + ")-(" + rhs + ")",
-                            env, true, true);
+                    expr = parse("(" + lhs + ")-(" + rhs + ")",
+                            env, true, true, 0, &parse_err);
                 }
             }
         } else {
             func.type = Function::FUNC_TYPE_EXPLICIT;
-            expr = parser(expr_str, env, true, true);
+            expr = parse(expr_str, env, true, true, 0, &parse_err);
         }
         if (!expr.is_null()) {
             // Optimize the main expression
@@ -1196,7 +1174,7 @@ void Plotter::reparse_expr(size_t idx) {
                 func.drecip = func.recip.diff(x_var, env);
             }
         } else func.diff.ast[0] = OpCode::null;
-        func_error = parser.error_msg;
+        func_error = parse_err;
     }
 
     // Optimize any polyline/parametric point expressions
@@ -1204,7 +1182,7 @@ void Plotter::reparse_expr(size_t idx) {
         point_expr.optimize();
     }
 
-    if (parser.error_msg.empty()) func_error.clear();
+    if (parse_err.empty()) func_error.clear();
     if (func.type == Function::FUNC_TYPE_EXPLICIT) {
         // Register a function in env
         env.def_func(func.name, func.expr, { x_var });
@@ -1237,7 +1215,7 @@ void Plotter::set_curr_func(size_t func_id) {
                     color::from_int(last_expr_color++);
             } else {
                 f.line_color = reuse_colors.front();
-                reuse_colors.pop();
+                reuse_colors.pop_front();
             }
             f.name = "f" + std::to_string(next_func_name++);
             funcs.push_back(std::move(f));
@@ -1260,7 +1238,7 @@ void Plotter::delete_func(size_t idx) {
     if (idx >= funcs.size()) return;
     env.del_func(funcs[idx].name);
     if (funcs.size() > 1) {
-        reuse_colors.push(funcs[idx].line_color);
+        reuse_colors.push_back(funcs[idx].line_color);
         funcs.erase(funcs.begin() + idx);
         if (curr_func > idx || curr_func >= funcs.size()) {
             curr_func--;
@@ -1483,30 +1461,270 @@ void Plotter::handle_mouse_wheel(bool upwards, int distance, int px, int py) {
     require_update = true;
 }
 
-std::ostream& Plotter::funcs_to_bin(std::ostream& os) const {
-    util::write_bin(os, curr_func);
-    util::write_bin(os, funcs.size());
-    for (size_t i = 0; i < funcs.size(); ++i) {
-        funcs[i].to_bin(os);
+std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
+    std::vector<json> jshell, jfuncs, jsliders;
+    {
+        std::vector<int> slider_ids;
+        for (auto& sl : sliders) {
+            slider_ids.push_back(sl.var_addr);
+        }
+        std::sort(slider_ids.begin(), slider_ids.end());
+        size_t j = 0;
+        // Export variable values
+        for (size_t i = 0; i < env.vars.size(); ++i) {
+            // Do not store x,y,z, etc.
+            if (is_var_name_reserved(env.varname[i])) continue;
+            while (j < slider_ids.size() && slider_ids[j] < i) ++j;
+            // Do not store slider variables
+            if (j < slider_ids.size() && slider_ids[j] == i) continue;
+            // Do not store nan-valued variables
+            if (std::isnan(env.vars[i]) ||
+                    std::isinf(env.vars[i])) continue;
+            std::ostringstream ss;
+            ss << std::setprecision(16) << env.vars[i];
+            jshell.push_back(env.varname[i] + " = " + ss.str());
+        }
     }
-    util::write_bin(os, view);
-    util::write_bin(os, x_var);
-    util::write_bin(os, y_var);
-    env.to_bin(os);
-    return os;
+    std::vector<int> fids;
+    for (auto& func : funcs) {
+        fids.push_back(std::atoi(func.name.substr(1).c_str()));
+    }
+    for (size_t i = 0; i < env.funcs.size(); ++i) {
+        auto& f = env.funcs[i];
+        if (f.name.size() > 1 &&
+                f.name[0] == 'f' && f.n_args == 1) {
+            // Do not store functions from editor like f0(x)
+            int fid = std::atoi(f.name.substr(1).c_str());
+            if (std::binary_search(fids.begin(), fids.end(), fid)) {
+                continue;
+            }
+        }
+        // Do not store null functions
+        if (f.expr.is_null()) continue;
+        std::string out = f.name + "(";
+        for (size_t j = 0; j < f.n_args; ++j) {
+            if (j) out.append(", ");
+            out.append("$");
+        }
+        out.append(") = ");
+        std::ostringstream ss;
+        f.expr.repr(ss, env);
+        jshell.push_back(out + ss.str());
+    }
+    // Export functions
+    jfuncs.reserve(funcs.size());
+    for (size_t i = 0; i < funcs.size(); ++i) {
+        auto& func = funcs[i];
+        json f {{"expr", func.expr_str},
+                {"color", func.line_color.to_hex() },
+                {"id", fids[i]} };
+        if (func.uses_parameter_t()) {
+            f["tmin"] = func.tmin;
+            f["tmax"] = func.tmax;
+        }
+        jfuncs.push_back(f);
+    }
+    // Export sliders
+    jsliders.reserve(sliders.size());
+    for (auto& slider : sliders) {
+        jsliders.push_back(json {
+                {"var", slider.var_name},
+                {"min", slider.lo },
+                {"max", slider.hi },
+                {"val", env.vars[slider.var_addr] }});
+    }
+    os << std::setprecision(17);
+    if (pretty) os << std::setw(4);
+
+    json jinternal = {
+        {"next_color", last_expr_color },
+        {"curr_func", curr_func},
+    };
+    if (reuse_colors.size()) {
+        std::vector<json> jreuse_colors;
+        // Export color list
+        jreuse_colors.reserve(reuse_colors.size());
+        for (const auto& col : reuse_colors) {
+            jreuse_colors.push_back(col.to_hex());
+        }
+        jinternal["color_queue"] = jreuse_colors;
+
+    }
+
+    return os << json {
+        {"view", // Export view data
+            json {
+                {"xmin", view.xmin},
+                {"xmax", view.xmax},
+                {"ymin", view.ymin},
+                {"ymax", view.ymax},
+                {"polar", polar_grid},
+            }
+        },
+        {"funcs", jfuncs},
+        {"sliders", jsliders },
+        {"internal", jinternal },
+        {"shell", jshell },
+    };
 }
-std::istream& Plotter::funcs_from_bin(std::istream& is) {
-    util::read_bin(is, curr_func);
-    size_t sz;
-    util::read_bin(is, sz);
-    funcs.resize(sz);
-    for (size_t i = 0; i < funcs.size(); ++i) {
-        funcs[i].from_bin(is);
+std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
+    if (error_msg) {
+        error_msg->clear();
     }
-    util::read_bin(is, view);
-    util::read_bin(is, x_var);
-    util::read_bin(is, y_var);
-    env.from_bin(is);
+    try {
+        json j; is >> j;
+        if (j.is_array()) {
+            // Interpret as function list
+            j = json {
+                {"funcs",  j}
+            };
+        }
+
+        {
+            // Load environment
+            env.clear();
+            x_var = env.addr_of("x", false);
+            y_var = env.addr_of("y", false);
+            t_var = env.addr_of("t", false);
+            r_var = env.addr_of("r", false);
+            std::ostringstream ss;
+            Shell tmpshell(env, ss);
+            if (j.count("shell") && j["shell"].is_array()) {
+                for (auto& line : j["shell"]) {
+                    if (line.is_string()) {
+                        tmpshell.eval_line(line.get<std::string>());
+                    }
+                }
+            }
+        }
+
+        // Load view
+        polar_grid = false;
+        if (j.count("view")) {
+            json& jview = j["view"];
+            if (jview.is_object()) {
+                if (jview.count("xmin")) view.xmin = jview["xmin"].get<double>();
+                if (jview.count("xmax")) view.xmax = jview["xmax"].get<double>();
+                if (jview.count("xmin")) view.ymin = jview["ymin"].get<double>();
+                if (jview.count("xmax")) view.ymax = jview["ymax"].get<double>();
+                if (jview.count("polar")) polar_grid = jview["polar"].get<bool>();
+            }
+        }
+
+        // Load sliders
+        sliders.clear();
+        sliders_vars.clear();
+
+        if (j.count("sliders") && j["sliders"].is_array()) {
+            for (auto& slider : j["sliders"]) {
+                if (!slider.is_object()) continue;
+                size_t idx = sliders.size();
+                sliders.emplace_back();
+                if (slider.count("min"))
+                    sliders[idx].lo = slider["min"].get<double>();
+                if (slider.count("max"))
+                    sliders[idx].hi = slider["max"].get<double>();
+                if (slider.count("val")) {
+                    sliders[idx].val = slider["val"].get<double>();
+                }
+                if (slider.count("var")) {
+                    sliders[idx].var_name = slider["var"];
+                    if (!slider.count("val")) {
+                        sliders[idx].val = env.get(sliders[idx].var_name);
+                    }
+                    update_slider_var(idx);
+                }
+            }
+        }
+        funcs.clear();
+        if (j.count("funcs") && j["funcs"].is_array()) {
+            size_t idx = 0;
+            for (auto& jfunc : j["funcs"]) {
+                funcs.emplace_back();
+                auto& f = funcs[idx];
+                if (jfunc.is_object()) {
+                    // Object form
+                    if (jfunc.count("expr"))
+                        f.expr_str = jfunc["expr"].get<std::string>();
+                    if (jfunc.count("color")) {
+                        auto& jcol = jfunc["color"];
+                        if (jcol.is_string()) {
+                            f.line_color = color::from_hex(
+                                    jcol.get<std::string>());
+                        } else if (jcol.is_number_integer()) {
+                            f.line_color = color::from_int(
+                                    (size_t)jcol.get<int>());
+                        }
+                    } else {
+                        f.line_color = color::from_int(idx);
+                        last_expr_color = idx+1;
+                    }
+                    if (jfunc.count("id")) {
+                        int id = jfunc["id"].get<int>();
+                        next_func_name = std::max(next_func_name, (size_t)id+1);
+                        f.name = "f" + std::to_string(id);
+                    } else {
+                        f.name = "f" + std::to_string(next_func_name++);
+                    }
+                    if (jfunc.count("tmin")) {
+                        f.tmin = jfunc["tmin"].get<double>();
+                    }
+                    if (jfunc.count("tmax")) {
+                        f.tmin = jfunc["tmax"].get<double>();
+                    }
+                } else if (jfunc.is_string()) {
+                    // Only expression
+                    f.expr_str = jfunc.get<std::string>();
+                    f.name = "f" + std::to_string(next_func_name++);
+                    f.line_color = color::from_int(idx);
+                    last_expr_color = idx+1;
+                }
+                reparse_expr(idx);
+                ++idx;
+            }
+            for (size_t i = 0; i < funcs.size(); ++i) {
+                // Reparse again in case of reference to other functions
+                reparse_expr(i);
+            }
+        } else {
+            // Ensure there is at lease 1 function left
+            funcs.resize(1);
+            funcs[0].expr_str = "";
+            funcs[0].type = Function::FUNC_TYPE_EXPLICIT;
+            funcs[0].line_color = color::from_int(last_expr_color++);
+            funcs[0].name = "f" + std::to_string(next_func_name++);
+        }
+
+        reuse_colors.clear();
+        if (j.count("internal")) {
+            json& jint = j["internal"];
+            if (jint.is_object()) {
+                if (jint.count("curr_func")) {
+                    int cf = jint["curr_func"].get<int>();
+                    if (cf < 0 || cf >= funcs.size()) {
+                        set_curr_func(0);
+                    } else {
+                        set_curr_func(cf);
+                    }
+                } else {
+                    set_curr_func(0);
+                }
+                if (jint.count("next_color")) last_expr_color =
+                    jint["next_color"].get<double>();
+                if (jint.count("color_queue") &&
+                        jint["color_queue"].is_array()) {
+                    for (auto& jcol : jint["color_queue"]) {
+                        reuse_colors.push_back(color::from_hex(
+                                    jcol.get<std::string>()));
+                    }
+                }
+            }
+        }
+    } catch (const json::parse_error& e) {
+        if (error_msg != nullptr) {
+            *error_msg = e.what();
+        }
+    }
     return is;
 }
 
@@ -1514,7 +1732,7 @@ void Plotter::detect_marker_click(int px, int py, bool no_passive) {
     auto& ptm = pt_markers[grid[py * view.swid + px]];
     if (ptm.passive && no_passive) return;
     marker_posx = px; marker_posy = py + 20;
-    std::stringstream ss;
+    std::ostringstream ss;
     ss << std::fixed << std::setprecision(4) <<
         PointMarker::label_repr(ptm.label) << ptm.x << ", " << ptm.y;
     marker_text = ss.str();
@@ -1543,37 +1761,36 @@ void Plotter::buf_add_polyline(const View& recalc_view,
 }
 void Plotter::buf_add_rectangle(const View& recalc_view,
         float x, float y, float w, float h, bool fill, const color::color& c) {
-        FuncDrawObj rect;
-        rect.type = fill ? FuncDrawObj::FILLED_RECT : FuncDrawObj::RECT;
-        rect.points = {{(double)x, (double)y}, {(double)(x+w), (double)(y+h)}};
-        auto xdiff = recalc_view.xmax - recalc_view.xmin;
-        auto ydiff = recalc_view.ymax - recalc_view.ymin;
-        for (size_t i = 0; i < rect.points.size(); ++i) {
-            rect.points[i][0] = rect.points[i][0]*1. / recalc_view.swid * xdiff + recalc_view.xmin;
-            rect.points[i][1] = (recalc_view.shigh - rect.points[i][1])*1. / recalc_view.shigh * ydiff + recalc_view.ymin;
-        }
-        if (fill && draw_back_buf.size()) {
-            auto& last_rect = draw_back_buf.back();
-            if (last_rect.type == FuncDrawObj::FILLED_RECT &&
+    FuncDrawObj rect;
+    rect.type = fill ? FuncDrawObj::FILLED_RECT : FuncDrawObj::RECT;
+    rect.points = {{(double)x, (double)y}, {(double)(x+w), (double)(y+h)}};
+    auto xdiff = recalc_view.xmax - recalc_view.xmin;
+    auto ydiff = recalc_view.ymax - recalc_view.ymin;
+    for (size_t i = 0; i < rect.points.size(); ++i) {
+        rect.points[i][0] = rect.points[i][0]*1. / recalc_view.swid * xdiff + recalc_view.xmin;
+        rect.points[i][1] = (recalc_view.shigh - rect.points[i][1])*1. / recalc_view.shigh * ydiff + recalc_view.ymin;
+    }
+    if (fill && draw_back_buf.size()) {
+        auto& last_rect = draw_back_buf.back();
+        if (last_rect.type == FuncDrawObj::FILLED_RECT &&
                 std::fabs(last_rect.points[0][1] - rect.points[0][1]) < 1e-6 * ydiff &&
                 std::fabs(last_rect.points[1][1] - rect.points[1][1]) < 1e-6 * ydiff &&
                 std::fabs(last_rect.points[1][0] - rect.points[0][0]) < 1e-6 * xdiff &&
                 last_rect.c == c) {
-                // Reduce shape count by merging with rectangle to left
-                last_rect.points[1][0] = rect.points[1][0];
-                return;
-            } else if (last_rect.type == FuncDrawObj::FILLED_RECT &&
+            // Reduce shape count by merging with rectangle to left
+            last_rect.points[1][0] = rect.points[1][0];
+            return;
+        } else if (last_rect.type == FuncDrawObj::FILLED_RECT &&
                 std::fabs(last_rect.points[0][0] - rect.points[0][0]) < 1e-6 * xdiff &&
                 std::fabs(last_rect.points[1][0] - rect.points[1][0]) < 1e-6 * xdiff &&
                 std::fabs(last_rect.points[1][1] - rect.points[0][1]) < 1e-6 * ydiff &&
                 last_rect.c == c) {
-                // Reduce shape count by merging with rectangle above
-                last_rect.points[1][1] = rect.points[1][1];
-                return;
-            }
+            // Reduce shape count by merging with rectangle above
+            last_rect.points[1][1] = rect.points[1][1];
+            return;
         }
-        rect.c = c;
-        draw_back_buf.push_back(std::move(rect));
     }
-
+    rect.c = c;
+    draw_back_buf.push_back(std::move(rect));
+}
 }  // namespace nivalis

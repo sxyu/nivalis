@@ -18,56 +18,57 @@ void push_op(AST& ast, uint32_t op) {
 int main() {
     BEGIN_TEST(test_parser);
     using namespace OpCode;
-    Parser parser;
+    std::string err;
     Environment dummy_env;
-    ASSERT_EQ(parser("nan", dummy_env).ast, AST(1)); // AST(1) has only null
-    ASSERT(parser.error_msg.empty());
+    ASSERT_EQ(parse("nan", dummy_env, true, false, 0, &err).ast, AST(1));
+        // AST(1) has only null
+    ASSERT(err.empty());
     // Syntax error
-    ASSERT_EQ(parser("()()", dummy_env, true, true).ast, AST(1));
-    ASSERT_EQ(parser.error_msg.substr(0,6), "Syntax");
+    ASSERT_EQ(parse("()()", dummy_env, true, true, 0, &err).ast, AST(1));
+    ASSERT_EQ(err.substr(0,6), "Syntax");
     // Numeric parsing error
-    ASSERT_EQ(parser("2x+(3)", dummy_env, true, true).ast, AST(1));
-    ASSERT_EQ(parser.error_msg.substr(0,7), "Numeric");
+    ASSERT_EQ(parse("2x+(3)", dummy_env, true, true, 0, &err).ast, AST(1));
+    ASSERT_EQ(err.substr(0,7), "Numeric");
     // Undefined variable
-    ASSERT_EQ(parser("2*x", dummy_env, true, true).ast, AST(1));
-    ASSERT_EQ(parser.error_msg.substr(0,9), "Undefined");
+    ASSERT_EQ(parse("2*x", dummy_env, true, true, 0, &err).ast, AST(1));
+    ASSERT_EQ(err.substr(0,9), "Undefined");
     {
         Environment env_tmp;
-        ASSERT_EQ(parser("(3)*x", dummy_env, false).ast,
+        ASSERT_EQ(parse("(3)*x", dummy_env, false, false, 0, &err).ast,
                 AST({ mul, 3., Ref(0) }));
-        ASSERT(parser.error_msg.empty());
+        ASSERT(err.empty());
     }
-    ASSERT_EQ(parser("2+++e", dummy_env).ast,
+    ASSERT_EQ(parse("2+++e", dummy_env).ast,
             AST({ add, 2., M_E }));
-    ASSERT_EQ(parser("2--+-+e", dummy_env).ast,
+    ASSERT_EQ(parse("2--+-+e", dummy_env).ast,
             AST({ sub, 2., unaryminus, unaryminus, M_E }));
 
-    ASSERT_EQ(parser("pi*-2", dummy_env).ast,
+    ASSERT_EQ(parse("pi*-2", dummy_env).ast,
             AST({ mul, M_PI, unaryminus, 2. }));
-    ASSERT(parser.error_msg.empty());
+    ASSERT(err.empty());
 
-    ASSERT_EQ(parser("1+2-3", dummy_env).ast,
+    ASSERT_EQ(parse("1+2-3", dummy_env).ast,
         AST({ sub, add, 1., 2., 3. }));
     {
         AST ast = { add, 1., sub, 4., 3. };
-        ASSERT_EQ(parser("1+(4-3)", dummy_env).ast, ast);
-        ASSERT_EQ(parser("1+[4-3]", dummy_env).ast, ast);
+        ASSERT_EQ(parse("1+(4-3)", dummy_env).ast, ast);
+        ASSERT_EQ(parse("1+[4-3]", dummy_env).ast, ast);
     }
-    ASSERT_EQ(parser("1/(6%4)*3", dummy_env).ast,
+    ASSERT_EQ(parse("1/(6%4)*3", dummy_env).ast,
             AST({ mul, divi, 1., mod, 6., 4., 3. }));
-    ASSERT_EQ(parser("3.4*33.^1.3e4^.14", dummy_env).ast,
+    ASSERT_EQ(parse("3.4*33.^1.3e4^.14", dummy_env).ast,
             AST({ mul, 3.4, power, 33., power, 13000., 0.14 }));
     {
         Environment env; env.addr_of("x", false);
         AST ast = { mul, mul, 2., sinb, Ref(env.addr_of("x")),
                     cosb, Ref(env.addr_of("x")) };
-        ASSERT_EQ(parser("2*sin(x)*cos(x)", env).ast, ast);
+        ASSERT_EQ(parse("2*sin(x)*cos(x)", env).ast, ast);
     }
     {
         Environment env; env.addr_of("yy", false);
-        ASSERT_EQ(parser("fact(yy)^(-2)", env).ast,
+        ASSERT_EQ(parse("fact(yy)^(-2)", env).ast,
                 AST({ power, tgammab, add, 1., Ref(0), unaryminus, 2. }));
-        ASSERT(parser.error_msg.empty());
+        ASSERT(err.empty());
     }
 
     {
@@ -88,8 +89,8 @@ int main() {
         ast.push_back(M_PI);
         thunk.end();
 
-        ASSERT_EQ(parser("{x>0: {yy<=-1.5: abs(x)}, pi}", env).ast, ast);
-        ASSERT(parser.error_msg.empty());
+        ASSERT_EQ(parse("{x>0: {yy<=-1.5: abs(x)}, pi}", env).ast, ast);
+        ASSERT(err.empty());
     }
 
     {
@@ -100,8 +101,8 @@ int main() {
         ThunkManager thunk(ast); thunk.begin();
         ast.insert(ast.end(), { mul, Ref(0), log2b, Ref(1)});
         thunk.end();
-        ASSERT_EQ(parser("sum(x:-10.,a)[a*log2(x)]", env).ast, ast);
-        ASSERT(parser.error_msg.empty());
+        ASSERT_EQ(parse("sum(x:-10.,a)[a*log2(x)]", env).ast, ast);
+        ASSERT(err.empty());
     }
 
     {
@@ -113,8 +114,8 @@ int main() {
         ast.insert(ast.end(),  {mul, Ref(0), sqrtb,
             Ref(1)});
         thunk.end();
-        ASSERT_EQ(parser("prod(x:19.+-+5.5,a)[a*sqrt(x)]", env).ast, ast);
-        ASSERT(parser.error_msg.empty());
+        ASSERT_EQ(parse("prod(x:19.+-+5.5,a)[a*sqrt(x)]", env).ast, ast);
+        ASSERT(err.empty());
     }
 
     {
@@ -123,16 +124,24 @@ int main() {
 
         AST ast = { mul, divi, 1., mul, log(2), Ref(1), Ref(0) };
 
-        ASSERT_EQ(parser("diff(x)[a*log(x, 2)]", env).ast, ast);
-        ASSERT(parser.error_msg.empty());
+        ASSERT_EQ(parse("diff(x)[a*log(x, 2)]", env).ast, ast);
+        ASSERT(err.empty());
     }
 
     {
         Environment env; env.addr_of("a", false);
         env.addr_of("x", false);
         AST ast = { unaryminus, power, 3., unaryminus, 2. };
-        ASSERT_EQ(parser("-3^-2", env).ast, ast);
-        ASSERT(parser.error_msg.empty());
+        ASSERT_EQ(parse("-3^-2", env).ast, ast);
+        ASSERT(err.empty());
+    }
+
+    {
+        Environment env; env.addr_of("a", false);
+        env.addr_of("x", false);
+        AST ast = { lor, land, unaryminus, 1., 0., eq, 1., 1. };
+        ASSERT_EQ(parse("-1&0|1==1", env).ast, ast);
+        ASSERT(err.empty());
     }
 
     END_TEST;
