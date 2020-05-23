@@ -808,6 +808,17 @@ extern "C" {
         ImGui_ImplOpenGL3_Init(glsl_version);
         // Setup Dear ImGui style
         ImGui::StyleColorsLight();
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.WindowRounding = 0.;
+        style.WindowBorderSize = 1.;
+        style.FrameBorderSize = 0.;
+        style.Colors[ImGuiCol_Border]         = ImVec4(0.8f, 0.8f, 0.8f, 1.f);
+        style.Colors[ImGuiCol_BorderShadow]   = ImVec4(0.f, 0.f, 0.f, 0.f);
+        style.Colors[ImGuiCol_TitleBg]        = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+        style.Colors[ImGuiCol_TitleBgActive]    = ImVec4(0.7f, 0.7f, 0.7f, 1.f);
+        style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.75, 0.75f, 0.75f, 1.f);
+        style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.99f, 0.99f, 0.99f, 1.f);
+        style.Colors[ImGuiCol_FrameBg]       = ImVec4(0.94f, 0.94f, 0.94f, 1.f);
 
 #ifdef NIVALIS_EMSCRIPTEN
         // Set initial window size according to HTML canvas size
