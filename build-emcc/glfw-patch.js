@@ -185,3 +185,34 @@ Browser.calculateMouseEvent = function(event) {
         Browser.mouseY = y
     }
 };
+
+// Additional handlers
+window.addEventListener('resize', js_resizeCanvas, false);
+function js_resizeCanvas() {
+    document.getElementById('canvas').width = window.innerWidth;
+    document.getElementById('canvas').height = window.innerHeight;
+}
+document.addEventListener('keypress',function(e){
+    e.preventDefault();
+});
+document.addEventListener('keydown',function(e){
+    if (event.ctrlKey==true &&
+        (event.which == '61' || event.which == '107' ||
+            event.which == '173' || event.which == '109'  || event.which == '187'  ||
+            event.which == '189' ||
+            event.which == '72' || event.which == '67' || event.which == '86' ||
+            event.which == '88')) {
+        event.preventDefault();
+    }
+});
+document.body.addEventListener("wheel", e=>{
+    if(e.ctrlKey)
+        event.preventDefault();//prevent zoom
+});
+if (is_mobile) {
+    document.body.addEventListener("click", e=>{
+        var text_input = document.getElementById("text-input");
+        text_input.focus();
+        text_input.click();
+    }, true);
+}

@@ -9,12 +9,18 @@ const unsigned NUM_THREADS =
 #else
     std::thread::hardware_concurrency();
 #endif
-// Initial screen size
-const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
+
+bool is_var_name_reserved(const std::string& var_name) {
+    return var_name == "x" || var_name == "y" ||
+           var_name == "t" || var_name == "r";
+}
 }
 
 namespace nivalis {
 namespace util {
+// Deduce gridline distances (plot coordinates) from normalized size:
+// (input) step = (plot size / screen size) * initial screen size
+// returns minor gridline distance, major gridline distance
 std::pair<double, double> round125(double step) {
     double fa = 1.;
     if (step < 1) {
@@ -53,6 +59,8 @@ std::ostream& Function::to_bin(std::ostream& os) const {
     ddiff.to_bin(os); recip.to_bin(os);
     drecip.to_bin(os);
     util::write_bin(os, line_color);
+    util::write_bin(os, tmin);
+    util::write_bin(os, tmax);
 
     util::write_bin(os, polyline.size());
     for (size_t i = 0; i < polyline.size(); ++i) {
@@ -71,6 +79,8 @@ std::istream& Function::from_bin(std::istream& is) {
     ddiff.from_bin(is); recip.from_bin(is);
     drecip.from_bin(is);
     util::read_bin(is, line_color);
+    util::read_bin(is, tmin);
+    util::read_bin(is, tmax);
 
     util::resize_from_read_bin(is, polyline);
     for (size_t i = 0; i < polyline.size(); ++i) {
@@ -88,6 +98,12 @@ std::ostream& FuncDrawObj::to_bin(std::ostream& os) const {
     util::write_bin(os, type);
     return os;
 }
+
+bool Function::uses_parameter_t() const{
+ return type == Function::FUNC_TYPE_POLAR ||
+            type == Function::FUNC_TYPE_PARAMETRIC;
+}
+
 std::istream& FuncDrawObj::from_bin(std::istream& is) {
     util::resize_from_read_bin(is, points);
     for (size_t i = 0; i < points.size(); ++i) {
@@ -153,6 +169,8 @@ Plotter::Plotter() : view{SCREEN_WIDTH, SCREEN_HEIGHT, 0., 0., 0., 0.}
 
     x_var = env.addr_of("x", false);
     y_var = env.addr_of("y", false);
+    t_var = env.addr_of("t", false);
+    r_var = env.addr_of("r", false);
     set_curr_func(0);
 }
 
@@ -194,6 +212,10 @@ void Plotter::recalc(const View& view) {
     // discontinuities (including 'edge of screen')
     // x-coordinate after a discontinuity to begin drawing function
     static const double DISCONTINUITY_EPS = xdiff * 1e-3;
+
+    // Number of different t values to evaluate for a parametric
+    // equation
+    static const double PARAMETRIC_STEPS = 2500.0;
 
     bool prev_loss_detail = loss_detail;
     loss_detail = false; // Will set to show 'some detail may be lost'
@@ -546,6 +568,35 @@ void Plotter::recalc(const View& view) {
 #endif
                     }
 
+                }
+                break;
+            case Function::FUNC_TYPE_PARAMETRIC:
+            case Function::FUNC_TYPE_POLAR:
+                {
+                    if (func.type == Function::FUNC_TYPE_PARAMETRIC
+                        && func.polyline.size() != 2) continue;
+                    std::vector<std::array<float, 2> > curr_line;
+                    double tmin = (double)func.tmin;
+                    double tmax = (double)func.tmax;
+                    double tstep = (tmax - tmin) / PARAMETRIC_STEPS;
+                    for (double t = tmin; t <= tmax; t += tstep) {
+                        env.vars[t_var] = t;
+                        double x, y;
+                        if (func.type == Function::FUNC_TYPE_PARAMETRIC) {
+                            x = func.polyline[0](env);
+                            y = func.polyline[1](env);
+                        } else {
+                            double r = func.expr(env);
+                            x = r * cos(t); y = r * sin(t);
+                        }
+                        float sx = static_cast<float>((x - view.xmin)
+                                * view.swid / xdiff);
+                        float sy = static_cast<float>((view.ymax - y)
+                                * view.shigh / ydiff);
+                        curr_line.push_back({sx, sy});
+                    }
+                    buf_add_polyline(view, curr_line, func_color,
+                            curr_func == exprid ? 3 : 2.);
                 }
                 break;
             case Function::FUNC_TYPE_EXPLICIT:
@@ -973,6 +1024,7 @@ void Plotter::reparse_expr(size_t idx) {
     auto& func = funcs[idx];
     auto& expr = func.expr;
     auto& expr_str = func.expr_str;
+    // Ugly code to try and determine the type of function
     func.polyline.clear();
     // Marks whether this is a vlaid polyline expr
     bool valid_polyline;
@@ -1039,15 +1091,27 @@ void Plotter::reparse_expr(size_t idx) {
                     if (e1.has_var(x_var) || e1.has_var(y_var)) {
                         // Can't have x,y, show warning
                         func.polyline.clear();
-                        polyline_err = "x, y disallowed\n";
+                        polyline_err = "x, y disallowed in tuple "
+                            "(polyline/parametric equation)\n";
                         break;
+                    } else if (e1.has_var(t_var)) {
+                        // Detect parametric equation
+                        if (func.polyline.size() != 2) {
+                            func.polyline.clear();
+                            polyline_err = "Parametric equation can't have "
+                                "more than one tuple\n";
+                            break;
+                        } else {
+                            // Parametric
+                            func.type = Function::FUNC_TYPE_PARAMETRIC;
+                        }
                     }
                 }
             }
             // Keep as polyline type but show error
             // so that the user can see info about why it failed to parse
             if (polyline_err.size())
-                func_error = "Polyline expr error: " + polyline_err;
+                func_error = polyline_err;
             else func_error.clear();
         }
     } else valid_polyline = false;
@@ -1071,6 +1135,7 @@ void Plotter::reparse_expr(size_t idx) {
             }
             auto lhs = expr_str.substr(0, eqpos),
                  rhs = expr_str.substr(eqpos_next);
+            bool valid_implicit_func = true;
             util::trim(lhs); util::trim(rhs);
             if (func.type == Function::FUNC_TYPE_IMPLICIT
                     && (lhs == "y" || rhs == "y")) {
@@ -1082,10 +1147,25 @@ void Plotter::reparse_expr(size_t idx) {
                     // if one side is y and other side has no y,
                     // treat as explicit function
                     func.type = Function::FUNC_TYPE_EXPLICIT;
+                    valid_implicit_func = false;
                 }
             }
-            if (func.type != Function::FUNC_TYPE_EXPLICIT) {
-                // If still valid, set expression to difference
+            if (func.type == Function::FUNC_TYPE_IMPLICIT
+                    && (lhs == "r" || rhs == "r")) {
+                expr = parser(lhs == "r" ? rhs : lhs, env,
+                        true, // explicit
+                        true  // quiet
+                      );
+                if (!expr.has_var(x_var) &&
+                    !expr.has_var(y_var)) {
+                    // if one side is r and other side has no x,y,
+                    // treat as polar function
+                    func.type = Function::FUNC_TYPE_POLAR;
+                    valid_implicit_func = false;
+                }
+            }
+            if (valid_implicit_func) {
+                // If none of these apply, set expression to difference
                 // i.e. rearrange so RHS is 0
                 if (flip) {
                     expr = parser("(" + rhs + ")-(" + lhs + ")",
@@ -1100,8 +1180,11 @@ void Plotter::reparse_expr(size_t idx) {
             expr = parser(expr_str, env, true, true);
         }
         if (!expr.is_null()) {
-            // Compute derivatives
-            expr.optimize();
+            // Optimize the main expression
+            if (func.type != Function::FUNC_TYPE_PARAMETRIC)
+                expr.optimize();
+
+            // Compute derivatives, if explicit
             if (func.type == Function::FUNC_TYPE_EXPLICIT) {
                 func.diff = expr.diff(x_var, env);
                 if (!func.diff.is_null()) {
@@ -1114,6 +1197,11 @@ void Plotter::reparse_expr(size_t idx) {
             }
         } else func.diff.ast[0] = OpCode::null;
         func_error = parser.error_msg;
+    }
+
+    // Optimize any polyline/parametric point expressions
+    for (auto& point_expr : func.polyline) {
+        point_expr.optimize();
     }
 
     if (parser.error_msg.empty()) func_error.clear();
@@ -1200,7 +1288,7 @@ void Plotter::update_slider_var(size_t idx) {
             sl.var_name  + "\n";
         sl.var_addr = -1;
         sl.var_name.clear();
-    } else if (sl.var_name == "x" || sl.var_name == "y") {
+    } else if (is_var_name_reserved(sl.var_name)) {
         // Not allowed to set in slider (reserved)
         slider_error = sl.var_name  + " is reserved\n";
         sl.var_addr = -1;
@@ -1268,7 +1356,7 @@ void Plotter::reset_view() {
     require_update = true;
 }
 
-void Plotter::handle_key(int key, bool ctrl, bool alt) {
+void Plotter::handle_key(int key, bool ctrl, bool shift, bool alt) {
     switch(key) {
         case 37: case 39: case 262: case 263:
             // LR Arrow
@@ -1295,7 +1383,7 @@ void Plotter::handle_key(int key, bool ctrl, bool alt) {
                 auto fa = (key == 45 || key == 189) ? 1.013 : 0.987;
                 auto dy = (view.ymax - view.ymin) * (fa - 1.) /2;
                 auto dx = (view.xmax - view.xmin) * (fa - 1.) /2;
-                if (ctrl) dy = 0.; // x-only
+                if (shift) dy = 0.; // x-only
                 if (alt) dx = 0.;  // y-only
                 view.xmin -= dx; view.xmax += dx;
                 view.ymin -= dy; view.ymax += dy;
@@ -1303,13 +1391,27 @@ void Plotter::handle_key(int key, bool ctrl, bool alt) {
             }
             break;
         case 48: case 72:
-            // ctrl H: Home
+            // ctrl 0/H: Home
             if (ctrl) {
                 reset_view();
             }
             break;
+        case 80:
+            // P: Polar grid
+            if (!polar_grid) {
+                polar_grid = true;
+                require_update = true;
+            }
+            break;
+        case 79:
+            // O: Cartesian grid
+            if (polar_grid) {
+                polar_grid = false;
+                require_update = true;
+            }
+            break;
         case 69:
-            // E: Edit (focus tb)
+            // E: Edit (focus editor)
             focus_on_editor = true;
             break;
     }

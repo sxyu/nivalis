@@ -26,9 +26,25 @@
           position: absolute; left: 0; top: -100px; height:0; width:0;
               opacity: 0
        }
+      #loading {
+          display: block;
+          opacity: 1;
+          transition: all 0.5s;
+          position: fixed;
+          top: 0; left: 0;
+          width: 100vw; height: 100vh;
+          z-index: 10000;
+          font-family: monospace;
+          font-size: 3em;
+          background-color: #eee;
+          color: #222;
+          line-height: 100vh;
+          text-align:center;
+      }
     </style>
   </head>
   <body>
+      <div id="loading">Nivalis</div>
     <input type="text" id="text-input" autocapitalize="none"/>
 
     <div class="emscripten_border">
@@ -69,37 +85,19 @@
                     });
                 text_input.focus();
             }
+            var intervalId = window.setInterval(function() {
+                if (document.getElementsByTagName('body')[0] !== undefined) {
+                    window.clearInterval(intervalId);
+                    document.getElementById("loading").style.opacity =
+                        '0.0';
+                    window.setTimeout(function() {
+                        document.getElementById("loading").style.display =
+                          'none';
+                    }, 500);
+                }
+            }, 100);
         },
       };
-      window.addEventListener('resize', js_resizeCanvas, false);
-      function js_resizeCanvas() {
-            document.getElementById('canvas').width = window.innerWidth;
-            document.getElementById('canvas').height = window.innerHeight;
-      }
-      document.addEventListener('keypress',function(e){
-          e.preventDefault();
-      });
-      document.addEventListener('keydown',function(e){
-          if (event.ctrlKey==true &&
-              (event.which == '61' || event.which == '107' ||
-                  event.which == '173' || event.which == '109'  || event.which == '187'  ||
-                  event.which == '189' ||
-              event.which == '72' || event.which == '67' || event.which == '86' ||
-              event.which == '88')) {
-              event.preventDefault();
-          }
-      });
-      document.body.addEventListener("wheel", e=>{
-          if(e.ctrlKey)
-              event.preventDefault();//prevent zoom
-      });
-      if (is_mobile) {
-          document.body.addEventListener("click", e=>{
-              var text_input = document.getElementById("text-input");
-              text_input.focus();
-              text_input.click();
-          }, true);
-      }
     </script>
     <script type="text/javascript" src="nivplot.js"></script>
     <script type="text/javascript" src="glfw-patch.js"></script>

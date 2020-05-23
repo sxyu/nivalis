@@ -47,8 +47,8 @@ const char* repr(uint32_t opcode) {
         case logbase:  return "log(@, @)";
         case max:   return "max(@, @)";
         case min:   return "min(@, @)";
-        case land:  return "and(@, @)";
-        case lor:   return "or(@, @)";
+        case land:  return "(@ & @)";
+        case lor:   return "(@ | @)";
         case lxor:  return "xor(@, @)";
         case lt:    return "(@ < @)";
         case le:    return "(@ <= @)";
@@ -96,7 +96,7 @@ const char* repr(uint32_t opcode) {
         case thunk_jmp: return "]";
         case thunk_ret: return "[@@";
         case arg: return "$";
-        case call: return "%(@)";
+        case call: return "\t(@)";
         default: return "";
     };
 }
@@ -145,8 +145,6 @@ const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
         func_opcodes["log"] = OpCode::logbase;
         func_opcodes["max"] = OpCode::max;
         func_opcodes["min"] = OpCode::min;
-        func_opcodes["and"] = OpCode::land;
-        func_opcodes["or"] = OpCode::lor;
         func_opcodes["xor"] = OpCode::lxor;
         func_opcodes["not"] = OpCode::lnot;
 

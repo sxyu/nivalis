@@ -18,9 +18,12 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#ifndef NIVALIS_EMSCRIPTEN
 #include <thread>
 #include <mutex>
 #include <atomic>
+#endif
+#include <iostream>
 #include "expr.hpp"
 #include "parser.hpp"
 #include "color.hpp"
@@ -38,17 +41,20 @@ namespace util {
 std::pair<double, double> round125(double step);
 }  // namespace util
 
+// Initial screen size
+const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 600;
+
 // Represents function in plotter
 struct Function {
-    // Function name
+    // Function name (f0 f1 etc)
     std::string name;
     // Function expression
     Expr expr;
-    // Derivative, 2nd derivative
+    // Derivative, 2nd derivative (only for explicit)
     Expr diff, ddiff;
-    // Reciprocal, derivative of reciprocal
+    // Reciprocal, derivative of reciprocal (only for explicit)
     Expr recip, drecip;
-    // Color of function's line
+    // Color of function's line; made translucent for inequality region
     color::color line_color;
     // Should be set by GUI implementation: expression string from editor.
     std::string expr_str;
@@ -57,14 +63,24 @@ struct Function {
         FUNC_TYPE_IMPLICIT,             // implicit func like abs(x)=abs(y)
         FUNC_TYPE_IMPLICIT_INEQ,        // implicit inequality >= 0
         FUNC_TYPE_IMPLICIT_INEQ_STRICT, // implicit inequality > 0
+        FUNC_TYPE_PARAMETRIC,           // parameteric equation
+        FUNC_TYPE_POLAR,                // polar equation
         FUNC_TYPE_POLYLINE,             // poly-lines (x,y) (x',y') (x'',y'')...
     } type;
-    // Stores line points, if polyline-type
+    // Polyline type: stores line point expressions,
+    // Parameteric type: polyline[0] is x, ..[1] is y
     std::vector<Expr> polyline;
+
+    // Bounds on t, for parametric and polar types only
+    float tmin = 0., tmax = 2 * M_PI;
 
     // Binary serialization
     std::ostream& to_bin(std::ostream& os) const;
     std::istream& from_bin(std::istream& is);
+    // Return true if function makes use of parameter t (tmin/tmax),
+    // as opposed to just x/y.
+    // Currently true for polar/parametric types.
+    bool uses_parameter_t() const;
 };
 
 // Marks a single point on the plot which can be clicked
@@ -150,92 +166,242 @@ public:
      * void line(float ax, float ay, float bx, float by, const color::color&, float thickness = 1.0);               draw line (ax, ay) -- (bx, by)
      * void polyline(const std::vector<std::array<float, 2> >& points, const color::color&, float thickness = 1.);  draw polyline (not closed)
      * void rectangle(float x, float y, float w, float h, bool fill, const color::color&);                          draw rectangle (filled or non-filled)
+     * void circle(float x, float y, float r, bool fill, const color::color&);                                      draw circle (filled or non-filled)
+     * void ellipse(float x, float y, float rx, float ry bool fill, const color::color&);                           draw axis-aligned ellipse (filled or non-filled)
      * void string(float x, float y, std::string s, const color::color&);                                           draw a string
      * Adapater may use internal caching and/or add optional arguments to above functions; when require_update is set the cache should be
      * cleared. */
     template<class GraphicsAdaptor>
     void draw_grid(GraphicsAdaptor& graph, const View& view) {
-        int sx0 = 0, sy0 = 0;
+        int sx_min = 0, sy_min = 0;
         int cnt_visible_axis = 0;
+        double y0 = view.ymax / (view.ymax - view.ymin);
+        float sy0 = static_cast<float>(view.shigh * y0);
+        double x0 = - view.xmin / (view.xmax - view.xmin);
+        float sx0 = static_cast<float>(view.swid * x0);
         // Draw axes
         if (view.ymin <= 0 && view.ymax >= 0) {
-            double y0 = view.ymax / (view.ymax - view.ymin);
-            sy0 = static_cast<float>(view.shigh * y0);
-            graph.line(0.f, sy0, view.swid, sy0, color::DARK_GRAY, 2.);
+            sy_min = sy0;
+            graph.line(0.f, sy_min, view.swid, sy_min, color::DARK_GRAY, 2.);
             ++cnt_visible_axis;
         }
         else if (view.ymin > 0) {
-            sy0 = view.shigh - 26;
+            sy_min = view.shigh - 26;
         }
         if (view.xmin <= 0 && view.xmax >= 0) {
-            double x0 = - view.xmin / (view.xmax - view.xmin);
-            sx0 = static_cast<float>(view.swid * x0);
-            graph.line(sx0, 0.f, sx0, view.shigh, color::DARK_GRAY, 3.);
+            sx_min = sx0;
+            graph.line(sx_min, 0.f, sx_min, view.shigh, color::DARK_GRAY, 3.);
             ++cnt_visible_axis;
         }
         else if (view.xmax < 0) {
-            sx0 = view.swid - 50;
+            sx_min = view.swid - 50;
         }
 
-        // Draw lines
-        double ystep, xstep, ymstep, xmstep;
-        std::tie(ystep, ymstep) = util::round125((view.ymax - view.ymin) / view.shigh * 600 / 10.8);
-        std::tie(xstep, xmstep) = util::round125((view.xmax - view.xmin) / view.swid * 1000 / 18.);
-        double xli = std::ceil(view.xmin / xstep) * xstep;
-        double xr = std::floor(view.xmax / xstep) * xstep;
-        double ybi = std::ceil(view.ymin / ystep) * ystep;
-        double yt = std::floor(view.ymax / ystep) * ystep;
-        double yb = ybi, xl = xli;
-        int idx = 0;
-        while (xl <= xr) {
-            float sxi = static_cast<float>(view.swid * (xl - view.xmin) / (view.xmax - view.xmin));
-            graph.line(sxi,0, sxi, view.shigh, color::LIGHT_GRAY);
-            xl = xstep * idx + xli;
-            ++idx;
-        }
-        idx = 0;
-        while (yb <= yt) {
-            float syi = static_cast<float>(view.shigh * (view.ymax - yb) / (view.ymax - view.ymin));
-            graph.line(0.f, syi, view.swid, syi, color::LIGHT_GRAY);
-            yb = ystep * idx + ybi;
-            ++idx;
-        }
-        // Larger lines + text
-        double xmli = std::ceil(view.xmin / xmstep) * xmstep;
-        double xmr = std::floor(view.xmax / xmstep) * xmstep;
-        double ymbi = std::ceil(view.ymin / ymstep) * ymstep;
-        double ymt = std::ceil(view.ymax / ymstep) * ymstep;
-        double ymb = ymbi, xml = xmli;
-        idx = 0;
-        while (xml <= xmr) {
-            float sxi = static_cast<float>(view.swid * (xml - view.xmin) / (view.xmax - view.xmin));
-            graph.line(sxi, 0.f, sxi, view.shigh, color::GRAY);
+        // round
+        thread_local auto prec4 = [](double v) -> std::string {
+            thread_local std::stringstream sstm;
+            sstm.str("");
+            sstm << std::setprecision(4) << v;
+            return sstm.str();
+        };
 
-            if (xml != 0) {
-                std::stringstream sstm;
-                sstm << std::setprecision(4) << xml;
-                graph.string(sxi-7, sy0+5, sstm.str(), color::BLACK);
+        // Draw lines (step = minor line, mstep = major line)
+        if (polar_grid) {
+            double rstep, rmstep;
+            auto xmins = view.xmin*view.xmin,
+                 ymins = view.ymin*view.ymin,
+                 xmaxs = view.xmax*view.xmax,
+                 ymaxs = view.ymax*view.ymax;
+            // Determine minimum distance from origin
+            // anywhere on screen
+            double rmin;
+            if (cnt_visible_axis == 2) rmin = 0.;
+            else if (cnt_visible_axis == 1) {
+                rmin = 0;
+                if (view.xmin <= 0. && view.xmax >= 0.) {
+                    rmin = sqrt(std::min(ymins, ymaxs));
+                } else {
+                    rmin = sqrt(std::min(xmins, xmaxs));
+                }
+            } else {
+                rmin = std::sqrt(std::min(
+                    std::min(xmins + ymins, xmins + ymaxs),
+                    std::min(xmaxs + ymins, xmaxs + ymaxs)));
             }
-            ++idx;
-            xml = xmstep * idx + xmli;
-        }
-        idx = 0;
-        while (ymb <= ymt) {
-            float syi = static_cast<float>(view.shigh * (view.ymax - ymb) / (view.ymax - view.ymin));
-            graph.line(0, syi, view.swid, syi, color::GRAY);
+            // Determine maximum distance from origin
+            double rmax = std::sqrt(std::max(
+                    std::max(xmins + ymins, xmins + ymaxs),
+                    std::max(xmaxs + ymins, xmaxs + ymaxs)));
+            // Compute minor/major step sizes
+            static const double INITIAL_SCREEN_DIAM =
+                sqrt(SCREEN_WIDTH * SCREEN_WIDTH +
+                        SCREEN_HEIGHT * SCREEN_HEIGHT);
+            double view_diam =
+                sqrt((view.xmax - view.xmin) * (view.xmax - view.xmin) +
+                     (view.ymax - view.ymin) * (view.ymax - view.ymin));
+            double screen_diam =
+                sqrt(view.swid * view.swid + view.shigh * view.shigh);
+            std::tie(rstep, rmstep) =
+                util::round125(view_diam / screen_diam *
+                    INITIAL_SCREEN_DIAM / 20.);
+            // End compute minor/major step sizes
+            // Draw minor (elliptical) gridlines
+            double rloi = std::ceil(rmin / rstep) * rstep;
+            double rhi = std::floor(rmax / rstep) * rstep;
+            double rmloi = std::ceil(rmin / rmstep) * rmstep;
+            double rmhi = std::floor(rmax / rmstep) * rmstep;
 
-            if (ymb != 0) {
-                std::stringstream sstm;
-                sstm << std::setprecision(4) << ymb;
-                graph.string(sx0+5, syi-6, sstm.str(), color::BLACK);
+            int idx = 0;
+            double rlo = rloi;
+            while (rlo <= rhi) {
+                graph.ellipse(sx0, sy0,
+                        rlo / (view.xmax - view.xmin) * view.swid,
+                        rlo / (view.ymax - view.ymin) * view.shigh,
+                        false, color::LIGHT_GRAY);
+                rlo = rstep * idx + rloi;
+                ++idx;
             }
-            ++idx;
-            ymb = ymstep * idx + ymbi;
+            idx = 0;
+            double x_plot_to_screen = view.swid * 1. / (view.xmax - view.xmin);
+            double y_plot_to_screen = view.shigh * 1. / (view.ymax - view.ymin);
+            // Major (elliptical) gridlines with text
+            double rmlo = rmloi;
+            while (rmlo <= rmhi) {
+                double sxr = rmlo * x_plot_to_screen;
+                double syr = rmlo * y_plot_to_screen;
+                graph.ellipse(sx0, sy0,
+                        sxr, syr,
+                        false, color::GRAY);
+                // Draw labels on axes
+                if (rmlo > 0.) {
+                    auto num_label = prec4(rmlo);
+                    graph.string(sx0 + sxr-7,
+                            sy0+5, num_label, color::BLACK);
+                    graph.string(sx0 - sxr-7,
+                            sy0+5, num_label, color::BLACK);
+                    graph.string(sx0+5, sy0 + syr -6,
+                            num_label, color::BLACK);
+                    graph.string(sx0+5, sy0 - syr -6,
+                            num_label, color::BLACK);
+                }
+                rmlo = rmstep * idx + rmloi;
+                ++idx;
+            }
+            // Angle (straight) gridlines
+            // 0, pi/12, pi/6 ...
+            for (int i = 0; i < 24; ++i) {
+                double angle = i * M_PI / 12;
+                double uxs = cos(angle) * x_plot_to_screen;
+                double uys = -sin(angle) * y_plot_to_screen;
+                graph.line(sx0 + uxs * rmin,
+                        sy0 + uys * rmin,
+                        sx0 + uxs * rmax,
+                        sy0 + uys * rmax,
+                        color::LIGHT_GRAY);
+                // Draw labels
+                ++idx;
+            }
+
+            // Angle label text
+            static const char* angle_labels[] = {
+                "0", "pi/6", "pi/3",
+                "pi/2", "2pi/3", "5pi/6",
+                "pi", "7pi/6", "4pi/3",
+                "3pi/2", "5pi/3", "11pi/6"
+            };
+            double angle_text_disp_r = rmloi + rmstep * 1.8;
+            // 0, pi/6, ...
+            for (int i = 0; i < sizeof(angle_labels) / sizeof(angle_labels[0]);
+                    ++i) {
+                double angle = i * M_PI / 6;
+                double ux = cos(angle), uy = -sin(angle);
+                double uxs = ux * x_plot_to_screen;
+                double uys = uy * y_plot_to_screen;
+                double posx = sx0 + uxs * angle_text_disp_r - ux * 5. - 12.;
+                double posy = sy0 + uys * angle_text_disp_r - uy * 5. - 12.;
+                if (i == 0 || i == 6) posy -= 10; // Clear x-axis
+                if (i == 3 || i == 9) posx += 20; // Clear y-axis
+                if (i == 0) posx += 10; // Adjust spacing
+                graph.string(posx, posy,
+                        angle_labels[i],
+                        color::GRAY);
+                ++idx;
+            }
+        } else {
+            double ystep, xstep, ymstep, xmstep;
+            std::tie(ystep, ymstep) =
+                util::round125((view.ymax - view.ymin) /
+                        view.shigh * 1. * SCREEN_HEIGHT / 10.8);
+            std::tie(xstep, xmstep) =
+                util::round125((view.xmax - view.xmin) /
+                        view.swid *1. * SCREEN_WIDTH / 18.);
+            {
+                // Minor gridlines
+                double xli = std::ceil(view.xmin / xstep) * xstep;
+                double xr = std::floor(view.xmax / xstep) * xstep;
+                double ybi = std::ceil(view.ymin / ystep) * ystep;
+                double yt = std::floor(view.ymax / ystep) * ystep;
+                double yb = ybi, xl = xli;
+                int idx = 0;
+                while (xl <= xr) {
+                    float sxi = static_cast<float>(view.swid *
+                            (xl - view.xmin) / (view.xmax - view.xmin));
+                    graph.line(sxi,0, sxi, view.shigh, color::LIGHT_GRAY);
+                    xl = xstep * idx + xli;
+                    ++idx;
+                }
+                idx = 0;
+                while (yb <= yt) {
+                    float syi = static_cast<float>(view.shigh *
+                            (view.ymax - yb) / (view.ymax - view.ymin));
+                    graph.line(0.f, syi, view.swid, syi, color::LIGHT_GRAY);
+                    yb = ystep * idx + ybi;
+                    ++idx;
+                }
+            }
+            {
+                // Major gridlines (with label text)
+                double xmli = std::ceil(view.xmin / xmstep) * xmstep;
+                double xmr = std::floor(view.xmax / xmstep) * xmstep;
+                double ymbi = std::ceil(view.ymin / ymstep) * ymstep;
+                double ymt = std::ceil(view.ymax / ymstep) * ymstep;
+                double ymb = ymbi, xml = xmli;
+                int idx = 0;
+                // On X axis
+                while (xml <= xmr) {
+                    float sxi = static_cast<float>(view.swid *
+                            (xml - view.xmin) / (view.xmax - view.xmin));
+                    graph.line(sxi, 0.f, sxi, view.shigh, color::GRAY);
+
+                    // Draw text
+                    if (xml != 0) {
+                        graph.string(sxi-7, sy_min+5, prec4(xml), color::BLACK);
+                    }
+                    ++idx;
+                    xml = xmstep * idx + xmli;
+                }
+                idx = 0;
+                // On Y axis
+                while (ymb <= ymt) {
+                    float syi = static_cast<float>(view.shigh *
+                            (view.ymax - ymb) / (view.ymax - view.ymin));
+                    if (!polar_grid) {
+                        graph.line(0, syi, view.swid, syi, color::GRAY);
+                    }
+
+                    // Draw text
+                    if (ymb != 0) {
+                        graph.string(sx_min+5, syi-6, prec4(ymb), color::BLACK);
+                    }
+                    ++idx;
+                    ymb = ymstep * idx + ymbi;
+                }
+            }
         }
 
         // Draw 0
         if (cnt_visible_axis == 2) {
-            graph.string(sx0 - 12, sy0 + 5, "0", color::BLACK);
+            graph.string(sx_min - 12, sy_min + 5, "0", color::BLACK);
         }
     }
     template<class GraphicsAdaptor>
@@ -326,7 +492,7 @@ public:
 
     // * Keyboard/mouse handlers
     // A basic key handler: key code, ctrl pressed?, alt pressed?
-    void handle_key(int key, bool ctrl, bool alt);
+    void handle_key(int key, bool ctrl, bool shift, bool alt);
 
     // Mouse down handler (any key)
     void handle_mouse_down(int px, int py);
@@ -362,10 +528,10 @@ private:
             float x, float y, float w, float h,
             bool fill, const color::color& c);
 public:
-
     // Public plotter state data
     View view;                              // Curr view data
     size_t curr_func = 0;                   // Currently selected function
+    bool polar_grid = false;                // If true, draws polar grid
 
     std::vector<Function> funcs;            // Functions
     std::string func_error;                 // Function parsing error str
@@ -407,7 +573,7 @@ private:
                                               // swap() swaps this to draw_buf
     std::vector<FuncDrawObj> draw_buf;        // Function draw buffer
                                               // draw() draws these shapes to an adaptor
-    std::vector<color::color> rect_opt_grid; // Grid of rectangle colors 
+    std::vector<color::color> rect_opt_grid; // Grid of rectangle colors
                                              // used by recalc,
                                              // for optimizing drawing
 
@@ -422,7 +588,7 @@ private:
     std::queue<color::color> reuse_colors;    // Reusable colors
     size_t last_expr_color = 0;               // Next available color index if no reusable
                                               // one present(by color::from_int)
-    uint32_t x_var, y_var;                    // x,y variable addresses
+    uint32_t x_var, y_var, t_var, r_var;      // x,y,t,r variable addresses
 
     // For use with mouth dragging
     bool dragdown, draglabel;

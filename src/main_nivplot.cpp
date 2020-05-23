@@ -78,6 +78,26 @@ struct ImGuiDrawListGraphicsAdaptor {
                     ImColor(c.r, c.g, c.b, c.a));
         }
     }
+    void circle(float x, float y, float r, bool fill, const color::color& c) {
+        if (fill) {
+            draw_list->AddCircleFilled(ImVec2(x,y), r,
+                    ImColor(c.r, c.g, c.b, c.a), std::min(r, 250.f));
+        } else {
+            draw_list->AddCircle(ImVec2(x,y), r,
+                    ImColor(c.r, c.g, c.b, c.a), std::min( r, 250.f));
+        }
+    }
+    // Axis-aligned ellipse
+    void ellipse(float x, float y, float rx, float ry,
+                 bool fill, const color::color& c) {
+        if (fill) {
+            draw_list->AddEllipseFilled(ImVec2(x,y), rx, ry,
+                    ImColor(c.r, c.g, c.b, c.a), std::min(.5f * (rx + ry), 250.f));
+        } else {
+            draw_list->AddEllipse(ImVec2(x,y), rx, ry,
+                    ImColor(c.r, c.g, c.b, c.a), std::min(.5f * (rx + ry), 250.f));
+        }
+    }
     void string(float x, float y, const std::string& s, const color::color& c) {
         // String using ImGui API
         draw_list->AddText(ImVec2(x, y),
@@ -199,7 +219,7 @@ void main_loop_step() {
 #endif
         // Cache the draw list
         if (draw_list_pre != nullptr) {
-            delete draw_list_pre;
+            free(draw_list_pre);
         }
         draw_list_pre = draw_list->CloneOutput();
     } else {
@@ -241,19 +261,22 @@ void main_loop_step() {
     ImGui::PushFont(font_md);
 
     for (size_t fidx = 0; fidx < plot.funcs.size(); ++fidx) {
+        auto& func = plot.funcs[fidx];
         if (plot.focus_on_editor && fidx == plot.curr_func) {
             ImGui::SetKeyboardFocusHere(0);
         }
-        const std::string fid = plot.funcs[fidx].name;
+        const std::string fid = func.name;
         ImGui::PushItemWidth(ImGui::GetWindowWidth() - 100);
         if (ImGui::InputText((fid +
                         "##funcedit-" + fid).c_str(),
-                    &plot.funcs[fidx].expr_str,
+                    &func.expr_str,
                     ImGuiInputTextFlags_CallbackHistory,
                     [](ImGuiTextEditCallbackData* data) -> int {
                         // Handle up/down arrow keys in textboxes
-                        change_curr_func = plot.curr_func +
-                            (data->EventKey == ImGuiKey_UpArrow ? -1 : 1);
+                        if (!ImGui::GetIO().KeyCtrl) {
+                            change_curr_func = plot.curr_func +
+                                (data->EventKey == ImGuiKey_UpArrow ? -1 : 1);
+                        }
                         return 0;
                     })) {
             plot.reparse_expr(fidx);
@@ -262,7 +285,7 @@ void main_loop_step() {
             if (fidx != plot.curr_func) change_curr_func = fidx;
         }
         ImGui::SameLine();
-        auto& col = plot.funcs[fidx].line_color;
+        auto& col = func.line_color;
         if (ImGui::ColorButton(("c##colfun" +fid).c_str(),
                     ImVec4(col.r, col.g, col.b, col.a),
                     ImGuiColorEditFlags_NoAlpha)) {
@@ -272,6 +295,36 @@ void main_loop_step() {
         ImGui::SameLine();
         if (ImGui::Button(("x##delfun-" + fid).c_str())) {
             plot.delete_func(fidx--);
+        }
+        if (func.uses_parameter_t()) {
+            ImGui::PushItemWidth(50);
+            if (ImGui::DragFloat(("##tmins" + fid).c_str(), &func.tmin, 0.05f,
+                       0.0f, 0.0f,  "t min")) {
+                plot.require_update = true;
+                if (func.tmax <= func.tmin) func.tmin = func.tmax - 1e-9f;
+            }
+            ImGui::SameLine();
+            ImGui::PushItemWidth(100);
+            if (ImGui::InputFloat(("##tmin" + fid).c_str(), &func.tmin)) {
+                plot.require_update = true;
+                if (func.tmax <= func.tmin) func.tmin = func.tmax - 1e-9f;
+            }
+
+            ImGui::SameLine();
+            ImGui::PushItemWidth(50);
+            if (ImGui::DragFloat(("##tmaxs" + fid).c_str(), &func.tmax, 0.05f,
+                       0.0f, 0.0f, "t max")) {
+                plot.require_update = true;
+                if (func.tmax <= func.tmin) func.tmax = func.tmin + 1e-9;
+            }
+
+            ImGui::SameLine();
+            ImGui::PushItemWidth(100);
+            if (ImGui::InputFloat(("##tmax" + fid).c_str(), &func.tmax)) {
+                plot.require_update = true;
+                if (func.tmax <= func.tmin) func.tmax = func.tmin + 1e-9f;
+            }
+
         }
     }
     plot.focus_on_editor = false;
@@ -357,7 +410,7 @@ void main_loop_step() {
     if (init) {
         ImGui::SetNextWindowPos(ImVec2(
                     static_cast<float>(plot.view.swid - 182), 10));
-        ImGui::SetNextWindowSize(ImVec2(175, 105));
+        ImGui::SetNextWindowSize(ImVec2(175, 135));
     }
     ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
     if (~pwwidth && !init) {
@@ -378,6 +431,7 @@ void main_loop_step() {
     ImGui::PushItemWidth(60.);
     if(ImGui::InputDouble("##ym", &plot.view.ymax)) plot.require_update = true;
     if (ImGui::Button("Reset view")) plot.reset_view();
+    if (ImGui::Checkbox("Polar grid", &plot.polar_grid)) plot.require_update = true;
     ImGui::End(); // View
 
     // Show the marker window
@@ -429,18 +483,38 @@ void main_loop_step() {
         // Reference popup
         ImGui::TextUnformatted("GUI: Function editor");
         ImGui::Indent();
-        ImGui::BulletText("%s", "The function editor is the window initially on top-left with\ntextboxes. You can enter expressions here to draw:");
+        ImGui::BulletText("%s", "The function editor is the window initially on top-left with\ntextboxes. You can enter expressions in textboxes here to draw:");
         ImGui::Indent();
-        ImGui::BulletText("%s", "Explicit functions: Simply enter an expression with x in the textbox\ne.g. x^2");
-        ImGui::BulletText("%s", "Implicit functions: Enter an equation with x, y in the textbox, e.g. cos(x*y)=0");
-        ImGui::BulletText("%s", "(Implicit) inequalities: e.g. x<y, cos(y)<sin(y), x^2>y");
+        ImGui::BulletText("%s", "Explicit functions: Simply enter an expression with x\ne.g. x^2, gamma(x). Equivalently, enter y=<expr>");
+        ImGui::BulletText("%s", "Implicit functions: Enter an equation with x, y in the textbox\ne.g. cos(x*y)=0, sin(x)=cos(y)");
+        ImGui::BulletText("%s", "Inequalities (implicit): e.g. x<y, cos(y)<sin(y), x^2>y");
+        ImGui::BulletText("%s", "Parametric: (<x-expr>, <y-expr>), where expressions should be\nin terms of t e.g. (4*sin(4*t),3*sin(3*t))");
+        ImGui::BulletText("%s", "Polar: r=<expr>, where <expr> should be in terms of angle t\ne.g. r = 1-cos(t)");
+        ImGui::Indent();
+            ImGui::BulletText("%s", "After entering a parametric/polar function, "
+                "inputs will\nappear to allow adjusting bounds on t "
+                "(you can directly set\nthe value or drag 't min', 't max' to change)");
+        ImGui::Unindent();
         ImGui::BulletText("%s", "'Polylines' (points and lines)");
         ImGui::Indent();
-        ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>)\ne.g. (1, 2). Coords can have variables.");
-        ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>)(<x2>,<y2>)... e.g. (1, 1)(2,2)(3,2)");
+        ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>)\ne.g. (1, 2). Coords can have slider variables.");
+        ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>)(<x2>,<y2>)... e.g. (1,1)(2,2)(3,2)");
         ImGui::Unindent();
         ImGui::Unindent();
+        ImGui::BulletText("%s", "Each function is given a unique name, e.g. f0, f1,\nshown to its right. You can use it in other function:\ne.g. expression of another function may be f0(x^2)");
+        ImGui::BulletText("%s", "Press the colored button to the right of the function name\nto change function color.");
+        ImGui::BulletText("%s", "Press 'x' to the right of that to delete the function.");
         ImGui::BulletText("%s", "Press '+ New function' to add more functions.\nPress 'x' to delete a function.\nPress the colored button to the left to change line color.");
+        ImGui::BulletText("%s", "Press '# Shell' to get a virtual nivalis shell\n(see 'Shell' section below for usage)");
+        ImGui::Unindent();
+
+        ImGui::TextUnformatted("GUI: Sliders");
+        ImGui::Indent();
+        ImGui::BulletText("%s", "The slider window is initially on the bottom-left.\nClick '+ Add slider' to create a slider.");
+        ImGui::BulletText("%s", "The top-left box above the slider is the variable name.\nThis can be any string consisting a-z, A-Z, 0-9, _, or ',\nnot starting with a number; it cannot be any of x,y,t,r.\nFor example, xy_3' is valid.\nTo use the slider value, enter this variable in a function expression\nin the function editor.\ne.g. if the string here is 'a',"
+                "you can use 'a*x' in a function");
+        ImGui::BulletText("%s", "The boxes to the right are for setting the variable's value manually\nand the lower/upper bounds of the slider resp.\n");
+        ImGui::BulletText("%s", "Drag on the slider to change the variable's value.\n");
         ImGui::Unindent();
 
         ImGui::TextUnformatted("GUI: Keyboard shortcuts");
@@ -449,19 +523,36 @@ void main_loop_step() {
         ImGui::Indent();
         ImGui::BulletText("%s", "E to focus on functions editor");
         ImGui::BulletText("%s", "-= keys to zoom, arrow keys to move");
-        ImGui::BulletText("%s", "Ctrl/Alt + -= keys to zoom asymmetrically");
+        ImGui::BulletText("%s", "Shift/Alt + -= keys to zoom asymmetrically");
+        ImGui::BulletText("%s", "O to switch to cartesian grid");
+        ImGui::BulletText("%s", "P to switch to polar grid");
         ImGui::Unindent();
         ImGui::BulletText("On function editor\n");
         ImGui::Indent();
         ImGui::BulletText("%s", "Up/down arrow to move between functions\n"
                 "Down from the bottomost function to create new function");
+        ImGui::BulletText("%s", "Ctrl + <background hotkey> e.g. Ctrl + Arrow/Ctrl + P to invoke background hotkey");
+        ImGui::Unindent();
+        ImGui::Unindent();
+
+        ImGui::TextUnformatted("Shell");
+        ImGui::Indent();
+        ImGui::BulletText("%s", "Define variable: for example, a = 3+4,\nthen you can use a in any function in the function editor.");
+        ImGui::BulletText("%s",
+                "Operator assignment: a+=3, a*=3, etc., as in usual languages");
+        ImGui::BulletText("%s",
+        "Define custom function: <name>(<args>) = <expr>\ne.g. sec(x) = 1/cos(x) or f(x,y,z) = x+y+z\nYou can use this function in the function editor.");
+        ImGui::BulletText("%s", "Symbolic operations");
+        ImGui::Indent();
+        ImGui::BulletText("%s", "Differentiate a function: diff <var> <expr>\ne.g. diff x sin(x)*cos(2*x); outputs the derivative expression");
+        ImGui::BulletText("%s", "Simplify expression (not super reliable): opt <expr>\ne.g. opt (1+x)^2 + 2*(x+1)^2, opt exp(x)*exp(2*x)");
         ImGui::Unindent();
         ImGui::Unindent();
 
         ImGui::TextUnformatted("Expressions: Operators");
         ImGui::Indent();
         ImGui::BulletText("%s", "+- */% ^\nWhere ^ is exponentiation (right-assoc)");
-        ImGui::BulletText("%s", "Logical and/or: & |");
+        ImGui::BulletText("%s", "Logical and: &; logical or: |; logical not: not(x)");
         ImGui::BulletText("%s", "Parentheses: () and [] are equivalent (but match separately)");
         ImGui::BulletText("%s", "Comparison: < > <= >= == output 0,1\n(= equivalent to == except in assignment/equality statement)");
         ImGui::Unindent();
@@ -469,8 +560,8 @@ void main_loop_step() {
         ImGui::TextUnformatted("Expressions: Special Forms");
         ImGui::Indent();
         ImGui::BulletText("%s", "Conditional special form (piecewise function):\n"
-                "{<predicate>: <expr>[, <elif-pred>: "
-                "<expr>[, ... [, <else-expr>]]]}\n"
+                "{<predicate>: <expr>[, <elif-pred>:\n"
+                " <expr>[, ... [, <else-expr>]]]}\n"
                 "ex. {x<0: x, x>=0 : x^2}  ex. {x<2: exp(x)}");
         ImGui::BulletText("%s", "Sum special form:\n"
                 "sum(<var>: <begin>, <end>)[<expr>]\n"
@@ -488,8 +579,11 @@ void main_loop_step() {
         ImGui::BulletText("%s", "<func_name>(<args>) to call a function");
         ImGui::BulletText("%s", "Most function names are self-explanatory; some hints:\n"
                 "N(x) is standard normal pdf\n"
+                "rifact(x, b) is rising factorial\n"
+                "falact(x, b) is falling factorial\n"
+                "ifact(x) is integer version of factorial\n(fact(x) is gamma(x+1))\n"
                 "Functions take a fixed number of arguments, except\n"
-                "log(x,b) (log x base b) is special: can take 1 or 2 args, where log(x) = ln(x)");
+                "log(x,b) (log x base b) is special: can take 1 or 2 args,\nwhere log(x) = ln(x)");
         ImGui::BulletText("%s", "List of functions available:");
         ImGui::Indent();
         const auto& mp = OpCode::funcname_to_opcode_map();
@@ -620,11 +714,11 @@ void main_loop_step() {
         mouse_prev_y = mouse_y;
     }
 
-    if (!io.WantCaptureKeyboard) {
+    if (!io.WantCaptureKeyboard || io.KeyCtrl) {
         for (size_t i = 0; i < IM_ARRAYSIZE(io.KeysDown); ++i) {
             if (ImGui::IsKeyDown(i)) {
                 plot.handle_key(i,
-                        io.KeyCtrl, io.KeyAlt);
+                        io.KeyCtrl, io.KeyShift, io.KeyAlt);
             }
         }
     }

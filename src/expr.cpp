@@ -150,7 +150,7 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
                   }
                   else os << "@" << ast[idx].ref;
                   break; // ref
-            case '%':
+            case '\t':
                   if (env != nullptr) {
                       os << env->funcs[ast[idx].call_info[0]].name;
                   } else {
