@@ -1207,23 +1207,17 @@ void Plotter::set_curr_func(size_t func_id) {
         // New function
         std::string tmp = funcs.back().expr_str;
         util::trim(tmp);
-        if (!tmp.empty()) {
-            Function f;
-            f.type = Function::FUNC_TYPE_EXPLICIT;
-            if (reuse_colors.empty()) {
-                f.line_color =
-                    color::from_int(last_expr_color++);
-            } else {
-                f.line_color = reuse_colors.front();
-                reuse_colors.pop_front();
-            }
-            f.name = "f" + std::to_string(next_func_name++);
-            funcs.push_back(std::move(f));
+        Function f;
+        f.type = Function::FUNC_TYPE_EXPLICIT;
+        if (reuse_colors.empty()) {
+            f.line_color =
+                color::from_int(last_expr_color++);
         } else {
-            // If last function is empty,
-            // then stay on it and do not create a new function
-            curr_func = funcs.size() - 1;
+            f.line_color = reuse_colors.front();
+            reuse_colors.pop_front();
         }
+        f.name = "f" + std::to_string(next_func_name++);
+        funcs.push_back(std::move(f));
     }
     focus_on_editor = true;
     require_update = true;
@@ -1356,9 +1350,11 @@ void Plotter::handle_key(int key, bool ctrl, bool shift, bool alt) {
             break;
         case 61: case 45:
         case 187: case 189:
+        case 173:
             // Zooming +-
             {
-                auto fa = (key == 45 || key == 189) ? 1.013 : 0.987;
+                auto fa = (key == 45 || key == 189 ||
+                            key == 173) ? 1.013 : 0.987;
                 auto dy = (view.ymax - view.ymin) * (fa - 1.) /2;
                 auto dx = (view.xmax - view.xmin) * (fa - 1.) /2;
                 if (shift) dy = 0.; // x-only

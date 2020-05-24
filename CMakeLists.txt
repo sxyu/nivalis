@@ -1,7 +1,7 @@
 cmake_minimum_required( VERSION 2.8 )
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Release)
 endif()
 if (POLICY CMP0048)
     cmake_policy(SET CMP0048 NEW)
@@ -22,7 +22,7 @@ option ( USE_SYSTEM_GLFW "Use system glfw3 if available" ON )
 option ( BUILD_TESTS "Build tests" ON )
 
 if( NOT CMAKE_BUILD_TYPE )
-  set( CMAKE_BUILD_TYPE Release )
+    set( CMAKE_BUILD_TYPE Release )
 endif()
 
 set( LIB_PROJ_NAME "libnivalis" )
@@ -42,14 +42,8 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 
 set(
     PROJ_EXECUTABLES
-    ${PLOT_GUI_PROJ_NAME}
+    ${PLOT_GUI_PROJ_NAME} ${SHELL_PROJ_NAME}
 )
-if (NOT EMSCRIPTEN)
-    set(
-        PROJ_EXECUTABLES
-        ${PROJ_EXECUTABLES} ${SHELL_PROJ_NAME}
-    )
-endif()
 
 set(
     PROJ_TESTS
@@ -57,42 +51,35 @@ set(
     test_eval_expr
     test_optimize_expr
     test_diff_expr
-)
+    )
 
 set(
-  HEADERS
-  parser.hpp
-  env.hpp
-  expr.hpp
-  util.hpp
-  opcodes.hpp
-  plotter/common.hpp
-  plotter/draw_worker.hpp
-  shell.hpp
-  color.hpp
+    HEADERS
+    parser.hpp
+    env.hpp
+    expr.hpp
+    util.hpp
+    opcodes.hpp
+    plotter/common.hpp
+    shell.hpp
+    color.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
 set(
-  SOURCES
-  parser.cpp
-  env.cpp
-  expr.cpp
-  util.cpp
-  opcodes.cpp
-  eval_expr.cpp
-  optimize_expr.cpp
-  diff_expr.cpp
-  shell.cpp
-  plotter/common.cpp
-  "../${IMGUI_DIR}/imgui.cpp"
-  "../${IMGUI_DIR}/imgui_draw.cpp"
-  "../${IMGUI_DIR}/imgui_widgets.cpp"
-  "../${IMGUI_DIR}/imgui_impl_opengl3.cpp"
-  "../${IMGUI_DIR}/imgui_impl_glfw.cpp"
-  "../${IMGUI_DIR}/imgui_stdlib.cpp"
-  color.cpp
-)
+    SOURCES
+    parser.cpp
+    env.cpp
+    expr.cpp
+    util.cpp
+    opcodes.cpp
+    eval_expr.cpp
+    optimize_expr.cpp
+    diff_expr.cpp
+    shell.cpp
+    plotter/common.cpp
+    color.cpp
+    )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 
 include_directories(
@@ -105,16 +92,49 @@ include_directories(
 
 set( PROJ_DEPENDENCIES )
 
-set ( _BOOST_ENABLED_ "//" )
-set ( BOOST_ENABLED OFF )
-if ( USE_BOOST_MATH )
-    set( Boost_USE_STATIC_LIBS ON )
-    set( Boost_USE_STATIC ON )
-    if ( EMSCRIPTEN )
-        # From port
+if (EMSCRIPTEN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 --bind -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -s EXTRA_EXPORTED_RUNTIME_METHODS='[\"cwrap\"]' -std=c++17")
+    set(_EMSCRIPTEN_ "")
+    if ( USE_BOOST_MATH )
         set ( _BOOST_ENABLED_ "" )
         set ( BOOST_ENABLED ON )
-    else ( EMSCRIPTEN )
+    endif()
+
+    set(
+        SOURCES
+        ${SOURCES}
+        "${IMGUI_DIR}/imgui.cpp"
+        "${IMGUI_DIR}/imgui_draw.cpp"
+        "${IMGUI_DIR}/imgui_widgets.cpp"
+        "${IMGUI_DIR}/imgui_impl_opengl3.cpp"
+        "${IMGUI_DIR}/imgui_impl_glfw.cpp"
+        "${IMGUI_DIR}/imgui_stdlib.cpp"
+    )
+
+    add_library( ${LIB_PROJ_NAME} STATIC ${HEADERS} ${SOURCES} )
+    set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME
+        ${SHELL_PROJ_NAME} )
+    add_executable( ${PLOT_GUI_PROJ_NAME} "${SRC_DIR}/main_web.cpp" )
+    target_link_libraries( ${PLOT_GUI_PROJ_NAME}
+        ${LIB_PROJ_NAME} ${PROJ_DEPENDENCIES} )
+else(EMSCRIPTEN)
+    set(_EMSCRIPTEN_ "//")
+    set(
+        SOURCES
+        ${SOURCES}
+        "${IMGUI_DIR}/imgui.cpp"
+        "${IMGUI_DIR}/imgui_draw.cpp"
+        "${IMGUI_DIR}/imgui_widgets.cpp"
+        "${IMGUI_DIR}/imgui_impl_opengl3.cpp"
+        "${IMGUI_DIR}/imgui_impl_glfw.cpp"
+        "${IMGUI_DIR}/imgui_stdlib.cpp"
+    )
+
+    set ( _BOOST_ENABLED_ "//" )
+    set ( BOOST_ENABLED OFF )
+    if ( USE_BOOST_MATH )
+        set( Boost_USE_STATIC_LIBS ON )
+        set( Boost_USE_STATIC ON )
         find_package(Boost)
         if (Boost_FOUND)
             set ( _BOOST_ENABLED_ "" )
@@ -123,31 +143,23 @@ if ( USE_BOOST_MATH )
         else()
             message ( WARNING "Boost math not found, some functions (beta, digamma,...) may not be available" )
         endif()
-    endif( EMSCRIPTEN )
-else ( USE_BOOST_MATH )
-    message ( STATUS "Boost math was disabled by user" )
-endif ( USE_BOOST_MATH )
+    else ( USE_BOOST_MATH )
+        message ( STATUS "Boost math was disabled by user" )
+    endif ( USE_BOOST_MATH )
 
-if (NOT EMSCRIPTEN)
     find_package(Threads REQUIRED)
-endif ()
 
-set ( _READLINE_ENABLED_ "//" )
-if ((NOT WIN32) AND (NOT EMSCRIPTEN))
-    # Find Readline
-    find_package( Readline QUIET )
-    if ( READLINE_FOUND )
-        set ( _READLINE_ENABLED_ "" )
-        set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} ${READLINE_LIBRARIES} )
-        include_directories(${READLINE_INCLUDE_DIRS})
+    set ( _READLINE_ENABLED_ "//" )
+    if (NOT WIN32)
+        # Find Readline
+        find_package( Readline QUIET )
+        if ( READLINE_FOUND )
+            set ( _READLINE_ENABLED_ "" )
+            set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} ${READLINE_LIBRARIES} )
+            include_directories(${READLINE_INCLUDE_DIRS})
+        endif()
     endif()
-endif()
 
-set(_EMSCRIPTEN_ "//")
-if (EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 --bind -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -s EXTRA_EXPORTED_RUNTIME_METHODS='[\"cwrap\"]' -std=c++17")
-    set(_EMSCRIPTEN_ "")
-else ()
     set (SOURCES ${SOURCES} "../${GLEW_DIR}/glew.c")
     # Finding OpenGL/GLFW
     set ( OPENGL_IMGUI_ENABLED OFF )
@@ -183,66 +195,19 @@ else ()
     )
 
     include_directories(${GLEW_DIR})
-endif (EMSCRIPTEN)
 
-message ( STATUS "Using OpenGL with ImGui as plotter backend" )
+    message ( STATUS "Using OpenGL with ImGui as plotter backend" )
 
-configure_file( version.hpp.in "${PROJECT_BINARY_DIR}/include/version.hpp" )
+    add_library( ${LIB_PROJ_NAME} STATIC ${HEADERS} ${SOURCES} )
+    set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME
+        ${SHELL_PROJ_NAME} )
 
-if ( BOOST_ENABLED )
-    include_directories( ${Boost_INCLUDE_DIRS} )
-# ensure boost doesn't throw exception when evaluating out of domain
-add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
-    -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
-    -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
-    -DBOOST_MATH_ROUNDING_ERROR_POLICY=ignore_error
-    -DBOOST_MATH_EVALUATION_ERROR_POLICY=ignore_error
-    )
-if ( MSVC )
-    add_definitions(-D_HAS_AUTO_PTR_ETC=1)
-endif ()
-endif ()
-
-add_definitions( -D_USE_MATH_DEFINES )
-
-add_library( ${LIB_PROJ_NAME} STATIC ${HEADERS} ${SOURCES} )
-set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME
-    ${SHELL_PROJ_NAME} )
-
-foreach(targ ${PROJ_EXECUTABLES})
-    add_executable( ${targ} "${SRC_DIR}/main_${targ}.cpp" )
-    target_link_libraries( ${targ}
-        ${LIB_PROJ_NAME}
-        ${CMAKE_THREAD_LIBS_INIT}
-        ${PROJ_DEPENDENCIES} )
-
-    if ( MSVC )
-        set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
-        add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GLT")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-    endif ( MSVC )
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        if (NOT EMSCRIPTEN)
-            target_link_libraries( ${targ} stdc++fs )
-            set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g" )
-        endif()
-    endif ()
-endforeach()
-
-if ((BUILD_TESTS) AND (NOT EMSCRIPTEN))
-    include_directories( ${TEST_DIR})
-    enable_testing()
-    set(TEST_BINARY_DIR "${CMAKE_BINARY_DIR}/test")
-    foreach(targ ${PROJ_TESTS})
-        add_executable( ${targ} "${TEST_DIR}/${targ}.cpp" )
+    foreach(targ ${PROJ_EXECUTABLES})
+        add_executable( ${targ} "${SRC_DIR}/main_${targ}.cpp" )
         target_link_libraries( ${targ}
             ${LIB_PROJ_NAME}
             ${CMAKE_THREAD_LIBS_INIT}
             ${PROJ_DEPENDENCIES} )
-
-        set_target_properties( ${targ}
-            PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_BINARY_DIR}")
 
         if ( MSVC )
             set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
@@ -250,20 +215,65 @@ if ((BUILD_TESTS) AND (NOT EMSCRIPTEN))
             set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GLT")
             set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
         endif ( MSVC )
-
         if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
             target_link_libraries( ${targ} stdc++fs )
+            set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g" )
         endif ()
-        add_test(${targ} "${TEST_BINARY_DIR}/${targ}")
     endforeach()
-    message ( STATUS "Will build tests; 'make test' after build to use. -DBUILD_TESTS=OFF to disable" )
-else ()
-    message ( STATUS "NOT building tests" )
-endif ((BUILD_TESTS) AND (NOT EMSCRIPTEN))
 
-if (NOT EMSCRIPTEN)
+    if (BUILD_TESTS)
+        include_directories( ${TEST_DIR})
+        enable_testing()
+        set(TEST_BINARY_DIR "${CMAKE_BINARY_DIR}/test")
+        foreach(targ ${PROJ_TESTS})
+            add_executable( ${targ} "${TEST_DIR}/${targ}.cpp" )
+            target_link_libraries( ${targ}
+                ${LIB_PROJ_NAME}
+                ${CMAKE_THREAD_LIBS_INIT}
+                ${PROJ_DEPENDENCIES} )
+
+            set_target_properties( ${targ}
+                PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_BINARY_DIR}")
+
+            if ( MSVC )
+                set_property(TARGET ${targ} APPEND PROPERTY LINK_FLAGS "/DEBUG /LTCG")
+                add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+                set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GLT")
+                set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+            endif ( MSVC )
+
+            if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+                target_link_libraries( ${targ} stdc++fs )
+            endif ()
+            add_test(${targ} "${TEST_BINARY_DIR}/${targ}")
+        endforeach()
+        message ( STATUS "Will build tests; 'make test' after build to use. -DBUILD_TESTS=OFF to disable" )
+    else ()
+        message ( STATUS "NOT building tests" )
+    endif (BUILD_TESTS)
+
     install(TARGETS ${PROJ_EXECUTABLES} DESTINATION bin)
-endif()
+
+endif(EMSCRIPTEN)
+
+if ( BOOST_ENABLED )
+    include_directories( ${Boost_INCLUDE_DIRS} )
+    # ensure boost doesn't throw exception when evaluating out of domain
+    add_definitions( -DBOOST_MATH_DOMAIN_ERROR_POLICY=ignore_error
+        -DBOOST_MATH_POLE_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
+        -DBOOST_MATH_UNDERFLOW_ERROR_POLICY=ignore_error -DBOOST_MATH_OVERFLOW_ERROR_POLICY=ignore_error
+        -DBOOST_MATH_ROUNDING_ERROR_POLICY=ignore_error
+        -DBOOST_MATH_EVALUATION_ERROR_POLICY=ignore_error
+        )
+    if ( MSVC )
+        add_definitions(-D_HAS_AUTO_PTR_ETC=1)
+    endif ()
+endif ()
+# ensure M_PI, etc available
+add_definitions( -D_USE_MATH_DEFINES )
+
+# create version.hpp
+configure_file( version.hpp.in "${PROJECT_BINARY_DIR}/include/version.hpp" )
 
 # Create source group for headers
 source_group( "Header Files" FILES ${HEADERS} )

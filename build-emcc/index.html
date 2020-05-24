@@ -7,96 +7,70 @@
     <script type="module" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule="" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.js"></script>
     <title>Nivalis Plotter</title>
-    <style>
-      body {
-        margin: 0;
-        padding: none;
-        overflow: hidden;
-      }
-      .emscripten { padding-right: 0; margin-left: auto;
-          margin-right: auto; display: block; }
-      div.emscripten { text-align: center; }
-      div.emscripten_border { border: none; }
-      canvas.emscripten { border: 0px none; background-color: black }
-      a#branding { position: fixed; bottom:0; right:0;
-          padding: 8px 14px; font-size:14px; background-color:#eee; color:#222 }
-      a { text-decoration: none; font-family: monospace; user-select: none }
-      a#branding > ion-icon { position:relative; top: 1px }
-      #text-input {
-          position: absolute; left: 0; top: -100px; height:0; width:0;
-              opacity: 0
-       }
-      #loading {
-          display: block;
-          opacity: 1;
-          transition: all 0.3s ease;
-          position: fixed;
-          top: 0; left: 0;
-          width: 100vw; height: 100vh;
-          z-index: 10000;
-          font-family: monospace;
-          font-size: 3em;
-          background-color: #eee;
-          color: #222;
-          line-height: 100vh;
-          text-align:center;
-      }
-    </style>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css"/>
   </head>
   <body>
-      <div id="loading">Nivalis</div>
-    <input type="text" id="text-input" autocapitalize="none"/>
+    <div id="loading">Nivalis</div>
+    <div id="marker"></div>
+    <div id="view-config">
+        <div class="input-group mb-2">
+            <input class='form-control' id='view-xmin' type='number' step='any'>
+            <span class='input-group-btn' style='width:0px;'></span>
+            <span class='form-control var-bounds-text'>
+                &le; x &le;</span>
+            <span class='input-group-btn' style='width:0px;'></span>
+            <input class='form-control' id='view-xmax' type='number' step='any'>
+        </div>
 
-    <div class="emscripten_border">
-      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+        <div class="input-group mb-2">
+            <input class='form-control' id='view-ymin' type='number' step='any'>
+            <span class='input-group-btn' style='width:0px;'></span>
+            <span class='form-control var-bounds-text'>
+                &le; y &le;</span>
+            <span class='input-group-btn' style='width:0px;'></span>
+            <input class='form-control' id='view-ymax' type='number' step='any'>
+        </div>
+
+        <div class="input-group mb-2">
+        <button type="button" id="btn-reset-view" class="btn btn-primary">
+            <ion-icon name="home"></ion-icon> Reset view</button>
+        </div>
+
+        <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="view-polar">
+            <label class="custom-control-label" for="view-polar">Polar grid</label>
+        </div>
+    </div>
+    <div class="wrapper">
+        <nav id="sidebar">
+            <div id="function-editor">
+                <div id="functions"> </div>
+            </div>
+            <div id="slider-editor">
+                <div id="control">
+                    <button type="button" id="btn-add-slider" class="btn btn-success"><ion-icon name="add"></ion-icon> Slider</button>
+                </div>
+                <div id="sliders"> </div>
+            </div>
+        </nav>
+
+        <div class="emscripten_border">
+            <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+        </div>
     </div>
     <a href="https://github.com/sxyu/nivalis" id="branding" target="_blank">
         Nivalis
         <ion-icon name="logo-github" titile="Nivalis"></ion-icon>
     </a>
 
-    <script type='text/javascript'>
-      var is_mobile = ( /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
 
-      var Module = {
-        preRun: [],
-        postRun: [],
-        print: (function() {})(),
-        printErr: function(text) {},
-        canvas: (function() {
-          var canvas = document.getElementById('canvas');
-          canvas.addEventListener("webglcontextlost", function(e) {
-             e.preventDefault(); }, false);
-          return canvas;
-        })(),
-        setStatus: function(text) {},
-        totalDependencies: 0,
-        monitorRunDependencies: function(left) {},
-        onRuntimeInitialized: function() {
-            var text_input = document.getElementById("text-input");
-            if (is_mobile) {
-                text_input.addEventListener(
-                    "input", function(e){
-                        Module.on_keypress(e.target.value[0].charCodeAt(0), 0);
-                        e.target.value = "";
-                    });
-                text_input.focus();
-            }
-            var intervalId = window.setInterval(function() {
-                if (document.getElementsByTagName('body')[0] !== undefined) {
-                    window.clearInterval(intervalId);
-                    document.getElementById("loading").style.opacity =
-                        '0.0';
-                    window.setTimeout(function() {
-                        document.getElementById("loading").style.display =
-                          'none';
-                    }, 500);
-                }
-            }, 100);
-        },
-      };
-    </script>
+    <script type="text/javascript" src="js/main.js"></script>
     <script type="text/javascript" src="nivplot.js"></script>
-    <script type="text/javascript" src="glfw-patch.js"></script>
   </body>
 </html>

@@ -63,7 +63,11 @@ std::string color::to_hex() const {
     int t = (tr << 16) + (tg << 8) + tb;
     std::stringstream strm;
     strm << std::hex << t;
-    return strm.str();
+    std::string s;
+    for (int i = 0; i < 6 - (int)strm.tellp(); ++i) {
+        s.push_back('0');        
+    }
+    return s + strm.str();
 }
 }  // namespace color
 }  // namespace nivalis

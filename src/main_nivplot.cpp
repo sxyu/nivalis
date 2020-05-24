@@ -19,41 +19,17 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_stdlib.h"
 
-#ifdef NIVALIS_EMSCRIPTEN
-#include <emscripten/emscripten.h>
-#include <emscripten/bind.h>
-#include <emscripten/html5.h>
-#include <GLES3/gl3.h>
-
-#define GLFW_INCLUDE_ES3
-
-#else // NIVALIS_EMSCRIPTEN
 #include <thread>
+#include <condition_variable>
+#include <mutex>
+#include <atomic>
 #include <GL/glew.h>
-#include "plotter/draw_worker.hpp"
 #include "imfilebrowser.h"
-#endif // NIVALIS_EMSCRIPTEN
 
 #include <GLFW/glfw3.h>
 
 #include "shell.hpp"
 #include "util.hpp"
-#ifdef NIVALIS_EMSCRIPTEN
-EM_JS(int, canvas_get_width, (), {
-        return Module.canvas.width;
-        });
-
-EM_JS(int, canvas_get_height, (), {
-        return Module.canvas.height;
-        });
-
-EM_JS(void, resizeCanvas, (), {
-        js_resizeCanvas();
-        });
-worker_handle draw_worker_handle;
-bool ret_from_worker;
-#endif // NIVALIS_EMSCRIPTEN
-
 
 namespace {
 using namespace nivalis;
@@ -115,6 +91,45 @@ Plotter plot; // Main plotter
 Environment& env = plot.env; // Main environment
 GLFWwindow* window; // GLFW window
 
+// Worker state
+bool worker_req_update;
+nivalis::Plotter::View worker_view;
+bool run_worker_flag;
+std::condition_variable worker_cv;
+std::mutex worker_mtx;
+
+// Draw worker thread entry point
+void draw_worker(nivalis::Plotter& plot) {
+    while (true) {
+        Plotter::View view;
+        {
+            std::unique_lock<std::mutex> lock(worker_mtx);
+            worker_cv.wait(lock, []{return run_worker_flag;});
+            view = worker_view;
+            run_worker_flag = false;
+        }
+        plot.recalc(view);
+        std::lock_guard<std::mutex> lock(worker_mtx);
+        plot.swap();
+        plot.require_update = true;
+        worker_req_update = true;
+    }
+}
+// Run worker if not already running AND either:
+// this update was not from the worker or
+// view has changed since last worker run
+void maybe_run_worker(nivalis::Plotter& plot) {
+    using namespace nivalis;
+    {
+        std::lock_guard<std::mutex> lock(worker_mtx);
+        run_worker_flag = !(worker_req_update &&
+                worker_view == plot.view);
+        worker_view = plot.view;
+        worker_req_update = false;
+    }
+    worker_cv.notify_one();
+}
+
 // MAIN LOOP: Run single step of main loop
 void main_loop_step() {
     // Add scaled default font (Dear ImGui)
@@ -130,7 +145,7 @@ void main_loop_step() {
     static ImFont *font_sm = AddDefaultFont(12);
     static ImFont *font_md = AddDefaultFont(14);
     // * State
-    // Do not throttle the FPS for active_counter frames
+    // Do not wait for input event for active_counter frames
     // (decreases 1 each frame)
     static int active_counter;
 
@@ -146,11 +161,6 @@ void main_loop_step() {
     // the color editor is changing (not necessarily curr_func)
     static size_t curr_edit_color_idx;
 
-#ifdef NIVALIS_EMSCRIPTEN
-    int ems_js_canvas_width = canvas_get_width();
-    int ems_js_canvas_height = canvas_get_height();
-    glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
-#else
     // File dialog
     static ImGui::FileBrowser open_file_dialog;
     static ImGui::FileBrowser save_file_dialog(
@@ -161,7 +171,6 @@ void main_loop_step() {
         save_file_dialog.SetTypeFilters({ ".json" });
         save_file_dialog.SetTitle("Export JSON");
     }
-#endif
 
     if (active_counter > 0) {
         // After move, keep updating for a while to
@@ -176,16 +185,12 @@ void main_loop_step() {
     }
     // Clear plot
     glClear(GL_COLOR_BUFFER_BIT);
-#ifndef NIVALIS_EMSCRIPTEN
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-#endif
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     float ratio = width / (float) height;
-#ifndef NIVALIS_EMSCRIPTEN
     glOrtho(0, width, height, 0, 0, 1);
-#endif
 
     // feed inputs to dear imgui, start new frame
     ImGui_ImplOpenGL3_NewFrame();
@@ -208,7 +213,6 @@ void main_loop_step() {
         plot.require_update = false;
         // Redraw the grid and functions
         plot.draw_grid(adaptor);      // Draw axes and grid
-#ifndef NIVALIS_EMSCRIPTEN
         {
             // Need lock since worker thread asynchroneously
             // swaps back buffer to front
@@ -219,22 +223,15 @@ void main_loop_step() {
         // this update was not from the worker or
         // view has changed since last worker run
         maybe_run_worker(plot);
-        // In Emscripten threads are not supported, and we use
-        // WebWorker instead; this is not need then
-#else
-        // Threading not supported in browser
-        plot.recalc();
-        plot.swap();
-        plot.draw(adaptor);       // Draw functions
-#endif
+
         // Cache the draw list
         draw_list_pre.CmdBuffer = draw_list->CmdBuffer;
         draw_list_pre.IdxBuffer = draw_list->IdxBuffer;
         draw_list_pre.VtxBuffer = draw_list->VtxBuffer;
         draw_list_pre.Flags = draw_list->Flags;
     } else {
-        // Load cache
         // No update, load draw list from cache
+        // (used if e.g. mouse moved without dragging)
         *draw_list = draw_list_pre;
     }
 
@@ -326,13 +323,8 @@ void main_loop_step() {
         }
     }
     plot.focus_on_editor = false;
-    std::string tmp = plot.funcs.back().expr_str;
-    util::trim(tmp);
-    if (tmp.size()) {
-        if (ImGui::Button("+ New function")) plot.add_func();
-        ImGui::SameLine();
-    }
-#ifndef NIVALIS_EMSCRIPTEN
+    if (ImGui::Button("+ New function")) plot.add_func();
+    ImGui::SameLine();
     if (ImGui::Button("Import")) {
         open_file_dialog.Open();
     }
@@ -341,7 +333,6 @@ void main_loop_step() {
         save_file_dialog.Open();
     }
     ImGui::SameLine();
-#endif
     if (ImGui::Button("# Shell")) {
         open_shell = true;
     }
@@ -689,7 +680,6 @@ void main_loop_step() {
         if (ImGui::Button("Submit")) exec_shell();
         ImGui::EndPopup();
     }
-#ifndef NIVALIS_EMSCRIPTEN
     // File dialogs; not available on web version
     open_file_dialog.Display();
     if(open_file_dialog.HasSelected())
@@ -715,7 +705,6 @@ void main_loop_step() {
         std::ofstream ofs(fname);
         plot.export_json(ofs, true);
     }
-#endif
 
     // * Handle IO events
     ImGuiIO &io = ImGui::GetIO();
@@ -760,41 +749,6 @@ void main_loop_step() {
 }  // void main_loop_step()
 }  // namespace
 
-#ifdef NIVALIS_EMSCRIPTEN
-// Emscripten access methods
-int emscripten_keypress(int k, int delv) {
-    if (delv == 0) {
-        ImGui::GetIO().AddInputCharacter(k);
-    } else if (delv == 1) {
-        ImGui::GetIO().KeysDown[
-            ImGui::GetIO().KeyMap[ImGuiKey_Backspace]] = k;
-
-    } else if (delv == 2) {
-        ImGui::GetIO().KeysDown[
-            ImGui::GetIO().KeyMap[ImGuiKey_Delete]] = k;
-    }
-    return 0;
-}
-std::string export_json() {
-    std::ostringstream ss;
-    plot.export_json(ss);
-    return ss.str();
-}
-// Returns error
-std::string import_json(const std::string& data) {
-    std::stringstream ss;
-    ss.write(data.c_str(), data.size());
-    std::string err;
-    plot.import_json(ss, &err);
-    return err;
-}
-EMSCRIPTEN_BINDINGS(nivplot) {
-    emscripten::function("on_keypress", &emscripten_keypress);
-    emscripten::function("export_json", &export_json);
-    emscripten::function("import_json", &import_json);
-}
-#endif  // NIVALIS_EMSCRIPTEN
-
 // Helper for Initializing OpenGL
 bool init_gl() {
     /* Initialize the library */
@@ -812,18 +766,12 @@ bool init_gl() {
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-#ifdef NIVALIS_EMSCRIPTEN
-    emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
-    // Resize the canvas to fill the browser window
-    resizeCanvas();
-#else
     // Init glew context
     if (glewInit() != GLEW_OK)
     {
         fprintf(stderr, "Failed to initialize OpenGL loader!\n");
         return false;
     }
-#endif
     glClearColor(1., 1., 1., 1.); // Clear white
     return true;
 }
@@ -861,15 +809,6 @@ int main(int argc, char ** argv) {
     style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.99f, 0.99f, 0.99f, 1.f);
     style.Colors[ImGuiCol_FrameBg]       = ImVec4(0.94f, 0.94f, 0.94f, 1.f);
 
-#ifdef NIVALIS_EMSCRIPTEN
-    // Set initial window size according to HTML canvas size
-    int ems_js_canvas_width = canvas_get_width();
-    int ems_js_canvas_height = canvas_get_height();
-    glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
-
-    // Set handlers and start emscripten main loop
-    emscripten_set_main_loop(main_loop_step, 0, 1);
-#else
     // Start worker thread
     std::thread thd(draw_worker, std::ref(plot));
     thd.detach();
@@ -878,7 +817,6 @@ int main(int argc, char ** argv) {
     while (!glfwWindowShouldClose(window)) {
         main_loop_step();
     } // Main loop
-#endif
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
