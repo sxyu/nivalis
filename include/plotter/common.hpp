@@ -494,13 +494,13 @@ public:
     // A basic key handler: key code, ctrl pressed?, alt pressed?
     void handle_key(int key, bool ctrl, bool shift, bool alt);
 
-    // Mouse down handler (any key)
+    // Mouse down handler (left key)
     void handle_mouse_down(int px, int py);
 
-    // Mouse move handler (any key)
+    // Mouse move handler (left key)
     void handle_mouse_move(int px, int py);
 
-    // Mouse up handler (any key)
+    // Mouse up handler (left key)
     void handle_mouse_up(int px, int py);
 
     // Mouse wheel handler:

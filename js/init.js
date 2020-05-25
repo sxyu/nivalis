@@ -176,7 +176,9 @@ let onInit = function() {
             $('#import-file').siblings(".custom-file-label")
                 .html('Import json success');
             Module.import_json(content);
-            Shell.con.info("Import JSON success");
+            if (Shell.initialized) {
+                Shell.con.info("Import JSON success");
+            }
             resync();
             Module.redraw();
         };
