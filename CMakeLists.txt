@@ -79,8 +79,19 @@ set(
     shell.cpp
     plotter/common.cpp
     color.cpp
-    )
+)
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
+set(
+    IMGUI_SOURCES
+    imgui.cpp
+    imgui_draw.cpp
+    imgui_widgets.cpp
+    imgui_impl_opengl3.cpp
+    imgui_impl_glfw.cpp
+    imgui_stdlib.cpp
+)
+list(TRANSFORM IMGUI_SOURCES PREPEND ${IMGUI_DIR}/)
+set ( SOURCES ${SOURCES} ${IMGUI_SOURCES} )
 
 include_directories(
     ${INCLUDE_DIR}
@@ -93,6 +104,19 @@ include_directories(
 set( PROJ_DEPENDENCIES )
 
 if (EMSCRIPTEN)
+    set( JS_SRC_DIR "${PROJECT_SOURCE_DIR}/js" )
+    set(
+        SOURCES_JS
+        simple-console.js
+        util.js
+        glfwPatch.js
+        pickrconfig.js
+        guiComponents.js
+        init.js
+        emModule.js
+    )
+    list(TRANSFORM SOURCES_JS PREPEND ${JS_SRC_DIR}/)
+
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 --bind -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -s EXTRA_EXPORTED_RUNTIME_METHODS='[\"cwrap\"]' -std=c++17")
     set(_EMSCRIPTEN_ "")
     if ( USE_BOOST_MATH )
@@ -100,35 +124,28 @@ if (EMSCRIPTEN)
         set ( BOOST_ENABLED ON )
     endif()
 
-    set(
-        SOURCES
-        ${SOURCES}
-        "${IMGUI_DIR}/imgui.cpp"
-        "${IMGUI_DIR}/imgui_draw.cpp"
-        "${IMGUI_DIR}/imgui_widgets.cpp"
-        "${IMGUI_DIR}/imgui_impl_opengl3.cpp"
-        "${IMGUI_DIR}/imgui_impl_glfw.cpp"
-        "${IMGUI_DIR}/imgui_stdlib.cpp"
-    )
-
     add_library( ${LIB_PROJ_NAME} STATIC ${HEADERS} ${SOURCES} )
     set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME
         ${SHELL_PROJ_NAME} )
     add_executable( ${PLOT_GUI_PROJ_NAME} "${SRC_DIR}/main_web.cpp" )
     target_link_libraries( ${PLOT_GUI_PROJ_NAME}
         ${LIB_PROJ_NAME} ${PROJ_DEPENDENCIES} )
+
+    # Concat JS files automatically
+    SET(FILELIST "")
+    FOREACH(ITEM ${SOURCES_JS})
+        SET(JSFILES "${JSFILES},${ITEM}")
+    ENDFOREACH()
+    STRING(SUBSTRING ${JSFILES} 1 -1 JSFILES)
+    add_custom_command(
+        OUTPUT "${PROJECT_BINARY_DIR}/js/main.js"
+        COMMAND ${CMAKE_COMMAND} -DFILELIST=${JSFILES} -DOUTPUT=${PROJECT_BINARY_DIR}/js/main.js -P ${CMAKE_MODULE_PATH}/concat.cmake
+        DEPENDS ${SOURCES_JS}
+        COMMENT "Concatenating JS sources to js/main.js"
+        VERBATIM )
+    add_custom_target(main_js ALL DEPENDS "${PROJECT_BINARY_DIR}/js/main.js")
 else(EMSCRIPTEN)
     set(_EMSCRIPTEN_ "//")
-    set(
-        SOURCES
-        ${SOURCES}
-        "${IMGUI_DIR}/imgui.cpp"
-        "${IMGUI_DIR}/imgui_draw.cpp"
-        "${IMGUI_DIR}/imgui_widgets.cpp"
-        "${IMGUI_DIR}/imgui_impl_opengl3.cpp"
-        "${IMGUI_DIR}/imgui_impl_glfw.cpp"
-        "${IMGUI_DIR}/imgui_stdlib.cpp"
-    )
 
     set ( _BOOST_ENABLED_ "//" )
     set ( BOOST_ENABLED OFF )

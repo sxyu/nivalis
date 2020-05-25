@@ -122,6 +122,7 @@ struct SliderData {
     float val, lo = -10.0, hi = 10.0;
     // Internal
     uint32_t var_addr;
+    std::string var_name_pre;
 };
 
 struct FuncDrawObj {
@@ -471,7 +472,7 @@ public:
     // Delete the slider at index idx in sliders
     void delete_slider(size_t idx);
 
-    // Call this when slider's variable name (var_name) changes:
+    // Call this when slider's variable name (var_name) changes
     // Using var_name update var_addr of slider at idx.
     // If var_name is invalid, sets slider_error
     void update_slider_var(size_t idx);
@@ -551,6 +552,10 @@ public:
     // Marker data
     std::string marker_text;
     int marker_posx, marker_posy;
+
+    // Radius around a point for which a marker is clickable
+    // should be increased for mobile.
+    int marker_clickable_radius = 5;
 
     // The environment object, contains defined functions and variables
     // (owned)

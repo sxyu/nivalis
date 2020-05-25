@@ -168,8 +168,7 @@ void Plotter::recalc(const View& view) {
     // Minimum x-distance between critical points
     static const double MIN_DIST_BETWEEN_ROOTS  = 1e-4;
     // Point marker display size / mouse selecting area size
-    static const int MARKER_DISP_RADIUS = 3,
-                 MARKER_CLICKABLE_RADIUS = 5;
+    static const int MARKER_DISP_RADIUS = 3;
 
     // x-epsilon for domain bisection
     // (finding cutoff where function becomes undefined)
@@ -242,10 +241,10 @@ void Plotter::recalc(const View& view) {
                                 ptm.rel_func = exprid;
                                 pt_markers_back.push_back(std::move(ptm));
                             }
-                            int cmin = std::max(static_cast<int>(sx - MARKER_CLICKABLE_RADIUS), 0);
-                            int cmax = std::min(static_cast<int>(sx + MARKER_CLICKABLE_RADIUS), view.swid - 1);
-                            int rmin = std::max(static_cast<int>(sy - MARKER_CLICKABLE_RADIUS), 0);
-                            int rmax = std::min(static_cast<int>(sy + MARKER_CLICKABLE_RADIUS), view.shigh - 1);
+                            int cmin = std::max(static_cast<int>(sx - marker_clickable_radius), 0);
+                            int cmax = std::min(static_cast<int>(sx + marker_clickable_radius), view.swid - 1);
+                            int rmin = std::max(static_cast<int>(sy - marker_clickable_radius), 0);
+                            int rmax = std::min(static_cast<int>(sy + marker_clickable_radius), view.shigh - 1);
                             if (cmin <= cmax) {
                                 for (int r = rmin; r <= rmax; ++r) {
                                     std::fill(grid_back.begin() + (r * view.swid + cmin),
@@ -513,11 +512,11 @@ void Plotter::recalc(const View& view) {
                                     const int sx = pm.sx, sy = pm.sy;
                                     size_t new_marker_idx = pt_markers_back.size();
                                     pt_markers_back.push_back(pm);
-                                    int cmin = std::max(sx - fine_interval + 1 - MARKER_CLICKABLE_RADIUS, 0);
-                                    int cmax = std::min(sx + MARKER_CLICKABLE_RADIUS, view.swid - 1);
+                                    int cmin = std::max(sx - fine_interval + 1 - marker_clickable_radius, 0);
+                                    int cmax = std::min(sx + marker_clickable_radius, view.swid - 1);
                                     if (cmin <= cmax) {
-                                        for (int r = std::max(sy - fine_interval + 1 - MARKER_CLICKABLE_RADIUS, 0);
-                                                r <= std::min(sy + MARKER_CLICKABLE_RADIUS, view.shigh - 1); ++ r) {
+                                        for (int r = std::max(sy - fine_interval + 1 - marker_clickable_radius, 0);
+                                                r <= std::min(sy + marker_clickable_radius, view.shigh - 1); ++ r) {
                                             std::fill(grid_back.begin() + (r * view.swid + cmin),
                                                     grid_back.begin() + (r * view.swid + cmax + 1),
                                                     new_marker_idx);
@@ -555,6 +554,7 @@ void Plotter::recalc(const View& view) {
                     std::vector<std::array<float, 2> > curr_line;
                     double tmin = (double)func.tmin;
                     double tmax = (double)func.tmax;
+                    if (tmin > tmax) std::swap(tmin, tmax);
                     double tstep = (tmax - tmin) / PARAMETRIC_STEPS;
                     for (double t = tmin; t <= tmax; t += tstep) {
                         env.vars[t_var] = t;
@@ -654,11 +654,11 @@ void Plotter::recalc(const View& view) {
 
                         int sxi = static_cast<int>(sx);
                         int syi = static_cast<int>(sy);
-                        int minyi = std::max(static_cast<int>(miny) - MARKER_CLICKABLE_RADIUS, 0);
-                        int maxyi = std::min(static_cast<int>(maxy) + MARKER_CLICKABLE_RADIUS, view.shigh-1);
+                        int minyi = std::max(static_cast<int>(miny) - marker_clickable_radius, 0);
+                        int maxyi = std::min(static_cast<int>(maxy) + marker_clickable_radius, view.shigh-1);
                         for (int r = minyi; r <= maxyi; ++r) {
-                            int cmin = std::max(sxi - MARKER_CLICKABLE_RADIUS, 0);
-                            int cmax = std::min(sxi + MARKER_CLICKABLE_RADIUS, view.swid-1);
+                            int cmin = std::max(sxi - marker_clickable_radius, 0);
+                            int cmax = std::min(sxi + marker_clickable_radius, view.swid-1);
                             // Assign to grid_back
                             for (int c = cmin; c <= cmax; ++c) {
                                 size_t existing_marker_idx = grid_back[r * view.swid + c];
@@ -891,8 +891,8 @@ void Plotter::recalc(const View& view) {
                             ptm.rel_func = exprid;
                             pt_markers_back.push_back(std::move(ptm));
                         }
-                        for (int r = std::max(sy - MARKER_CLICKABLE_RADIUS, 0); r <= std::min(sy + MARKER_CLICKABLE_RADIUS, view.shigh-1); ++r) {
-                            for (int c = std::max(sx - MARKER_CLICKABLE_RADIUS, 0); c <= std::min(sx + MARKER_CLICKABLE_RADIUS, view.swid-1); ++c) {
+                        for (int r = std::max(sy - marker_clickable_radius, 0); r <= std::min(sy + marker_clickable_radius, view.shigh-1); ++r) {
+                            for (int c = std::max(sx - marker_clickable_radius, 0); c <= std::min(sx + marker_clickable_radius, view.swid-1); ++c) {
                                 grid_back[r * view.swid + c] = idx;
                             }
                         }
@@ -960,12 +960,12 @@ void Plotter::recalc(const View& view) {
                                     ptm.rel_func = -1;
                                     pt_markers_back.push_back(std::move(ptm));
                                 }
-                                for (int r = std::max(sy - MARKER_CLICKABLE_RADIUS, 0);
-                                        r <= std::min(sy + MARKER_CLICKABLE_RADIUS,
+                                for (int r = std::max(sy - marker_clickable_radius, 0);
+                                        r <= std::min(sy + marker_clickable_radius,
                                             view.shigh-1); ++r) {
                                     for (int c = std::max(
-                                                sx - MARKER_CLICKABLE_RADIUS, 0);
-                                            c <= std::min(sx + MARKER_CLICKABLE_RADIUS,
+                                                sx - marker_clickable_radius, 0);
+                                            c <= std::min(sx + marker_clickable_radius,
                                                 view.swid-1); ++c) {
                                         grid_back[r * view.swid + c] = idx;
                                     }
@@ -1250,8 +1250,11 @@ void Plotter::delete_func(size_t idx) {
 
 void Plotter::update_slider_var(size_t idx) {
     auto& sl = sliders[idx];
+    if (sl.var_name_pre.size()) {
+        sliders_vars.erase(sl.var_name_pre);
+        sl.var_name_pre.clear();
+    }
     util::trim(sl.var_name);
-    sliders_vars.erase(sl.var_name);
     if (sl.var_name == "") {
         sl.var_addr = -1;
     } else if (sliders_vars.count(sl.var_name)) {
@@ -1273,6 +1276,7 @@ void Plotter::update_slider_var(size_t idx) {
         for (size_t t = 0; t < funcs.size(); ++t)
             reparse_expr(t);
         require_update = true;
+        sl.var_name_pre = sl.var_name;
     }
 }
 
@@ -1286,6 +1290,7 @@ void Plotter::add_slider() {
         ++var_name[0];
     }
     sl.var_name = var_name;
+    sl.var_name_pre = var_name;
     sl.var_addr = env.addr_of(sl.var_name, false);
     sl.val = 1.0;
     env.vars[sl.var_addr] = 1.0;
@@ -1297,6 +1302,7 @@ void Plotter::add_slider() {
 void Plotter::delete_slider(size_t idx) {
     sliders_vars.erase(sliders[idx].var_name);
     sliders.erase(sliders.begin() + idx);
+    slider_error.clear();
 }
 
 void Plotter::copy_slider_value_to_env(size_t idx) {
@@ -1444,7 +1450,7 @@ void Plotter::handle_mouse_wheel(bool upwards, int distance, int px, int py) {
     } else {
         scaling = exp(log(distance) * multiplier);
     }
-    scaling = std::min(scaling, 100.);
+    scaling = std::max(std::min(scaling, 100.), 0.01);
     double xdiff = (view.xmax - view.xmin) * (scaling-1.);
     double ydiff = (view.ymax - view.ymin) * (scaling-1.);
 
@@ -1546,8 +1552,7 @@ std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
         jinternal["color_queue"] = jreuse_colors;
 
     }
-
-    return os << json {
+    json j {
         {"view", // Export view data
             json {
                 {"xmin", view.xmin},
@@ -1556,12 +1561,12 @@ std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
                 {"ymax", view.ymax},
                 {"polar", polar_grid},
             }
-        },
-        {"funcs", jfuncs},
-        {"sliders", jsliders },
-        {"internal", jinternal },
-        {"shell", jshell },
+        }
     };
+    if (jshell.size()) j["shell"] = jshell;
+    if (jsliders.size()) j["sliders"] = jsliders;
+    if (jfuncs.size()) j["funcs"] = jfuncs;
+    return os << j;
 }
 std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
     if (error_msg) {
@@ -1624,11 +1629,11 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
                     sliders[idx].val = slider["val"].get<double>();
                 }
                 if (slider.count("var")) {
-                    sliders[idx].var_name = slider["var"];
+                    sliders[idx].var_name = slider["var"].get<std::string>();
+                    update_slider_var(idx);
                     if (!slider.count("val")) {
                         sliders[idx].val = env.get(sliders[idx].var_name);
                     }
-                    update_slider_var(idx);
                 }
             }
         }
@@ -1666,7 +1671,7 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
                         f.tmin = jfunc["tmin"].get<double>();
                     }
                     if (jfunc.count("tmax")) {
-                        f.tmin = jfunc["tmax"].get<double>();
+                        f.tmax = jfunc["tmax"].get<double>();
                     }
                 } else if (jfunc.is_string()) {
                     // Only expression

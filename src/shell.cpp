@@ -35,8 +35,7 @@ namespace nivalis {
 Shell::Shell(Environment& env, std::ostream& os) : env(env), os(os) {
     os << "Nivalis " NIVALIS_VERSION " " NIVALIS_COPYRIGHT << std::endl;
 }
-void Shell::eval_line(std::string line) {
-    if (closed) return;
+bool Shell::eval_line(std::string line) {
     int assn_opcode = OpCode::bsel;
     std::string str_to_parse, var;
     std::vector<std::string> def_fn_args;
@@ -49,13 +48,14 @@ void Shell::eval_line(std::string line) {
     util::trim(line);
     if (cmd == "exit") {
         closed = true;
-        return;
+        return true;
     } else if (cmd == "del") {
         // Delete variable
         if (env.del(line)) {
             os << "del " << line << std::endl;
         } else {
             os << "Undefined variable " << line << "\n";
+            return false;
         }
     } else {
         bool do_optim = cmd == "opt";
@@ -67,7 +67,7 @@ void Shell::eval_line(std::string line) {
             util::trim(diff_var); util::trim(line);
             if (!util::is_varname(diff_var)) {
                 os << diff_var << " is not a valid variable name\n";
-                return;
+                return false;
             }
             diff_var_addr = env.addr_of(diff_var, false);
             str_to_parse = line;
@@ -123,14 +123,17 @@ void Shell::eval_line(std::string line) {
         }
         std::string parse_err;
         auto expr = parse(str_to_parse, env, !(do_diff || do_optim), // expicit
-                false, // quiet
+                true, // quiet
                 def_fn_args.size(), // max args
                 &parse_err);
+        if (parse_err.size()) {
+            os << parse_err;
+            return false;
+        }
         if (do_optim) {
             expr.optimize();
             expr.repr(os, env) << "\n";
-        }
-        if (do_diff) {
+        } else if (do_diff) {
             Expr diff = expr.diff(diff_var_addr, env);
             diff.repr(os, env) << "\n";
         } else {
@@ -166,7 +169,7 @@ void Shell::eval_line(std::string line) {
                             if (addr == -1) {
                                 os << "Undefined variable \"" << var
                                     << "\" (operator assignment)\n";
-                                return;
+                                return false;
                             }
                             var_val = Expr::constant(env.vars[addr])
                                 .combine(assn_opcode,
@@ -184,5 +187,6 @@ void Shell::eval_line(std::string line) {
             }
         }
     }
+    return true;
 }
 }  // namespace nivalis

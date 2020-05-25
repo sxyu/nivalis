@@ -10,9 +10,9 @@ namespace nivalis {
 class Shell {
 public:
     explicit Shell(Environment& env, std::ostream& os);
-    // Evaluate a line
-    void eval_line(std::string line); // string copy intentional
-    // Whether shell is 'closed'
+    // Evaluate a line; returns true iff no error
+    bool eval_line(std::string line); // string copy intentional
+    // Whether shell is 'closed' (must be handled by frontend)
     bool closed = false;
 private:
     std::ostream& os;

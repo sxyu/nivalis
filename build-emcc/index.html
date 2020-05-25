@@ -1,76 +1,209 @@
 <!doctype html>
 <html lang="en-us">
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
-    <script type="module" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.esm.js"></script>
-    <script nomodule="" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.js"></script>
-    <title>Nivalis Plotter</title>
-    <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css"/>
-  </head>
-  <body>
-    <div id="loading">Nivalis</div>
-    <div id="marker"></div>
-    <div id="view-config">
-        <div class="input-group mb-2">
-            <input class='form-control' id='view-xmin' type='number' step='any'>
-            <span class='input-group-btn' style='width:0px;'></span>
-            <span class='form-control var-bounds-text'>
-                &le; x &le;</span>
-            <span class='input-group-btn' style='width:0px;'></span>
-            <input class='form-control' id='view-xmax' type='number' step='any'>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+        <script type="module" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.esm.js"></script>
+        <script nomodule="" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.js"></script>
+        <title>Nivalis Plotter</title>
+        <link rel="stylesheet" href="css/main.css">
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css"/>
+        <link rel="stylesheet" href="css/simple-console.css" />
+    </head>
+    <body>
+        <div id="loading"><div>Nivalis</div></div>
+        <div id="marker"></div>
+        <div id="shell">
+            <a id="shell-close" href="#"><ion-icon name='close'></ion-icon></a>
         </div>
-
-        <div class="input-group mb-2">
-            <input class='form-control' id='view-ymin' type='number' step='any'>
-            <span class='input-group-btn' style='width:0px;'></span>
-            <span class='form-control var-bounds-text'>
-                &le; y &le;</span>
-            <span class='input-group-btn' style='width:0px;'></span>
-            <input class='form-control' id='view-ymax' type='number' step='any'>
-        </div>
-
-        <div class="input-group mb-2">
-        <button type="button" id="btn-reset-view" class="btn btn-primary">
-            <ion-icon name="home"></ion-icon> Reset view</button>
-        </div>
-
-        <div class="custom-control custom-checkbox">
-            <input type="checkbox" class="custom-control-input" id="view-polar">
-            <label class="custom-control-label" for="view-polar">Polar grid</label>
-        </div>
-    </div>
-    <div class="wrapper">
-        <nav id="sidebar">
-            <div id="function-editor">
-                <div id="functions"> </div>
+        <nav class="navbar navbar-expand-sm navbar-light bg-light" id="header">
+            <span class="navbar-brand">
+                Nivalis
+                <a href="https://github.com/sxyu/nivalis"
+                   target="_blank" title='See Nivalis code on Github'>
+                    <ion-icon name="logo-github" titie="Nivalis on Github"></ion-icon>
+                </a>
+            </span>
+            <div class="collapse navbar-collapse" id="navbar-collapse">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item">
+                        <a href="#" id="open-export" class="nav-link">
+                            Export
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="import-dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Import
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="import-dropdown-toggle" id="import-file-dropdown">
+                            <div class="btn-group" role="group" >
+                                <div class="custom-file">
+                                    <input type="file" class="custom-file-input" id="import-file" aria-describedby="fileHelp">
+                                    <label class="custom-file-label" for="import-file">
+                                        Select json file...
+                                    </label>
+                                </div>
+                                <button type="button" id="import-btn" class="btn btn-primary">Import</button>
+                            </div>
+                            <div>
+                                <span id="import-error"></span>
+                            </div>
+                        </div> <!-- dropdown-menu -->
+                    </li> <!-- nav-item  -->
+                    <li class="nav-item dropdown">
+                        <a href="#" id="open-shell"
+                            class="nav-link"  title="Toggle virtual shell">
+                            Shell
+                            <ion-icon name='caret-down'
+                                class='toggle-caret'></ion-icon>
+                        </a>
+                    </li> <!-- nav-item  -->
+                </ul> <!-- navbar-nav -->
+            </div> <!-- navbar-collapse -->
+            <a id="btn-reset-view-small" class="nav-link reset-view" href='#'
+                                         title="Reset view. Hotkey: Ctrl+H">
+                <ion-icon name="home"></ion-icon>
+            </a>
+            <a id="view-toggle" class="nav-link" href='#' title="Toggle view panel">
+                View <ion-icon name='caret-down' class='toggle-caret'></ion-icon>
+            </a>
+            <button id="navbar-collapse-toggler" class="navbar-toggler" type="button" data-toggle="collapse"
+                data-target="#navbar-collapse"
+                aria-controls="navbar-collapse" aria-expanded="false"
+                aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+        </nav> <!-- navbar -->
+        <div id='view-config'>
+            <div class="input-group mb-2 input-group-sm">
+                <input class='form-control' id='view-xmin' type='number' step='any'>
+                <span class='form-control var-bounds-text'>
+                    &le; x &le;</span>
+                <input class='form-control' id='view-xmax' type='number' step='any'>
             </div>
-            <div id="slider-editor">
-                <div id="control">
-                    <button type="button" id="btn-add-slider" class="btn btn-success"><ion-icon name="add"></ion-icon> Slider</button>
+
+            <div class="input-group mb-2 input-group-sm">
+                <input class='form-control' id='view-ymin' type='number' step='any'>
+                <span class='form-control var-bounds-text'>
+                    &le; y &le;</span>
+                <input class='form-control' id='view-ymax' type='number' step='any'>
+            </div>
+
+            <div class="form-group row">
+                <div class='col-sm-6'>
+                    <button type="button" id="btn-reset-view" class="btn btn-primary btn-sm reset-view" title="Hotkey: Ctrl+H">
+                        <ion-icon name="home"></ion-icon> Reset view
+                    </button>
                 </div>
-                <div id="sliders"> </div>
+                <div class='col-sm-6'>
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="view-polar">
+                        <label class="custom-control-label" for="view-polar" title="Tip: O/P to switch cartesian/polar">Polar grid</label>
+                    </div>
+                </div>
             </div>
-        </nav>
-
-        <div class="emscripten_border">
-            <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
         </div>
-    </div>
-    <a href="https://github.com/sxyu/nivalis" id="branding" target="_blank">
-        Nivalis
-        <ion-icon name="logo-github" titile="Nivalis"></ion-icon>
-    </a>
+        <div class="wrapper" id="main-wrapper">
+            <nav id="sidebar">
+                <div id="sidebar-container">
+                    <div id="function-editor">
+                        <div id="functions"> </div>
+                        <div id="function-error-container" class="error-text">
+                            <small id="function-error"></small>
+                        </div>
+                    </div>
+                    <div id="slider-editor">
+                        <div id="sliders"> </div>
+                        <div class="container-fluid">
+                            <div class="form-group row">
+                                <div class='col-sm-5'>
+                                    <button type="button" id="btn-add-slider" class="btn btn-success btn-sm"><ion-icon name="add"></ion-icon> Slider</button>
+                                </div>
+                                <div class='col-sm-7'>
+                                    <div id="slider-error-container" class="error-text">
+                                        <small id="slider-error"></small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </nav> <!-- sidebar -->
+            <div id="sidebar-dragger">
+                <div id="sidebar-dragger-label">
+                    <ion-icon name="caret-forward"></ion-icon>
+                </div>
+            </div>
 
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
+            <div id="content">
+                <div class="emscripten_border">
+                    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+                </div>
+            </div>
+        </div>
 
-    <script type="text/javascript" src="js/main.js"></script>
-    <script type="text/javascript" src="nivplot.js"></script>
-  </body>
+        <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
+
+        <script type="text/template" id="function-form-template">
+            <div class='input-group mb-2 function-form input-group-sm' id='function-form-{name}'>
+        <div class='input-group-prepend'>
+            <span class='input-group-text function-name inactive' id='function-name-{name}'> {name}</span>
+        </div>
+        <input class='form-control function-expr' id='function-expr-{name}'
+               autocorrect="off" autocapitalize="none" type='text'>
+        <div class='input-group-append'>
+            <button class='btn btn-sm btn-light btn-outline-secondary color-picker' id='color-picker-{name}' title='Change color'><ion-icon name='analytics'></ion-icon></button>
+            <button class='btn btn-sm btn-light btn-outline-secondary function-del inactive' id='function-del-{name}' title='Delete'> <ion-icon name='trash'></ion-icon></button>
+        </div>
+      </div>
+      <div class='input-group function-tbounds input-group-sm' id='function-tbounds-{name}'>
+        <input class='form-control function-tmin'
+             id='function-tmin-{name}' type='number' step='any' placeholder='min'>
+        <span class='form-control var-bounds-text'> &le; t &le;</span>
+        <input class='form-control function-tmax'
+                 id='function-tmax-{name}' type='number' step='any' placeholder='max'>
+      </div>
+        </script>
+
+        <script type="text/template" id="slider-form-template">
+            <div class='input-group slider-bounds input-group-sm'
+            id='slider-bounds-{name}'>
+            <input class='form-control slider-var'
+                   id='slider-var-{name}' type='text'
+                   placeholder="var">
+            <span class='form-control var-bounds-text'> =</span>
+            <input class='form-control slider-val'
+                   id='slider-val-{name}' type='number' step='any'
+                   placeholder="val">
+            <span class='form-control spacer'>
+                <ion-icon name='filter'></ion-icon>
+            </span>
+            <input class='form-control slider-min'
+                   id='slider-min-{name}' type='number' step='any'
+                   placeholder="min">
+            <span class='form-control var-bounds-text'> to </span>
+            <input class='form-control slider-max'
+                   id='slider-max-{name}' type='number' step='any'
+                   placeholder="max">
+        </div>
+        <div class='input-group slider input-group-sm'
+            id='slider-{name}'>
+            <input type="range" class="form-control custom-range slider-sli" min="0"
+                max="1" step="any" id="slider-sli-{name}">
+            <div class='input-group-append'>
+                <button class='btn btn-sm btn-light btn-outline-secondary slider-del' id='slider-del-{name}'>
+                    <ion-icon name='trash'></ion-icon>
+                </button>
+            </div>
+        </div>
+        </script>
+
+        <script type="text/javascript" src="js/main.js"></script>
+        <script type="text/javascript" src="nivplot.js"></script>
+    </body>
 </html>
