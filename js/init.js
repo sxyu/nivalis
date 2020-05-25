@@ -23,7 +23,9 @@ let setupHandlers = function() {
     });
     canvas.addEventListener("mousedown", e=>{
         if (e.button == 0) {
-            Module.on_mousedown(e.pageX, e.pageX);
+            let oleft = $(canvas).offset().left;
+            let otop = $(canvas).offset().top;
+            Module.on_mousedown(e.clientX - oleft, e.clientY - otop);
             Renderer.redraw();
         }
     });
@@ -59,7 +61,9 @@ let setupHandlers = function() {
     });
     canvas.addEventListener("mousemove", function(e){
         if (e.button == 0) {
-            Module.on_mousemove(e.pageX, e.pageY);
+            let oleft = $(canvas).offset().left;
+            let otop = $(canvas).offset().top;
+            Module.on_mousemove(e.clientX - oleft, e.clientY - otop);
             ViewConfig.updateViewBounds();
             Renderer.redraw();
         }
@@ -91,7 +95,9 @@ let setupHandlers = function() {
     });
     canvas.addEventListener("mouseup", e=>{
         if (e.button == 0) {
-            Module.on_mouseup(e.pageX, e.pageY);
+            let oleft = $(canvas).offset().left;
+            let otop = $(canvas).offset().top;
+            Module.on_mouseup(e.clientX - oleft, e.clientY - otop);
             Renderer.redraw();
         }
     });
@@ -111,17 +117,6 @@ let setupHandlers = function() {
 };
 let onInit = function() {
     setupHandlers()
-
-    // Close loading screen
-    if (document.getElementsByTagName('body')[0] !== undefined) {
-        document.getElementById("loading").style.opacity =
-            '0.0';
-        window.setTimeout(function() {
-            document.getElementById("loading").style.display =
-                'none';
-        }, 300);
-        onResizeCanvas();
-    }
 
     glfwPatch();
 
@@ -266,5 +261,17 @@ let onInit = function() {
     });
     if (Util.is_mobile) {
         Module.set_marker_clickable_radius(12);
+    } else {
+        Module.set_marker_clickable_radius(5);
     }
+
+    // Close loading screen
+    document.getElementById("loading").style.opacity = '0.0';
+        document.getElementById("loading").style.display =
+            'none';
+    window.setTimeout(function() {
+        document.getElementById("loading").style.display =
+            'none';
+    }, 300);
+    onResizeCanvas();
 };
