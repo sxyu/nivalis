@@ -265,6 +265,28 @@ let onInit = function() {
         Module.set_marker_clickable_radius(5);
     }
 
+    $('.example').click(function(){
+        let $this = $(this);
+        let fidx = FuncEdit.func_names.length-1;
+        if (FuncEdit.func_names.length == 2 &&
+            Module.get_func_expr(0).trim() === '') {
+            fidx = 0;
+        }
+        let fn = FuncEdit.func_names[fidx];
+        $('#function-expr-' + fn).val($this.text().trim());
+        if (this.hasAttribute('tmax')) {
+            $('#function-tmax-' + fn).val($this.attr('tmax'));
+            Module.set_func_tmax(fidx, Number.parseFloat($this.attr('tmax')));
+        }
+        if (this.hasAttribute('tmin')) {
+            $('#function-tmin-' + fn).val($this.attr('tmin'));
+            Module.set_func_tmin(fidx, Number.parseFloat($this.attr('tmin')));
+        }
+        FuncEdit.reparse(fn);
+        $('#function-expr-' + fn).focus();
+        Module.redraw();
+    });
+
     // Close loading screen
     document.getElementById("loading").style.opacity = '0.0';
         document.getElementById("loading").style.display =

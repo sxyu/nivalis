@@ -246,10 +246,14 @@ bool get_func_uses_t(int idx) {
 double get_func_tmin(int idx) { return plot.funcs[idx].tmin; }
 double get_func_tmax(int idx) { return plot.funcs[idx].tmax; }
 void set_func_tmin(int idx, double val) {
+    if (std::isnan(val) || val >= plot.funcs[idx].tmax ||
+            std::isinf(val)) return; // refuse
     plot.funcs[idx].tmin = val;
     plot.require_update = true;
 }
 void set_func_tmax(int idx, double val) {
+    if (std::isnan(val) || val <= plot.funcs[idx].tmin ||
+            std::isinf(val)) return; // refuse
     plot.funcs[idx].tmax = val;
     plot.require_update = true;
 }

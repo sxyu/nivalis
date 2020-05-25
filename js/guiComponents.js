@@ -20,6 +20,17 @@ var Renderer = {
 var FuncEdit = {
     func_names: [],
     func_indices: {},
+    reparse : function(name) {
+            var idx = FuncEdit.func_indices[name];
+            Module.set_func_expr(idx, $('#function-expr-'+name).val());
+            var uses_t = Module.get_func_uses_t(idx);
+            if (uses_t) {
+                $('#function-tbounds-' + name).css('display', 'flex');
+            } else {
+                $('#function-tbounds-' + name).css('display', 'none');
+            }
+            Module.redraw();
+    },
     new_func: function(add) {
         var fidx = FuncEdit.func_names.length;
         if (add) {
@@ -36,17 +47,8 @@ var FuncEdit = {
         obj.val(Module.get_func_expr(fidx));
         obj.on('input', function() {
             // Change editor
-            var $this = $(this);
             var this_name = this.id.substr(14);
-            var idx = FuncEdit.func_indices[this_name];
-            Module.set_func_expr(idx, $this.val());
-            var uses_t = Module.get_func_uses_t(idx);
-            if (uses_t) {
-                $('#function-tbounds-' + this_name).css('display', 'flex');
-            } else {
-                $('#function-tbounds-' + this_name).css('display', 'none');
-            }
-            Module.redraw();
+            FuncEdit.reparse(this_name);
         });
         obj.on('keyup', function(e) {
             // Up/down

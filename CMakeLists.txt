@@ -107,6 +107,10 @@ if (EMSCRIPTEN)
     set( JS_SRC_DIR "${PROJECT_SOURCE_DIR}/js" )
     set(
         SOURCES_JS
+        jquery-3.5.1.slim.min.js
+        popper.min.js
+        bootstrap.min.js
+        pickr.min.js
         simple-console.js
         util.js
         glfwPatch.js
