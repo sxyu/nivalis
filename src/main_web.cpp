@@ -13,7 +13,7 @@
 #include <utility>
 
 #include "plotter/common.hpp"
-#include "imgui.h"
+#include "plotter/imgui_adaptor.hpp"
 #include "imstb_textedit.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_glfw.h"
@@ -39,68 +39,28 @@ bool ret_from_worker;
 
 namespace nivalis {
 namespace {
-// Graphics adaptor for Plotter, with caching
-struct ImGuiDrawListGraphicsAdaptor {
-    void line(float ax, float ay, float bx, float by,
-            const color::color& c, float thickness = 1.) {
-        draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
-                ImColor(c.r, c.g, c.b, c.a), thickness);
-    }
-    void polyline(const std::vector<std::array<float, 2> >& points,
-            const color::color& c, float thickness = 1.) {
-        std::vector<ImVec2> line(points.size());
-        for (size_t i = 0; i < line.size(); ++i) {
-            line[i].x = (float) points[i][0];
-            line[i].y = (float) points[i][1];
-        }
-        draw_list->AddPolyline(&line[0], (int)line.size(), ImColor(c.r, c.g, c.b, c.a), false, thickness);
-    }
-    void rectangle(float x, float y, float w, float h, bool fill, const color::color& c) {
-        if (fill) {
-            draw_list->AddRectFilled(ImVec2(x,y), ImVec2(x+w, y+h),
-                    ImColor(c.r, c.g, c.b, c.a));
-        } else {
-            draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
-                    ImColor(c.r, c.g, c.b, c.a));
-        }
-    }
-    void circle(float x, float y, float r, bool fill, const color::color& c) {
-        if (fill) {
-            draw_list->AddCircleFilled(ImVec2(x,y), r,
-                    ImColor(c.r, c.g, c.b, c.a), std::min(r, 250.f));
-        } else {
-            draw_list->AddCircle(ImVec2(x,y), r,
-                    ImColor(c.r, c.g, c.b, c.a), std::min( r, 250.f));
-        }
-    }
-    // Axis-aligned ellipse
-    void ellipse(float x, float y, float rx, float ry,
-                 bool fill, const color::color& c) {
-        if (fill) {
-            draw_list->AddEllipseFilled(ImVec2(x,y), rx, ry,
-                    ImColor(c.r, c.g, c.b, c.a), std::min(.5f * (rx + ry), 250.f));
-        } else {
-            draw_list->AddEllipse(ImVec2(x,y), rx, ry,
-                    ImColor(c.r, c.g, c.b, c.a), std::min(.5f * (rx + ry), 250.f));
-        }
-    }
-    void string(float x, float y, const std::string& s, const color::color& c) {
-        // String using ImGui API
-        draw_list->AddText(ImVec2(x, y),
-                ImColor(c.r, c.g, c.b, c.a), s.c_str());
-    }
-
-    ImDrawList* draw_list = nullptr;
-};
-
 Plotter plot; // Main plotter
 Environment& env = plot.env; // Main environment
 GLFWwindow* window; // GLFW window
 std::ostringstream shell_strm; // Shell stream (replaces cout);
 Shell shell(env, shell_strm); // Hidden shell
 
+std::stringstream state_encoding_strm;
+std::string state_encoding;
+
+worker_handle worker; // WebWorker
+
+void redraw_canvas(bool);
+// WebWorker callback
+void webworker_cback(char* data, int size, void* arg) {
+    state_encoding_strm.str("");
+    state_encoding_strm.write(data, size);
+    plot.import_binary_render_result(state_encoding_strm);
+    redraw_canvas(true);
+}
+
 // Emscripten access methods
-void redraw_canvas() {
+void redraw_canvas(bool worker_req_update) {
     // * State
     // Main graphics adaptor for plot.draw
     static ImGuiDrawListGraphicsAdaptor adaptor;
@@ -132,17 +92,33 @@ void redraw_canvas() {
     }
 
     static ImDrawList draw_list_pre(ImGui::GetDrawListSharedData());
+    static Plotter::View plot_view_pre = plot.view;
+
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     adaptor.draw_list = draw_list;
     if (plot.require_update) {
         // Redraw
         plot.require_update = false;
         // Redraw the grid and functions
-        plot.draw_grid(adaptor);      // Draw axes and grid
-        // TODO: move this to webworker
-        plot.recalc();
-        plot.swap();
-        plot.draw(adaptor);       // Draw functions
+        plot.draw_grid(adaptor, plot_view_pre);  // Draw axes and grid
+        plot.populate_grid();                    // Populate grid of point
+                                                 // markers for mouse events
+        plot.draw(adaptor, plot_view_pre);       // Draw functions
+
+        state_encoding_strm.str("");
+        plot.export_binary_func_and_env(state_encoding_strm);
+        state_encoding = state_encoding_strm.str();
+        if (!worker_req_update &&
+                emscripten_get_worker_queue_size(worker) == 0) {
+            emscripten_call_worker(worker, "webworker_sync",
+                    &state_encoding[0],
+                    state_encoding.size(), webworker_cback, nullptr);
+        }
+
+        // Note view is delayed by one frame, so that if worker finishes updating
+        // in a single frame, we don't get border artifacts due to user movement
+        plot_view_pre = plot.view;
+
         // Cache the draw list
         draw_list_pre.CmdBuffer = draw_list->CmdBuffer;
         draw_list_pre.IdxBuffer = draw_list->IdxBuffer;
@@ -169,7 +145,11 @@ void redraw_canvas() {
 
     glfwSwapBuffers(window);
     glfwPollEvents();
-}  // void redraw_grid()
+}  // void redraw_canvas()
+void redraw_canvas_not_worker() {
+    // Expose 0-argument version to JS
+    redraw_canvas(false);
+}
 
 void on_key(int key, bool ctrl, bool shift, bool alt) {
     plot.handle_key(key, ctrl, shift, alt);
@@ -357,7 +337,7 @@ EMSCRIPTEN_BINDINGS(nivplot) {
     function("on_keypress", &emscripten_keypress);
     function("export_json", &export_json);
     function("import_json", &import_json);
-    function("redraw", &redraw_canvas);
+    function("redraw", &redraw_canvas_not_worker);
 
     function("set_marker_clickable_radius", &set_marker_clickable_radius);
 
@@ -464,4 +444,6 @@ int main(int argc, char ** argv) {
     int ems_js_canvas_width = canvas_get_width();
     int ems_js_canvas_height = canvas_get_height();
     glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
+
+    worker = emscripten_create_worker("worker.js");
 }

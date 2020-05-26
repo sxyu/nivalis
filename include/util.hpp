@@ -87,7 +87,10 @@ void push_dbl(std::vector<uint32_t>& v, double value);
 double as_double(const uint32_t* ast);
 
 // Squared distance
-int sqr_dist(int ax, int ay, int bx, int by);
+template <class T>
+T sqr_dist(T ax, T ay, T bx, T by) {
+    return (ax-bx)*(ax-bx) + (ay-by)*(ay-by);
+}
 
 
 template<class T>

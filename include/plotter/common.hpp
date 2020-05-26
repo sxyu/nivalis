@@ -84,8 +84,20 @@ struct Function {
 
 // Marks a single point on the plot which can be clicked
 struct PointMarker {
+    // Get string corresponding to each label enum entry
+    static constexpr const char* label_repr(int lab) {
+        switch(lab) {
+            case LABEL_X_INT: return "x-intercept\n";
+            case LABEL_Y_INT: return "y-intercept\n";
+            case LABEL_LOCAL_MIN: return "local minimum\n";
+            case LABEL_LOCAL_MAX: return "local maximum\n";
+            case LABEL_INTERSECTION: return "intersection\n";
+            case LABEL_INFLECTION_PT: return "inflection point\n";
+            default: return "";
+        }
+    }
+
     double x, y; // position
-    int sx, sy;  // location on screen (if applicable)
     enum {
         // Label to show when hovered over/clicked
         LABEL_NONE,
@@ -100,18 +112,6 @@ struct PointMarker {
     // passive: show marker with title,position on click
     // else: show .. on hover
     bool passive;
-    // Get string corresponding to each label enum entry
-    static constexpr const char* label_repr(int lab) {
-        switch(lab) {
-            case LABEL_X_INT: return "x-intercept\n";
-            case LABEL_Y_INT: return "y-intercept\n";
-            case LABEL_LOCAL_MIN: return "local minimum\n";
-            case LABEL_LOCAL_MAX: return "local maximum\n";
-            case LABEL_INTERSECTION: return "intersection\n";
-            case LABEL_INFLECTION_PT: return "inflection point\n";
-            default: return "";
-        }
-    }
 };
 
 // Data for each slider in Slider window
@@ -129,6 +129,7 @@ struct FuncDrawObj {
     std::vector<std::array<double, 2> > points;
     float thickness;
     color::color c;
+    size_t rel_func;
     enum{
         POLYLINE,
         FILLED_RECT,
@@ -142,7 +143,12 @@ struct FuncDrawObj {
 /** Nivalis GUI plotter logic, decoupled from GUI implementation
  * Register GUI event handlers to call handle_xxx
  * Register resize handler to call resize
- * Call draw_grid(), recalc(), swap(), draw() in drawing event/loop
+ *  * Single Thread: Call draw_grid()/recalc()/draw()/populate_grid()
+ *                   in drawing loop
+ *  * Two-thread:  draw_grid()/ (under lock)draw() in drawing thread
+ *                 worker thread runs recalc() on a second plotter
+ *                 with functions copied with export_binary_func_and_env()
+ *                 (under lock) on each frame
  * Call reset_view() to reset view, delete_func() delete function,
  * set_curr_func() to set current function, etc.
 * */
@@ -153,6 +159,7 @@ public:
         double xmax, xmin;                  // Function area bounds: x
         double ymax, ymin;                  // Function area bounds: y
         bool operator==(const View& other) const;
+        bool operator!=(const View& other) const;
     };
 
     // Construct a Plotter.
@@ -411,20 +418,22 @@ public:
         draw_grid(graph, view);
     }
 
-    /** Draw all functions onto the back buffer and set up point markers
+    /** Draw all functions onto the buffer and set up point markers
      * (for clicking on function/crit points)*/
-    void recalc(const View& view);
-    void recalc();
-
-    // Swap back buffer with front buffer (note: get lock for this,
-    // if recalc on separate process)
-    void swap();
+    void render(const View& view);
+    void render();
 
     template<class GraphicsAdaptor>
-    // Draw front buffer to screen
-    void draw(GraphicsAdaptor& graph) {
-        if (view.xmin >= view.xmax) view.xmax = view.xmin + 1e-9;
-        if (view.ymin >= view.ymax) view.ymax = view.ymin + 1e-9;
+    // Draw buffer populated by render to screen
+    void draw(GraphicsAdaptor& graph, const View& view) {
+        if (view.xmin >= view.xmax) {
+            draw(graph, View{view.swid, view.shigh, view.xmin + 1e-9, view.xmin, view.ymax, view.ymin});
+            return;
+        }
+        if (view.ymin >= view.ymax) {
+            draw(graph, View{view.swid, view.shigh, view.xmax, view.xmin, view.ymin + 1e-9, view.ymin});
+            return;
+        }
 
         std::vector<std::array<float, 2> > points;
         for (auto& obj : draw_buf) {
@@ -449,6 +458,16 @@ public:
             }
         }
     }
+
+    template<class GraphicsAdaptor>
+    // Draw front buffer to screen
+    void draw(GraphicsAdaptor& graph) {
+        draw(graph, view);
+    }
+
+    // Populate the marker grid (grid)
+    // and add passive markers for all polylines
+    void populate_grid();
 
     // Re-parse expression from expr_str into expr, etc. for function 'idx'
     // and update expression, derivatives, etc.
@@ -511,6 +530,14 @@ public:
     // JSON serialization
     std::ostream& export_json(std::ostream& os, bool pretty = false) const;
     std::istream& import_json(std::istream& is, std::string* error_msg = nullptr);
+
+    // Binary serialization, only functions, view, and env (used to sync data to worker before render)
+    std::ostream& export_binary_func_and_env(std::ostream& os) const;
+    std::istream& import_binary_func_and_env(std::istream& is);
+
+    // Binary serialization, only draw_buf, pt_markers (used to sync data from worker after render)
+    std::ostream& export_binary_render_result(std::ostream& os) const;
+    std::istream& import_binary_render_result(std::istream& is);
 private:
     // Helper for detecting if px, py activates a marker (in grid);
     // if so sets marker_* and current function
@@ -519,7 +546,7 @@ private:
     // Helpers for adding polylines/rectangles to the buffer
     void buf_add_polyline(const View& recalc_view,
             const std::vector<std::array<float, 2> >& points,
-            const color::color& c,  float thickness = 1);
+            const color::color& c, size_t rel_func,  float thickness = 1);
     void buf_add_rectangle(const View& recalc_view,
             float x, float y, float w, float h,
             bool fill, const color::color& c);
@@ -555,7 +582,7 @@ public:
 
     // Radius around a point for which a marker is clickable
     // should be increased for mobile.
-    int marker_clickable_radius = 5;
+    int marker_clickable_radius = 8;
 
     // The environment object, contains defined functions and variables
     // (owned)
@@ -565,24 +592,26 @@ public:
     // Mutex for concurrency
     std::mutex mtx;
 #endif
-private:
-    std::vector<FuncDrawObj> draw_back_buf;   // Function draw back buffer
-                                              // recalc() adds shapes to here
-                                              // swap() swaps this to draw_buf
-    std::vector<FuncDrawObj> draw_buf;        // Function draw buffer
-                                              // draw() draws these shapes to an adaptor
-    std::vector<color::color> rect_opt_grid; // Grid of rectangle colors
-                                             // used by recalc,
-                                             // for optimizing drawing
+
+    std::vector<FuncDrawObj> draw_buf;       // Function draw buffer
+                                             // render() populates it
+                                             // draw() draws these shapes to
+                                             // an adaptor
 
     std::vector<PointMarker> pt_markers;    // Point markers
-    std::vector<size_t> grid;               // Grid containing marker id
-                                            // at every pixel, row major
-                                            // (-1 if no marker)
-    std::vector<size_t> grid_back;               // Grid copy, filled  by recalc(), swapped to grid by swap()
-    std::vector<PointMarker> pt_markers_back;    // Point markers copy, filled  by recalc(),
-                                                 // swapped to grid by swap()
+                                            // render() populates non-passive
+                                            // markers, populate_grid()
+                                            // adds passive markers
+                                            // Used on mouse events
 
+    std::vector<size_t> grid;               // Grid containing marker index
+                                            // at each pixel (in pt_markers),
+                                            // row major (-1 if no marker)
+                                            // Populated by populate_grid()
+                                            // used on mouse events
+
+    bool loss_detail = false;                 // Whether some detail is lost (if set, will show error)
+private:
     std::deque<color::color> reuse_colors;    // Reusable colors
     size_t last_expr_color = 0;               // Next available color index if no reusable
                                               // one present(by color::from_int)
@@ -593,8 +622,6 @@ private:
     int dragx, dragy;
 
     size_t next_func_name = 0;                // Next available function name
-
-    bool loss_detail = false;                 // Whether some detail is lost (if set, will show error)
 };
 
 

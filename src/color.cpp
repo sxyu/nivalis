@@ -57,7 +57,7 @@ color from_hex(const std::string& hex) {
 
 std::string color::to_hex() const {
     static auto trunc = [](float f) -> int{
-        return std::min(std::max((int)std::round(f * 255.), 0), 255);
+        return std::min(std::max((int)(f * 255. + 0.5), 0), 255);
     };
     int tr = trunc(r), tg = trunc(g), tb = trunc(b);
     int t = (tr << 16) + (tg << 8) + tb;

@@ -13,7 +13,7 @@
 #include <utility>
 
 #include "plotter/common.hpp"
-#include "imgui.h"
+#include "plotter/imgui_adaptor.hpp"
 #include "imstb_textedit.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_glfw.h"
@@ -33,70 +33,21 @@
 
 namespace {
 using namespace nivalis;
-// Graphics adaptor for Plotter, with caching
-struct ImGuiDrawListGraphicsAdaptor {
-    void line(float ax, float ay, float bx, float by,
-            const color::color& c, float thickness = 1.) {
-        draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
-                ImColor(c.r, c.g, c.b, c.a), thickness);
-    }
-    void polyline(const std::vector<std::array<float, 2> >& points,
-            const color::color& c, float thickness = 1.) {
-        std::vector<ImVec2> line(points.size());
-        for (size_t i = 0; i < line.size(); ++i) {
-            line[i].x = (float) points[i][0];
-            line[i].y = (float) points[i][1];
-        }
-        draw_list->AddPolyline(&line[0], (int)line.size(), ImColor(c.r, c.g, c.b, c.a), false, thickness);
-    }
-    void rectangle(float x, float y, float w, float h, bool fill, const color::color& c) {
-        if (fill) {
-            draw_list->AddRectFilled(ImVec2(x,y), ImVec2(x+w, y+h),
-                    ImColor(c.r, c.g, c.b, c.a));
-        } else {
-            draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
-                    ImColor(c.r, c.g, c.b, c.a));
-        }
-    }
-    void circle(float x, float y, float r, bool fill, const color::color& c) {
-        if (fill) {
-            draw_list->AddCircleFilled(ImVec2(x,y), r,
-                    ImColor(c.r, c.g, c.b, c.a), std::min(r, 250.f));
-        } else {
-            draw_list->AddCircle(ImVec2(x,y), r,
-                    ImColor(c.r, c.g, c.b, c.a), std::min( r, 250.f));
-        }
-    }
-    // Axis-aligned ellipse
-    void ellipse(float x, float y, float rx, float ry,
-                 bool fill, const color::color& c) {
-        if (fill) {
-            draw_list->AddEllipseFilled(ImVec2(x,y), rx, ry,
-                    ImColor(c.r, c.g, c.b, c.a), std::min(.5f * (rx + ry), 250.f));
-        } else {
-            draw_list->AddEllipse(ImVec2(x,y), rx, ry,
-                    ImColor(c.r, c.g, c.b, c.a), std::min(.5f * (rx + ry), 250.f));
-        }
-    }
-    void string(float x, float y, const std::string& s, const color::color& c) {
-        // String using ImGui API
-        draw_list->AddText(ImVec2(x, y),
-                ImColor(c.r, c.g, c.b, c.a), s.c_str());
-    }
-
-    ImDrawList* draw_list = nullptr;
-};
 
 Plotter plot; // Main plotter
+Plotter worker_plot; // Worker plotter
 Environment& env = plot.env; // Main environment
 GLFWwindow* window; // GLFW window
 
 // Worker state
-bool worker_req_update;
-nivalis::Plotter::View worker_view;
 bool run_worker_flag;
 std::condition_variable worker_cv;
 std::mutex worker_mtx;
+std::stringstream state_encoding;
+
+// If true, then the redraw_canvas request is from WebWorker.
+// to prevent infinite update loop, do not call WebWorker in that case
+bool worker_req_update;
 
 // Draw worker thread entry point
 void draw_worker(nivalis::Plotter& plot) {
@@ -105,16 +56,29 @@ void draw_worker(nivalis::Plotter& plot) {
         {
             std::unique_lock<std::mutex> lock(worker_mtx);
             worker_cv.wait(lock, []{return run_worker_flag;});
-            view = worker_view;
+            view = worker_plot.view;
             run_worker_flag = false;
+            worker_plot.import_binary_func_and_env(state_encoding);
+            state_encoding.str("");
         }
-        plot.recalc(view);
+        worker_plot.render(view);
         std::lock_guard<std::mutex> lock(worker_mtx);
-        plot.swap();
+        // worker_plot.export_binary_render_result(output_encoding);
+        // plot.import_binary_render_result(output_encoding);
+        // Use swap rather than messaging for better performacne
+        plot.draw_buf.swap(worker_plot.draw_buf);
+        plot.pt_markers.swap(worker_plot.pt_markers);
         plot.require_update = true;
+        if (worker_plot.loss_detail) {
+            plot.func_error = worker_plot.func_error;
+        } else if (plot.loss_detail) {
+            plot.func_error.clear();
+        }
+        plot.loss_detail = worker_plot.loss_detail;
         worker_req_update = true;
     }
 }
+
 // Run worker if not already running AND either:
 // this update was not from the worker or
 // view has changed since last worker run
@@ -123,8 +87,10 @@ void maybe_run_worker(nivalis::Plotter& plot) {
     {
         std::lock_guard<std::mutex> lock(worker_mtx);
         run_worker_flag = !(worker_req_update &&
-                worker_view == plot.view);
-        worker_view = plot.view;
+                worker_plot.view == plot.view);
+        state_encoding.str("");
+        plot.export_binary_func_and_env(state_encoding);
+        worker_plot.view = plot.view;
         worker_req_update = false;
     }
     worker_cv.notify_one();
@@ -206,23 +172,30 @@ void main_loop_step() {
     }
 
     static ImDrawList draw_list_pre(ImGui::GetDrawListSharedData());
+    static Plotter::View plot_view_pre = plot.view;
+
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     adaptor.draw_list = draw_list;
     if (plot.require_update) {
         // Redraw
         plot.require_update = false;
         // Redraw the grid and functions
-        plot.draw_grid(adaptor);      // Draw axes and grid
+        plot.draw_grid(adaptor, plot_view_pre);      // Draw axes and grid
         {
             // Need lock since worker thread asynchroneously
             // swaps back buffer to front
             std::lock_guard<std::mutex> lock(worker_mtx);
-            plot.draw(adaptor);       // Draw functions
+            plot.populate_grid();                    // Populate grid of point markers for mouse events
+            plot.draw(adaptor, plot_view_pre);       // Draw functions
         }
         // Run worker if not already running AND either:
         // this update was not from the worker or
         // view has changed since last worker run
         maybe_run_worker(plot);
+
+        // Note view is delayed by one frame, so that if worker finishes updating
+        // in a single frame, we don't get border artifacts due to user movement
+        plot_view_pre = plot.view;
 
         // Cache the draw list
         draw_list_pre.CmdBuffer = draw_list->CmdBuffer;
@@ -708,14 +681,14 @@ void main_loop_step() {
 
     // * Handle IO events
     ImGuiIO &io = ImGui::GetIO();
+    int mouse_x = static_cast<int>(io.MousePos[0]);
+    int mouse_y = static_cast<int>(io.MousePos[1]);
+    if (io.MouseReleased[0]) {
+        plot.handle_mouse_up(mouse_x, mouse_y);
+    }
     if (!io.WantCaptureMouse) {
-        int mouse_x = static_cast<int>(io.MousePos[0]);
-        int mouse_y = static_cast<int>(io.MousePos[1]);
         if (io.MouseDown[0]) {
             plot.handle_mouse_down(mouse_x, mouse_y);
-        }
-        if (io.MouseReleased[0]) {
-            plot.handle_mouse_up(mouse_x, mouse_y);
         }
         static int mouse_prev_x = -1, mouse_prev_y = -1;
         if (mouse_x != mouse_prev_x || mouse_y != mouse_prev_y) {
@@ -747,6 +720,7 @@ void main_loop_step() {
     glfwSwapBuffers(window);
     glfwPollEvents();
 }  // void main_loop_step()
+
 }  // namespace
 
 // Helper for Initializing OpenGL
@@ -776,7 +750,7 @@ bool init_gl() {
     return true;
 }
 
-    // Main method
+// Main method
 int main(int argc, char ** argv) {
     using namespace nivalis;
     for (int i = 1; i < argc; ++i) {

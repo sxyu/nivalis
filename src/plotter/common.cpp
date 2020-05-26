@@ -6,6 +6,7 @@
 #include "json.hpp"
 #include "shell.hpp"
 #include <iomanip>
+#include <iostream>
 
 namespace {
 using json = nlohmann::json;
@@ -16,6 +17,9 @@ const unsigned NUM_THREADS =
 #else
     std::thread::hardware_concurrency();
 #endif
+
+#define _X_TO_SX(x) static_cast<float>(((x) - view.xmin) * view.swid / (view.xmax - view.xmin))
+#define _Y_TO_SY(y) static_cast<float>((view.ymax - (y)) * view.shigh / (view.ymax - view.ymin))
 
 bool is_var_name_reserved(const std::string& var_name) {
     return var_name == "x" || var_name == "y" ||
@@ -65,7 +69,7 @@ std::ostream& Function::to_bin(std::ostream& os) const {
     expr.to_bin(os); diff.to_bin(os);
     ddiff.to_bin(os); recip.to_bin(os);
     drecip.to_bin(os);
-    util::write_bin(os, line_color);
+    for (int i = 0; i < 4; ++i) util::write_bin(os, line_color.data[i]);
     util::write_bin(os, tmin);
     util::write_bin(os, tmax);
 
@@ -85,7 +89,7 @@ std::istream& Function::from_bin(std::istream& is) {
     expr.from_bin(is); diff.from_bin(is);
     ddiff.from_bin(is); recip.from_bin(is);
     drecip.from_bin(is);
-    util::read_bin(is, line_color);
+    for (int i = 0; i < 4; ++i) util::read_bin(is, line_color.data[i]);
     util::read_bin(is, tmin);
     util::read_bin(is, tmax);
 
@@ -102,14 +106,9 @@ std::ostream& FuncDrawObj::to_bin(std::ostream& os) const {
         util::write_bin(os, points[i]);
     }
     util::write_bin(os, thickness);
-    util::write_bin(os, c);
+    for (int i = 0; i < 4; ++i) util::write_bin(os, c.data[i]);
     util::write_bin(os, type);
     return os;
-}
-
-bool Function::uses_parameter_t() const{
- return type == Function::FUNC_TYPE_POLAR ||
-            type == Function::FUNC_TYPE_PARAMETRIC;
 }
 
 std::istream& FuncDrawObj::from_bin(std::istream& is) {
@@ -119,15 +118,24 @@ std::istream& FuncDrawObj::from_bin(std::istream& is) {
     }
 
     util::read_bin(is, thickness);
-    util::read_bin(is, c);
+    for (int i = 0; i < 4; ++i) util::read_bin(is, c.data[i]);
     util::read_bin(is, type);
 
     return is;
 }
 
+bool Function::uses_parameter_t() const{
+ return type == Function::FUNC_TYPE_POLAR ||
+            type == Function::FUNC_TYPE_PARAMETRIC;
+}
+
 bool Plotter::View::operator==(const View& other) const {
     return shigh == other.shigh && swid == other.swid && xmin == other.xmin && xmax == other.xmax &&
            ymin == other.ymin && ymax == other.ymax;
+}
+
+bool Plotter::View::operator!=(const View& other) const {
+    return !(other == *this);
 }
 
 Plotter::Plotter() : view{SCREEN_WIDTH, SCREEN_HEIGHT, 0., 0., 0., 0.}
@@ -151,7 +159,7 @@ Plotter::Plotter() : view{SCREEN_WIDTH, SCREEN_HEIGHT, 0., 0., 0., 0.}
     set_curr_func(0);
 }
 
-void Plotter::recalc(const View& view) {
+void Plotter::render(const View& view) {
     double xdiff = view.xmax - view.xmin, ydiff = view.ymax - view.ymin;
 
     // * Constants
@@ -197,10 +205,8 @@ void Plotter::recalc(const View& view) {
     loss_detail = false; // Will set to show 'some detail may be lost'
 
     // * Clear back buffers
-    pt_markers_back.clear(); pt_markers_back.reserve(500);
-    grid_back.resize(view.shigh * view.swid, -1);
-    std::fill(grid_back.begin(), grid_back.end(), -1);
-    draw_back_buf.clear();
+    pt_markers.clear(); pt_markers.reserve(500);
+    draw_buf.clear();
 
     // * Draw functions
     // BEGIN_PROFILE;
@@ -225,36 +231,20 @@ void Plotter::recalc(const View& view) {
                                     std::isinf(x) || std::isinf(y)) {
                                 continue;
                             }
-                            float sx = static_cast<float>((x - view.xmin) * view.swid / xdiff);
-                            float sy = static_cast<float>((view.ymax - y) * view.shigh / ydiff);
+                            float sx = _X_TO_SX(x), sy = _Y_TO_SY(y);
                             line.push_back({sx, sy});
                             buf_add_rectangle(view, sx - (float)mark_radius,
                                     sy - (float)mark_radius,
                                     (float)mark_radius*2 + 1.f,
                                     (float)mark_radius*2 + 1.f, true, func_color);
-                            size_t new_marker_idx = pt_markers_back.size();
-                            {
-                                PointMarker ptm;
-                                ptm.label = PointMarker::LABEL_NONE;
-                                ptm.y = y; ptm.x = x;
-                                ptm.passive = true;
-                                ptm.rel_func = exprid;
-                                pt_markers_back.push_back(std::move(ptm));
-                            }
-                            int cmin = std::max(static_cast<int>(sx - marker_clickable_radius), 0);
-                            int cmax = std::min(static_cast<int>(sx + marker_clickable_radius), view.swid - 1);
-                            int rmin = std::max(static_cast<int>(sy - marker_clickable_radius), 0);
-                            int rmax = std::min(static_cast<int>(sy + marker_clickable_radius), view.shigh - 1);
-                            if (cmin <= cmax) {
-                                for (int r = rmin; r <= rmax; ++r) {
-                                    std::fill(grid_back.begin() + (r * view.swid + cmin),
-                                            grid_back.begin() + (r * view.swid + cmax + 1),
-                                            new_marker_idx);
-                                }
-                            }
-
+                            PointMarker ptm;
+                            ptm.label = PointMarker::LABEL_NONE;
+                            ptm.y = y; ptm.x = x;
+                            ptm.passive = false;
+                            ptm.rel_func = exprid;
+                            pt_markers.push_back(std::move(ptm));
                         }
-                        buf_add_polyline(view, line, func_color, (curr_func == exprid) ? 3.f : 2.f);
+                        buf_add_polyline(view, line, func_color, exprid, (curr_func == exprid) ? 3.f : 2.f);
                     }
                 }
                 break;
@@ -274,7 +264,7 @@ void Plotter::recalc(const View& view) {
                     color::color ineq_color(func_color.r, func_color.g, func_color.b, 0.25);
 
                     // Coarse interval
-                    static const int COARSE_INTERVAL = 6;
+                    static const int COARSE_INTERVAL = 4;
 
                     // Function values in above line
                     std::vector<double> coarse_line(view.swid + 2);
@@ -292,13 +282,13 @@ void Plotter::recalc(const View& view) {
 
                     // Increase interval per x pixels
                     static const size_t HIGH_PIX_LIMIT =
-                        std::max<size_t>(50000 / NUM_THREADS, 20000);
+                        std::max<size_t>(200000 / NUM_THREADS, 20000);
                     // Maximum number of pixels to draw (stops drawing)
                     static const size_t MAX_PIXELS = 300000;
                     // Epsilon for bisection
                     static const double BISECTION_EPS = 1e-4;
 
-                    for (int csy = 0; csy < view.shigh + COARSE_INTERVAL - 1; csy += COARSE_INTERVAL) {
+                    for (int csy = -1; csy < view.shigh + COARSE_INTERVAL - 1; csy += COARSE_INTERVAL) {
                         int cyi = COARSE_INTERVAL;
                         if (csy >= view.shigh) {
                             csy = view.shigh - 1;
@@ -307,7 +297,7 @@ void Plotter::recalc(const View& view) {
                         }
                         const double cy = (view.shigh - csy)*1. / view.shigh * ydiff + view.ymin;
                         coarse_right_interesting = false;
-                        for (int csx = 0; csx < view.swid + COARSE_INTERVAL - 1; csx += COARSE_INTERVAL) {
+                        for (int csx = -1; csx < view.swid + COARSE_INTERVAL - 1; csx += COARSE_INTERVAL) {
                             int cxi = COARSE_INTERVAL;
                             if (csx >= view.swid) {
                                 csx = view.swid - 1;
@@ -322,19 +312,19 @@ void Plotter::recalc(const View& view) {
                             env.vars[y_var] = cy;
                             env.vars[x_var] = coarse_x;
                             double z = expr(env);
-                            if (csx >= cxi && csy >= cyi) {
+                            if (csx >= cxi-1 && csy >= cyi-1) {
                                 bool interesting_square = false;
                                 int sgn_z = (z < 0 ? -1 : z == 0 ? 0 : 1);
                                 bool interest_from_left = coarse_right_interesting;
-                                bool interest_from_above = coarse_below_interesting[csx];
-                                coarse_right_interesting = coarse_below_interesting[csx] = false;
-                                double zleft = coarse_line[csx - cxi];
+                                bool interest_from_above = coarse_below_interesting[csx+1];
+                                coarse_right_interesting = coarse_below_interesting[csx+1] = false;
+                                double zleft = coarse_line[csx+1 - cxi];
                                 int sgn_zleft = (zleft < 0 ? -1 : zleft == 0 ? 0 : 1);
                                 if (sgn_zleft * sgn_z <= 0) {
-                                    coarse_below_interesting[csx] = true;
+                                    coarse_below_interesting[csx+1] = true;
                                     interesting_square = true;
                                 }
-                                double zup = coarse_line[csx];
+                                double zup = coarse_line[csx+1];
                                 int sgn_zup = (zup < 0 ? -1 : zup == 0 ? 0 : 1);
                                 if (sgn_zup * sgn_z <= 0) {
                                     coarse_right_interesting = true;
@@ -356,7 +346,7 @@ void Plotter::recalc(const View& view) {
                                             (float)cxi, (float)cyi, true, ineq_color);
                                 }
                             }
-                            coarse_line[csx] = z;
+                            coarse_line[csx+1] = z;
                         }
                     }
 
@@ -370,7 +360,7 @@ void Plotter::recalc(const View& view) {
                         auto worker = [&]() {
                             std::vector<double> line(view.swid + 2);
                             std::vector<bool> fine_paint_below(view.swid + 2);
-                            std::vector<std::array<int, 2> > tdraws, tdraws_ineq;
+                            std::vector<std::array<int, 3> > tdraws, tdraws_ineq;
                             std::vector<PointMarker> tpt_markers;
                             Environment tenv = env;
                             bool fine_paint_right;
@@ -387,20 +377,20 @@ void Plotter::recalc(const View& view) {
                                 // Update interval based on point count
                                 fine_interval = static_cast<int>(tpix_cnt /
                                             HIGH_PIX_LIMIT) + 1;
-                                if (fine_interval >= 4) fine_interval = 6;
+                                if (fine_interval >= 3) fine_interval = 4;
 
                                 int ylo, yhi, xlo, xhi; double z_at_xy_hi;
                                 std::tie(ylo, yhi, xlo, xhi, z_at_xy_hi) = sqr;
 
-                                std::fill(fine_paint_below.begin() + xlo,
-                                        fine_paint_below.begin() + (xhi + 1), false);
+                                std::fill(fine_paint_below.begin() + (xlo + 1),
+                                        fine_paint_below.begin() + (xhi + 2), false);
                                 for (int sy = ylo; sy <= yhi; sy += fine_interval) {
                                     fine_paint_right = false;
                                     const double y = (view.shigh - sy)*1. / view.shigh * ydiff + view.ymin;
                                     for (int sx = xlo; sx <= xhi; sx += fine_interval) {
 
                                         const double x = 1.*sx / view.swid * xdiff + view.xmin;
-                                        double precise_x = x, precise_y = y;
+                                        // double precise_x = x, precise_y = y;
 
                                         double z;
                                         if (sy == yhi && sx == xhi) {
@@ -414,70 +404,62 @@ void Plotter::recalc(const View& view) {
                                             int sgn_z = (z < 0 ? -1 : z == 0 ? 0 : 1);
                                             bool paint_square = false;
                                             bool paint_from_left = fine_paint_right;
-                                            bool paint_from_above = fine_paint_below[sx];
-                                            fine_paint_right = fine_paint_below[sx] = false;
-                                            double zup = line[sx];
+                                            bool paint_from_above = fine_paint_below[sx+1];
+                                            fine_paint_right = fine_paint_below[sx+1] = false;
+                                            double zup = line[sx+1];
                                             int sgn_zup = (zup < 0 ? -1 : zup == 0 ? 0 : 1);
                                             if (sgn_zup * sgn_z <= 0) {
-                                                // Bisect up
-                                                tenv.vars[x_var] = x;
-                                                double lo = y;
-                                                double hi = (view.shigh - (sy - fine_interval))*1. / view.shigh * ydiff + view.ymin;
-                                                while (hi - lo > BISECTION_EPS) {
-                                                    double mi = (lo + hi) / 2;
-                                                    tenv.vars[y_var] = mi;
-                                                    double zmi = expr(tenv);
-                                                    int sgn_zmi = (zmi < 0 ? -1 : 1);
-                                                    if (sgn_z == sgn_zmi) lo = mi;
-                                                    else hi = mi;
-                                                }
-                                                precise_y = lo;
+                                            //     // Bisect up
+                                            //     tenv.vars[x_var] = x;
+                                            //     double lo = y;
+                                            //     double hi = (view.shigh - (sy - fine_interval))*1. / view.shigh * ydiff + view.ymin;
+                                            //     while (hi - lo > BISECTION_EPS) {
+                                            //         double mi = (lo + hi) / 2;
+                                            //         tenv.vars[y_var] = mi;
+                                            //         double zmi = expr(tenv);
+                                            //         int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                            //         if (sgn_z == sgn_zmi) lo = mi;
+                                            //         else hi = mi;
+                                            //     }
+                                            //     precise_y = lo;
                                                 paint_square = fine_paint_right = true;
                                             }
-                                            double zleft = line[sx - fine_interval];
+                                            double zleft = line[sx+1 - fine_interval];
                                             int sgn_zleft = (zleft < 0 ? -1 : zleft == 0 ? 0 : 1);
                                             if (sgn_zleft * sgn_z <= 0) {
-                                                if (!paint_square) {
-                                                    // Bisect left
-                                                    tenv.vars[y_var] = y;
-                                                    double lo = 1.*(sx - fine_interval) / view.swid * xdiff + view.xmin;
-                                                    double hi = x;
-                                                    while (hi - lo > BISECTION_EPS) {
-                                                        double mi = (lo + hi) / 2;
-                                                        tenv.vars[x_var] = mi;
-                                                        double zmi = expr(tenv);
-                                                        int sgn_zmi = (zmi < 0 ? -1 : 1);
-                                                        if (sgn_zleft == sgn_zmi) lo = mi;
-                                                        else hi = mi;
-                                                    }
-                                                    precise_x = lo;
-                                                }
-                                                paint_square = fine_paint_below[sx] = true;
+                                                // if (!paint_square) {
+                                                //     // Bisect left
+                                                //     tenv.vars[y_var] = y;
+                                                //     double lo = 1.*(sx - fine_interval) / view.swid * xdiff + view.xmin;
+                                                //     double hi = x;
+                                                //     while (hi - lo > BISECTION_EPS) {
+                                                //         double mi = (lo + hi) / 2;
+                                                //         tenv.vars[x_var] = mi;
+                                                //         double zmi = expr(tenv);
+                                                //         int sgn_zmi = (zmi < 0 ? -1 : 1);
+                                                //         if (sgn_zleft == sgn_zmi) lo = mi;
+                                                //         else hi = mi;
+                                                //     }
+                                                //     precise_x = lo;
+                                                // }
+                                                paint_square = fine_paint_below[sx+1] = true;
                                             }
                                             if (paint_square || paint_from_left || paint_from_above) {
-                                                float precise_sy =
-                                                    static_cast<float>(
-                                                            (view.ymax - y) / ydiff * view.shigh);
-                                                float precise_sx = static_cast<float>(
-                                                        (x - view.xmin) / xdiff * view.swid);
-                                                tdraws.push_back({sx, sy});
-                                                // Add labels
-                                                PointMarker new_marker;
-                                                new_marker.x = precise_x; new_marker.y = precise_y;
-                                                new_marker.sx = sx; new_marker.sy = sy;
-                                                new_marker.rel_func = exprid;
-                                                new_marker.label = PointMarker::LABEL_NONE;
-                                                new_marker.passive = true;
-                                                tpt_markers.push_back(std::move(new_marker));
+                                                // float precise_sy =
+                                                //     static_cast<float>(
+                                                //             (view.ymax - y) / ydiff * view.shigh);
+                                                // float precise_sx = static_cast<float>(
+                                                //         (x - view.xmin) / xdiff * view.swid);
+                                                tdraws.push_back({sx, sy, fine_interval});
                                                 ++tpix_cnt;
                                             } else if (sgn_z >= 0 &&
                                                     func.type !=
                                                     Function::FUNC_TYPE_IMPLICIT) {
                                                 // Inequality region
-                                                tdraws_ineq.push_back({sx, sy});
+                                                tdraws_ineq.push_back({sx, sy, fine_interval});
                                             }
                                         }
-                                        line[sx] = z;
+                                        line[sx+1] = z;
                                     }
                                 }
                             }
@@ -490,39 +472,28 @@ void Plotter::recalc(const View& view) {
                                     // Draw function line (boundary
                                     for (auto& p : tdraws) {
                                         buf_add_rectangle(view,
-                                                p[0] + (float)(- fine_interval + 1 - pad),
-                                                p[1] + (float)(- fine_interval + 1 - pad),
-                                                (float)(fine_interval + pad),
-                                                (float)(fine_interval + pad),
+                                                p[0] + (float)(- p[2] + 1 - pad),
+                                                p[1] + (float)(- p[2] + 1 - pad),
+                                                (float)(p[2] + pad),
+                                                (float)(p[2] + pad),
                                                 true, func_color);
                                     }
                                 }
                                 for (auto& p : tdraws_ineq) {
                                     // Draw inequality region
                                     buf_add_rectangle(view,
-                                            p[0] + (float)(- fine_interval + 1),
-                                            p[1] + (float)(- fine_interval + 1),
-                                            (float)fine_interval,
-                                            (float)fine_interval,
+                                            p[0] + (float)(- p[2] + 1),
+                                            p[1] + (float)(- p[2] + 1),
+                                            (float)p[2],
+                                            (float)p[2],
                                             true,
                                             ineq_color);
                                 }
 
-                                for (auto& pm : tpt_markers) {
-                                    const int sx = pm.sx, sy = pm.sy;
-                                    size_t new_marker_idx = pt_markers_back.size();
-                                    pt_markers_back.push_back(pm);
-                                    int cmin = std::max(sx - fine_interval + 1 - marker_clickable_radius, 0);
-                                    int cmax = std::min(sx + marker_clickable_radius, view.swid - 1);
-                                    if (cmin <= cmax) {
-                                        for (int r = std::max(sy - fine_interval + 1 - marker_clickable_radius, 0);
-                                                r <= std::min(sy + marker_clickable_radius, view.shigh - 1); ++ r) {
-                                            std::fill(grid_back.begin() + (r * view.swid + cmin),
-                                                    grid_back.begin() + (r * view.swid + cmax + 1),
-                                                    new_marker_idx);
-                                        }
-                                    }
-                                }
+                                size_t sz = pt_markers.size();
+                                pt_markers.resize(sz + tpt_markers.size());
+                                std::move(tpt_markers.begin(), tpt_markers.end(),
+                                        pt_markers.begin() + sz);
 
                                 // Show detail lost warning
                                 if (fine_interval > 1) loss_detail = true;
@@ -566,13 +537,10 @@ void Plotter::recalc(const View& view) {
                             double r = func.expr(env);
                             x = r * cos(t); y = r * sin(t);
                         }
-                        float sx = static_cast<float>((x - view.xmin)
-                                * view.swid / xdiff);
-                        float sy = static_cast<float>((view.ymax - y)
-                                * view.shigh / ydiff);
+                        float sx = _X_TO_SX(x), sy = _Y_TO_SY(y);
                         curr_line.push_back({sx, sy});
                     }
-                    buf_add_polyline(view, curr_line, func_color,
+                    buf_add_polyline(view, curr_line, func_color, exprid,
                             curr_func == exprid ? 3 : 2.);
                 }
                 break;
@@ -639,47 +607,11 @@ void Plotter::recalc(const View& view) {
                     // to allow clicking
                     auto draw_line = [&](float psx, float psy, float sx, float sy, double x, double y) {
                         float miny = std::min(sy, psy), maxy = sy + psy - miny;
-
-                        // Construct a (passive) point marker for this point,
-                        // so that the user can click to see the position
-                        size_t new_marker_idx = pt_markers_back.size();
-                        pt_markers_back.emplace_back();
-                        auto& new_marker = pt_markers_back.back();
-                        new_marker.x = x; new_marker.y = y;
-                        new_marker.rel_func = exprid;
-                        new_marker.label = PointMarker::LABEL_NONE;
-                        new_marker.sx = static_cast<int>(sx + psx) / 2;
-                        new_marker.sy = static_cast<int>(sy + psy) / 2;
-                        new_marker.passive = true;
-
-                        int sxi = static_cast<int>(sx);
-                        int syi = static_cast<int>(sy);
-                        int minyi = std::max(static_cast<int>(miny) - marker_clickable_radius, 0);
-                        int maxyi = std::min(static_cast<int>(maxy) + marker_clickable_radius, view.shigh-1);
-                        for (int r = minyi; r <= maxyi; ++r) {
-                            int cmin = std::max(sxi - marker_clickable_radius, 0);
-                            int cmax = std::min(sxi + marker_clickable_radius, view.swid-1);
-                            // Assign to grid_back
-                            for (int c = cmin; c <= cmax; ++c) {
-                                size_t existing_marker_idx = grid_back[r * view.swid + c];
-                                if (~existing_marker_idx) {
-                                    auto& existing_marker = pt_markers_back[existing_marker_idx];
-                                    if (util::sqr_dist(existing_marker.sx,
-                                                existing_marker.sy, c, r) <=
-                                            util::sqr_dist(new_marker.sx,
-                                                new_marker.sy, c, r)) {
-                                        // If existing marker is closer, do not overwrite it
-                                        continue;
-                                    }
-                                }
-                                grid_back[r * view.swid + c] = new_marker_idx;
-                            }
-                        }
                         // Draw the line
                         if (curr_line.empty() ||
                                 (psx > curr_line.back()[0] || psy != curr_line.back()[1])) {
                             if (curr_line.size() > 1) {
-                                buf_add_polyline(view, curr_line, func_color,
+                                buf_add_polyline(view, curr_line, func_color, exprid,
                                         curr_func == exprid ? 3 : 2.);
                             }
                             curr_line.resize(2);
@@ -752,7 +684,7 @@ void Plotter::recalc(const View& view) {
                     for (const auto& discontinuity : discont) {
                         double discont_x = discontinuity.first;
                         int discont_type = discontinuity.second;
-                        float discont_sx = static_cast<float>((discont_x - view.xmin) / xdiff * view.swid);
+                        float discont_sx = _X_TO_SX(discont_x);
                         if (as_idx > 0) {
                             bool connector = prev_discont_type != DISCONT_SCREEN;
                             // Draw func between asymptotes
@@ -765,8 +697,7 @@ void Plotter::recalc(const View& view) {
                                 if (!std::isnan(y)) {
                                     if (y > view.ymax + ydiff) y = view.ymax + ydiff;
                                     else if (y < view.ymin - ydiff) y = view.ymin - ydiff;
-                                    float sy = static_cast<float>((view.ymax - y) * view.shigh / ydiff);
-                                    float sx = sxd;
+                                    float sy = _Y_TO_SY(y), sx = sxd;
                                     if (reinit) {
                                         if (!(y > view.ymax || y < view.ymin)) {
                                             reinit = false;
@@ -851,7 +782,7 @@ void Plotter::recalc(const View& view) {
 
                     // Finish last line, if exists
                     if (curr_line.size() > 1) {
-                        buf_add_polyline(view, curr_line, func_color,
+                        buf_add_polyline(view, curr_line, func_color, exprid,
                                 curr_func == exprid ? 3 : 2.);
                     }
                     std::vector<CritPoint> to_erase; // Save dubious points to delete from roots_and_extrama
@@ -881,21 +812,12 @@ void Plotter::recalc(const View& view) {
                                 sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
                                 2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
                         buf_add_rectangle(view, sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
-                        size_t idx = pt_markers_back.size();
-                        {
-                            PointMarker ptm;
-                            ptm.label = label;
-                            ptm.y = y; ptm.x = x;
-                            ptm.sx = sx; ptm.sy = sy;
-                            ptm.passive = false;
-                            ptm.rel_func = exprid;
-                            pt_markers_back.push_back(std::move(ptm));
-                        }
-                        for (int r = std::max(sy - marker_clickable_radius, 0); r <= std::min(sy + marker_clickable_radius, view.shigh-1); ++r) {
-                            for (int c = std::max(sx - marker_clickable_radius, 0); c <= std::min(sx + marker_clickable_radius, view.swid-1); ++c) {
-                                grid_back[r * view.swid + c] = idx;
-                            }
-                        }
+                        PointMarker ptm;
+                        ptm.label = label;
+                        ptm.y = y; ptm.x = x;
+                        ptm.passive = false;
+                        ptm.rel_func = exprid;
+                        pt_markers.push_back(std::move(ptm));
                     };
                     for (const CritPoint& cpt : roots_and_extrema) {
                         env.vars[x_var] = cpt.first;
@@ -951,25 +873,13 @@ void Plotter::recalc(const View& view) {
                                         sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
                                         2*MARKER_DISP_RADIUS+1, false,
                                         func2.line_color);
-                                size_t idx = pt_markers_back.size();
-                                {
-                                    PointMarker ptm;
-                                    ptm.label = PointMarker::LABEL_INTERSECTION;
-                                    ptm.x = x; ptm.y = y;
-                                    ptm.passive = false;
-                                    ptm.rel_func = -1;
-                                    pt_markers_back.push_back(std::move(ptm));
-                                }
-                                for (int r = std::max(sy - marker_clickable_radius, 0);
-                                        r <= std::min(sy + marker_clickable_radius,
-                                            view.shigh-1); ++r) {
-                                    for (int c = std::max(
-                                                sx - marker_clickable_radius, 0);
-                                            c <= std::min(sx + marker_clickable_radius,
-                                                view.swid-1); ++c) {
-                                        grid_back[r * view.swid + c] = idx;
-                                    }
-                                }
+                                size_t idx = pt_markers.size();
+                                PointMarker ptm;
+                                ptm.label = PointMarker::LABEL_INTERSECTION;
+                                ptm.x = x; ptm.y = y;
+                                ptm.passive = false;
+                                ptm.rel_func = -1;
+                                pt_markers.push_back(std::move(ptm));
                             } // for x : st
                         } // for exprid2
                     } // if (!func.diff.is_null())
@@ -985,14 +895,86 @@ void Plotter::recalc(const View& view) {
         func_error.clear();
     }
 }
-void Plotter::recalc() {
-    recalc(view);
+void Plotter::render() {
+    render(view);
 }
 
-void Plotter::swap() {
-    draw_buf.swap(draw_back_buf);
-    grid.swap(grid_back);
-    pt_markers.swap(pt_markers_back);
+void Plotter::populate_grid() {
+    const int r = marker_clickable_radius;
+    grid.resize(view.swid * view.shigh);
+    std::fill(grid.begin(), grid.end(), -1);
+
+    thread_local std::deque<
+            std::array<int, 4> // y x id dist
+            > que;
+
+    que.clear();
+    auto bfs = [&]{
+        // BFS to fill grid
+        while(!que.empty()) {
+            auto v = que.front();
+            int sy = v[0], sx = v[1], id = v[2], d = v[3];
+            grid[sy * view.swid + sx] = id;
+            que.pop_front();
+            if (d >= marker_clickable_radius) continue;
+            if (sy > 0 && grid[(sy - 1) * view.swid + sx] == -1) {
+                que.push_back({ sy - 1, sx, id, d + 1});
+            }
+            if (sx > 0 && grid[sy * view.swid + sx - 1] == -1) {
+                que.push_back({ sy, sx - 1, id, d + 1});
+            }
+            if (sx < view.swid - 1 && grid[sy * view.swid + sx + 1] == -1) {
+                que.push_back({ sy, sx + 1, id, d + 1});
+            }
+            if (sy < view.shigh - 1 && grid[(sy + 1) * view.swid + sx] == -1) {
+                que.push_back({ sy + 1, sx, id, d + 1});
+            }
+        }
+    };
+
+    // Push non-passive markers (crit points, should cover other points)
+    for (size_t id = 0; id < pt_markers.size(); ++id) {
+        auto& ptm = pt_markers[id];
+        int sx = (int)(0.5 + _X_TO_SX(ptm.x));
+        int sy = (int)(0.5 + _Y_TO_SY(ptm.y));
+        if (sx < 0 || sy < 0 || sx >= view.swid || sy >= view.shigh)
+            continue;
+        que.push_back({ sy, sx, (int)id, 0 });
+    }
+    bfs();
+
+    // Construct and push passive markers
+    for (size_t i = 0; i < draw_buf.size(); ++i) {
+        const auto & obj = draw_buf[i];
+        if (obj.type == FuncDrawObj::POLYLINE) {
+            const auto& points = obj.points;
+            for (size_t j = 1; j < points.size(); ++j) {
+                const std::array<double, 2>& p = points[j - 1];
+                const std::array<double, 2>& q = points[j];
+                size_t id = pt_markers.size();
+                {
+                    PointMarker ptm;
+                    ptm.x = p[0]; ptm.y = p[1];
+                    ptm.label = PointMarker::LABEL_NONE;
+                    ptm.rel_func = obj.rel_func;
+                    ptm.passive = true;
+                    pt_markers.push_back(std::move(ptm));
+                }
+                int psx = (int)(0.5 + _X_TO_SX(p[0]));
+                int qsx = (int)(0.5 + _X_TO_SX(q[0]));
+                if (psx < 0 || psx >= view.swid || qsx - psx > 1) continue;
+
+                int psy = (int)(0.5 + _Y_TO_SY(p[1]));
+                int qsy = (int)(0.5 + _Y_TO_SY(q[1]));
+                int dir = qsy >= psy ? 1 : -1;
+                for (int r = std::min(std::max(psy, 0), view.shigh - 1);
+                        r != std::min(std::max(qsy, 0), view.shigh - 1) + dir; r += dir) {
+                    que.push_back({ r, psx, (int)id - 1, 0 });
+                }
+            }
+        }
+    }
+    bfs();
 }
 
 void Plotter::reparse_expr(size_t idx) {
@@ -1729,6 +1711,74 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
     return is;
 }
 
+std::ostream& Plotter::export_binary_func_and_env(std::ostream& os) const {
+    util::write_bin(os, curr_func);
+    util::write_bin(os, funcs.size());
+    for (size_t i = 0; i < funcs.size(); ++i) {
+        funcs[i].to_bin(os);
+    }
+    util::write_bin(os, view);
+    util::write_bin(os, x_var);
+    util::write_bin(os, y_var);
+    util::write_bin(os, t_var);
+    util::write_bin(os, r_var);
+    env.to_bin(os);
+    return os;
+}
+
+std::istream& Plotter::import_binary_func_and_env(std::istream& is) {
+    util::read_bin(is, curr_func);
+    util::resize_from_read_bin(is, funcs);
+    for (size_t i = 0; i < funcs.size(); ++i) {
+        funcs[i].from_bin(is);
+    }
+    util::read_bin(is, view);
+    util::read_bin(is, x_var);
+    util::read_bin(is, y_var);
+    util::read_bin(is, t_var);
+    util::read_bin(is, r_var);
+    env.from_bin(is);
+    return is;
+}
+
+std::ostream& Plotter::export_binary_render_result(std::ostream& os) const {
+    util::write_bin(os, draw_buf.size());
+    for (size_t i = 0; i < draw_buf.size(); ++i) {
+        draw_buf[i].to_bin(os);
+    }
+    util::write_bin(os, pt_markers.size());
+    for (size_t i = 0; i < pt_markers.size(); ++i) {
+        util::write_bin(os, pt_markers[i]);
+    }
+    util::write_bin(os, func_error.size());
+    os.write(func_error.c_str(), func_error.size());
+    util::write_bin(os, loss_detail);
+    return os;
+}
+std::istream& Plotter::import_binary_render_result(std::istream& is) {
+    util::resize_from_read_bin(is, draw_buf);
+    for (size_t i = 0; i < draw_buf.size(); ++i) {
+        draw_buf[i].from_bin(is);
+    }
+    util::resize_from_read_bin(is, pt_markers);
+    for (size_t i = 0; i < pt_markers.size(); ++i) {
+        util::read_bin(is, pt_markers[i]);
+    }
+    std::string func_error_tmp;
+    util::resize_from_read_bin(is, func_error_tmp);
+    is.read(&func_error_tmp[0], func_error_tmp.size());
+    bool loss_detail_tmp;
+    util::read_bin(is, loss_detail_tmp);
+    if (loss_detail_tmp) {
+        func_error = func_error_tmp;
+    } else if (loss_detail) {
+        func_error.clear();
+    }
+    loss_detail = loss_detail_tmp;
+    require_update = true;
+    return is;
+}
+
 void Plotter::detect_marker_click(int px, int py, bool no_passive) {
     auto& ptm = pt_markers[grid[py * view.swid + px]];
     if (ptm.passive && no_passive) return;
@@ -1744,35 +1794,37 @@ void Plotter::detect_marker_click(int px, int py, bool no_passive) {
     }
 }
 
-void Plotter::buf_add_polyline(const View& recalc_view,
+void Plotter::buf_add_polyline(const View& render_view,
         const std::vector<std::array<float, 2> >& points,
-        const color::color& c, float thickness) {
+        const color::color& c, size_t rel_func, float thickness) {
     FuncDrawObj obj;
     obj.points.resize(points.size());
     for (size_t i = 0; i < points.size(); ++i) {
-        obj.points[i][0] = points[i][0]*1. / recalc_view.swid *
-            (recalc_view.xmax - recalc_view.xmin) + recalc_view.xmin;
-        obj.points[i][1] = (recalc_view.shigh - points[i][1])*1. /
-            recalc_view.shigh * (recalc_view.ymax - recalc_view.ymin) + recalc_view.ymin;
+        obj.points[i][0] = points[i][0]*1. / render_view.swid *
+            (render_view.xmax - render_view.xmin) + render_view.xmin;
+        obj.points[i][1] = (render_view.shigh - points[i][1])*1. /
+            render_view.shigh * (render_view.ymax - render_view.ymin) + render_view.ymin;
     }
     obj.type = FuncDrawObj::POLYLINE;
+    obj.rel_func = rel_func;
     obj.c = c;
     obj.thickness = thickness;
-    draw_back_buf.push_back(std::move(obj));
+    draw_buf.push_back(std::move(obj));
 }
-void Plotter::buf_add_rectangle(const View& recalc_view,
+void Plotter::buf_add_rectangle(const View& render_view,
         float x, float y, float w, float h, bool fill, const color::color& c) {
     FuncDrawObj rect;
     rect.type = fill ? FuncDrawObj::FILLED_RECT : FuncDrawObj::RECT;
     rect.points = {{(double)x, (double)y}, {(double)(x+w), (double)(y+h)}};
-    auto xdiff = recalc_view.xmax - recalc_view.xmin;
-    auto ydiff = recalc_view.ymax - recalc_view.ymin;
+    rect.rel_func = -1; // Not used
+    auto xdiff = render_view.xmax - render_view.xmin;
+    auto ydiff = render_view.ymax - render_view.ymin;
     for (size_t i = 0; i < rect.points.size(); ++i) {
-        rect.points[i][0] = rect.points[i][0]*1. / recalc_view.swid * xdiff + recalc_view.xmin;
-        rect.points[i][1] = (recalc_view.shigh - rect.points[i][1])*1. / recalc_view.shigh * ydiff + recalc_view.ymin;
+        rect.points[i][0] = rect.points[i][0]*1. / render_view.swid * xdiff + render_view.xmin;
+        rect.points[i][1] = (render_view.shigh - rect.points[i][1])*1. / render_view.shigh * ydiff + render_view.ymin;
     }
-    if (fill && draw_back_buf.size()) {
-        auto& last_rect = draw_back_buf.back();
+    if (fill && draw_buf.size()) {
+        auto& last_rect = draw_buf.back();
         if (last_rect.type == FuncDrawObj::FILLED_RECT &&
                 std::fabs(last_rect.points[0][1] - rect.points[0][1]) < 1e-6 * ydiff &&
                 std::fabs(last_rect.points[1][1] - rect.points[1][1]) < 1e-6 * ydiff &&
@@ -1792,6 +1844,6 @@ void Plotter::buf_add_rectangle(const View& recalc_view,
         }
     }
     rect.c = c;
-    draw_back_buf.push_back(std::move(rect));
+    draw_buf.push_back(std::move(rect));
 }
 }  // namespace nivalis

@@ -60,9 +60,10 @@ set(
     expr.hpp
     util.hpp
     opcodes.hpp
-    plotter/common.hpp
     shell.hpp
     color.hpp
+    plotter/common.hpp
+    plotter/imgui_adaptor.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
@@ -77,8 +78,9 @@ set(
     optimize_expr.cpp
     diff_expr.cpp
     shell.cpp
-    plotter/common.cpp
     color.cpp
+    plotter/common.cpp
+    plotter/imgui_adaptor.cpp
 )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 set(
@@ -134,6 +136,14 @@ if (EMSCRIPTEN)
     add_executable( ${PLOT_GUI_PROJ_NAME} "${SRC_DIR}/main_web.cpp" )
     target_link_libraries( ${PLOT_GUI_PROJ_NAME}
         ${LIB_PROJ_NAME} ${PROJ_DEPENDENCIES} )
+
+    add_executable( worker "${SRC_DIR}/main_webworker.cpp" )
+    target_link_libraries( worker
+        ${LIB_PROJ_NAME} ${PROJ_DEPENDENCIES} )
+    set_target_properties( worker
+        PROPERTIES COMPILE_FLAGS "-s EXPORTED_FUNCTIONS='[\"_webworker_sync\"]' -s BUILD_AS_WORKER=1")
+    set_target_properties( worker
+        PROPERTIES LINK_FLAGS "-s EXPORTED_FUNCTIONS='[\"_webworker_sync\"]' -s BUILD_AS_WORKER=1")
 
     # Concat JS files automatically
     SET(FILELIST "")
