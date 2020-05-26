@@ -9,17 +9,19 @@ void ImGuiDrawListGraphicsAdaptor::line(float ax, float ay, float bx, float by,
 }
 void ImGuiDrawListGraphicsAdaptor::polyline(const std::vector<std::array<float, 2> >& points,
         const color::color& c, float thickness) {
-    // std::vector<ImVec2> line(points.size());
-    for (size_t i = 0; i < points.size()-1; ++i) {
-        // line[i].x = points[i][0];
-        // line[i].y = points[i][1];
-        draw_list->AddLine(ImVec2(points[i][0], points[i][1]),
-                           ImVec2(points[i+1][0], points[i+1][1]),
-                           ImColor(c.r, c.g, c.b, c.a), thickness);
+    std::vector<ImVec2> line(points.size());
+    for (size_t i = 0; i < points.size(); ++i) {
+        line[i].x = points[i][0];
+        line[i].y = points[i][1];
     }
+    // for (size_t i = 0; i < points.size()-1; ++i) {
+    //     draw_list->AddLine(ImVec2(points[i][0], points[i][1]),
+    //                        ImVec2(points[i+1][0], points[i+1][1]),
+    //                        ImColor(c.r, c.g, c.b, c.a), thickness);
+    // }
     // ImGui's polyline is bugged currently, has weird artifacts
     // (even though I am already using code from a PR purporting to fix it)
-    // draw_list->AddPolyline(&line[0], (int)line.size(), ImColor(c.r, c.g, c.b, c.a), false, thickness);
+    draw_list->AddPolyline(&line[0], (int)line.size(), ImColor(c.r, c.g, c.b, c.a), false, thickness);
 }
 void ImGuiDrawListGraphicsAdaptor::rectangle(float x, float y, float w, float h, bool fill, const color::color& c) {
     if (fill) {

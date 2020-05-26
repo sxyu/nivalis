@@ -630,38 +630,38 @@ void Plotter::render(const View& view) {
                             if (!is_y_nan) {
                                 double dy = func.diff(env);
                                 if (!std::isnan(dy)) {
-                                    // double root = expr.newton(NEWTON_ARGS, &func.diff, y, dy);
-                                    // push_critpt_if_valid(root, ROOT, roots_and_extrema);
+                                    double root = expr.newton(NEWTON_ARGS, &func.diff, y, dy);
+                                    push_critpt_if_valid(root, ROOT, roots_and_extrema);
                                     double asymp = func.recip.newton(NEWTON_ARGS,
                                             &func.drecip, 1. / y, -dy / (y*y));
                                     push_critpt_if_valid(asymp, DISCONT_ASYMPT, discont);
 
-                                    // double ddy = func.ddiff(env);
-                                    // if (!std::isnan(ddy)) {
-                                    //     double extr = func.diff.newton(NEWTON_ARGS,
-                                    //             &func.ddiff, dy, ddy);
-                                    //     push_critpt_if_valid(extr, EXTREMUM, roots_and_extrema);
-                                    // }
+                                    double ddy = func.ddiff(env);
+                                    if (!std::isnan(ddy)) {
+                                        double extr = func.diff.newton(NEWTON_ARGS,
+                                                &func.ddiff, dy, ddy);
+                                        push_critpt_if_valid(extr, EXTREMUM, roots_and_extrema);
+                                    }
                                 }
                             }
                             if (sx) {
-                                // const bool is_prev_y_nan = std::isnan(prev_y);
-                                // if (is_y_nan != is_prev_y_nan) {
-                                //     // Search for cutoff via bisection
-                                //     double lo = prev_x, hi = x;
-                                //     while (hi - lo > DOMAIN_BISECTION_EPS) {
-                                //         double mi = (lo + hi) * 0.5;
-                                //         env.vars[x_var] = mi; double mi_y = expr(env);
-                                //         if (std::isnan(mi_y) == is_prev_y_nan) {
-                                //             lo = mi;
-                                //         } else {
-                                //             hi = mi;
-                                //         }
-                                //     }
-                                //     double boundary_x_not_nan_side = is_prev_y_nan ? hi : lo;
-                                //     push_critpt_if_valid(boundary_x_not_nan_side,
-                                //             DISCONT_DOMAIN, discont);
-                                // }
+                                const bool is_prev_y_nan = std::isnan(prev_y);
+                                if (is_y_nan != is_prev_y_nan) {
+                                    // Search for cutoff via bisection
+                                    double lo = prev_x, hi = x;
+                                    while (hi - lo > DOMAIN_BISECTION_EPS) {
+                                        double mi = (lo + hi) * 0.5;
+                                        env.vars[x_var] = mi; double mi_y = expr(env);
+                                        if (std::isnan(mi_y) == is_prev_y_nan) {
+                                            lo = mi;
+                                        } else {
+                                            hi = mi;
+                                        }
+                                    }
+                                    double boundary_x_not_nan_side = is_prev_y_nan ? hi : lo;
+                                    push_critpt_if_valid(boundary_x_not_nan_side,
+                                            DISCONT_DOMAIN, discont);
+                                }
                             }
                             prev_x = x; prev_y = y;
                         }
@@ -804,12 +804,6 @@ void Plotter::render(const View& view) {
                             return;
                         }
 
-                        // int sy = static_cast<int>((view.ymax - y) / ydiff * view.shigh);
-                        // int sx = static_cast<int>((x - view.xmin) / xdiff * view.swid);
-                        // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
-                        //         sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
-                        //         2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
-                        // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
                         PointMarker ptm;
                         ptm.label = label;
                         ptm.y = y; ptm.x = x;
@@ -857,20 +851,6 @@ void Plotter::render(const View& view) {
                             for (double x : st) {
                                 env.vars[x_var] = x;
                                 double y = expr(env);
-                                // int sy = static_cast<int>((view.ymax - y) /
-                                //                           ydiff * view.shigh);
-                                // int sx = static_cast<int>((x - view.xmin) /
-                                //                           xdiff * view.swid);
-                                // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
-                                //         sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS,
-                                //         2*MARKER_DISP_RADIUS, true, color::LIGHT_GRAY);
-                                // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS-1,
-                                //         sy-MARKER_DISP_RADIUS-1, 2*MARKER_DISP_RADIUS+1,
-                                //         2*MARKER_DISP_RADIUS+1, false, func.line_color);
-                                // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
-                                //         sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
-                                //         2*MARKER_DISP_RADIUS+1, false,
-                                //         func2.line_color);
                                 size_t idx = pt_markers.size();
                                 PointMarker ptm;
                                 ptm.label = PointMarker::LABEL_INTERSECTION;
@@ -1396,7 +1376,9 @@ void Plotter::handle_mouse_down(int px, int py) {
                 ~grid[py * view.swid + px]) {
             // Show marker
             detect_marker_click(px, py);
-            draglabel = true;
+            // draglabel = true;
+            dragdown = true;
+            dragx = px; dragy = py;
         } else {
             // Begin dragging window
             dragdown = true;
