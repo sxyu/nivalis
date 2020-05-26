@@ -1323,11 +1323,16 @@ void Plotter::reset_view() {
 }
 
 void Plotter::handle_key(int key, bool ctrl, bool shift, bool alt) {
+#ifdef NIVALIS_EMSCRIPTEN
+    static const double scale = 2.0;
+#else
+    static const double scale = 1.0;
+#endif
     switch(key) {
         case 37: case 39: case 262: case 263:
             // LR Arrow
             {
-                auto delta = (view.xmax - view.xmin) * 0.003;
+                auto delta = (view.xmax - view.xmin) * 0.003 * scale;
                 if (key == 37 || key == 263) delta = -delta;
                 view.xmin += delta; view.xmax += delta;
             }
@@ -1336,7 +1341,7 @@ void Plotter::handle_key(int key, bool ctrl, bool shift, bool alt) {
         case 38: case 40: case 264: case 265:
             {
                 // UD Arrow
-                auto delta = (view.ymax - view.ymin) * 0.003;
+                auto delta = (view.ymax - view.ymin) * 0.003 * scale;
                 if (key == 40 || key == 264) delta = -delta;
                 view.ymin += delta; view.ymax += delta;
             }
@@ -1347,8 +1352,8 @@ void Plotter::handle_key(int key, bool ctrl, bool shift, bool alt) {
         case 173:
             // Zooming +-
             {
-                auto fa = (key == 45 || key == 189 ||
-                            key == 173) ? 1.013 : 0.987;
+                auto fa = 1 + 0.013 * ((key == 45 || key == 189 ||
+                            key == 173) ? scale : -scale);
                 auto dy = (view.ymax - view.ymin) * (fa - 1.) /2;
                 auto dx = (view.xmax - view.xmin) * (fa - 1.) /2;
                 if (shift) dy = 0.; // x-only

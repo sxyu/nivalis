@@ -1,8 +1,8 @@
 var Renderer = {
     redraw_cnt: 0,
     _redraw : function() {
-        Module.redraw();
         Renderer.redraw_cnt -= 1;
+        Module.redraw();
         if (Renderer.redraw_cnt > 0) {
             window.requestAnimationFrame(Renderer._redraw);
         }

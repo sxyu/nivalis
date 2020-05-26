@@ -1,16 +1,17 @@
 #include "plotter/common.hpp"
 #include <emscripten/emscripten.h>
 #include <sstream>
+#include <iostream>
 
 namespace {
 using namespace nivalis;
 Plotter plot;
 bool updating = false;
 std::string result;
-}
+size_t queue_sz;
+}  // namespace
 
 extern "C" {
-
 // Syncrhonize functions/environment
 void webworker_sync(char* data, int size) {
     {

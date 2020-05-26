@@ -690,7 +690,8 @@ void main_loop_step() {
         if (io.MouseDown[0]) {
             plot.handle_mouse_down(mouse_x, mouse_y);
         }
-        static int mouse_prev_x = -1, mouse_prev_y = -1;
+        int mouse_prev_x = static_cast<int>(io.MousePosPrev[0]);
+        int mouse_prev_y = static_cast<int>(io.MousePosPrev[1]);
         if (mouse_x != mouse_prev_x || mouse_y != mouse_prev_y) {
             plot.handle_mouse_move(mouse_x, mouse_y);
         }

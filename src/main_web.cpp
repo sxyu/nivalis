@@ -50,22 +50,20 @@ std::string state_encoding;
 
 worker_handle worker; // WebWorker
 
-void redraw_canvas(bool);
+bool redraw_canvas(bool);
 // WebWorker callback
 void webworker_cback(char* data, int size, void* arg) {
     state_encoding_strm.str("");
     state_encoding_strm.write(data, size);
     plot.import_binary_render_result(state_encoding_strm);
-    // std::cout << "RECEIVE " << plot.draw_buf.size() << "; ";
-    // for (auto& b : plot.draw_buf) {
-    //     std::cout << " " << b.points.size();
-    // }
-    // std::cout << "\n";
     redraw_canvas(true);
+    notify_js_func_error_changed();
 }
 
-// Emscripten access methods
-void redraw_canvas(bool worker_req_update) {
+// Emscripten access methods, ret true if success
+bool redraw_canvas(bool worker_req_update) {
+    bool success = true;
+    static int missed_messages = 0;
     // * State
     // Main graphics adaptor for plot.draw
     static ImGuiDrawListGraphicsAdaptor adaptor;
@@ -113,8 +111,14 @@ void redraw_canvas(bool worker_req_update) {
         state_encoding_strm.str("");
         plot.export_binary_func_and_env(state_encoding_strm);
         state_encoding = state_encoding_strm.str();
-        if (!worker_req_update &&
-                emscripten_get_worker_queue_size(worker) < 1) {
+        if (emscripten_get_worker_queue_size(worker) > 1) {
+            success = false;
+            ++ missed_messages;
+        }
+        if (!(worker_req_update && plot.view == plot_view_pre &&
+              missed_messages == 0) && success) {
+            if (missed_messages && worker_req_update)
+                --missed_messages;
             emscripten_call_worker(worker, "webworker_sync",
                     &state_encoding[0],
                     state_encoding.size(), webworker_cback, nullptr);
@@ -135,6 +139,12 @@ void redraw_canvas(bool worker_req_update) {
         *draw_list = draw_list_pre;
     }
 
+    auto& io = ImGui::GetIO();
+    if (io.MousePosPrev[0] != io.MousePos[0] ||
+            io.MousePosPrev[1] != io.MousePos[1]) {
+        plot.handle_mouse_move(io.MousePos[0], io.MousePos[1]);
+    }
+
     // Set to set current function to 'change_curr_func' at next loop step
     static int change_curr_func = -1;
     // Change current function
@@ -150,6 +160,7 @@ void redraw_canvas(bool worker_req_update) {
 
     glfwSwapBuffers(window);
     glfwPollEvents();
+    return success;
 }  // void redraw_canvas()
 void redraw_canvas_not_worker() {
     // Expose 0-argument version to JS
