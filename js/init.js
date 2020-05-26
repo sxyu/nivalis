@@ -115,7 +115,7 @@ let setupHandlers = function() {
         if(e.ctrlKey)
             event.preventDefault();//prevent zoom
         Module.on_mousewheel(e.deltaY < 0,
-            Math.abs(e.deltaY) * 5., e.offsetX, e.offsetY);
+            10., e.offsetX, e.offsetY);
         Renderer.redraw();
         ViewConfig.updateViewBounds();
     });

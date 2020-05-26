@@ -131,6 +131,7 @@ a:hover { text-decoration: none }
 }
 #sidebar .input-group-text.function-name{
     font-weight: 700;
+    user-select: none;
 }
 #sidebar .btn-outline-secondary{
     background: #fafafa;

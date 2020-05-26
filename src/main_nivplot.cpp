@@ -185,8 +185,8 @@ void main_loop_step() {
             // Need lock since worker thread asynchroneously
             // swaps back buffer to front
             std::lock_guard<std::mutex> lock(worker_mtx);
-            plot.populate_grid();                    // Populate grid of point markers for mouse events
             plot.draw(adaptor, plot_view_pre);       // Draw functions
+            plot.populate_grid();                    // Populate grid of point markers for mouse events
         }
         // Run worker if not already running AND either:
         // this update was not from the worker or
@@ -683,6 +683,7 @@ void main_loop_step() {
     ImGuiIO &io = ImGui::GetIO();
     int mouse_x = static_cast<int>(io.MousePos[0]);
     int mouse_y = static_cast<int>(io.MousePos[1]);
+    static int mouse_prev_x = 0, mouse_prev_y = 0;
     if (io.MouseReleased[0]) {
         plot.handle_mouse_up(mouse_x, mouse_y);
     }
@@ -690,8 +691,6 @@ void main_loop_step() {
         if (io.MouseDown[0]) {
             plot.handle_mouse_down(mouse_x, mouse_y);
         }
-        int mouse_prev_x = static_cast<int>(io.MousePosPrev[0]);
-        int mouse_prev_y = static_cast<int>(io.MousePosPrev[1]);
         if (mouse_x != mouse_prev_x || mouse_y != mouse_prev_y) {
             plot.handle_mouse_move(mouse_x, mouse_y);
         }

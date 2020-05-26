@@ -143,10 +143,10 @@ struct FuncDrawObj {
 /** Nivalis GUI plotter logic, decoupled from GUI implementation
  * Register GUI event handlers to call handle_xxx
  * Register resize handler to call resize
- *  * Single Thread: Call draw_grid()/recalc()/draw()/populate_grid()
+ *  * Single Thread: Call draw_grid()/render()/draw()/populate_grid()
  *                   in drawing loop
  *  * Two-thread:  draw_grid()/ (under lock)draw() in drawing thread
- *                 worker thread runs recalc() on a second plotter
+ *                 worker thread runs render() on a second plotter
  *                 with functions copied with export_binary_func_and_env()
  *                 (under lock) on each frame
  * Call reset_view() to reset view, delete_func() delete function,
@@ -435,27 +435,45 @@ public:
             return;
         }
 
-        std::vector<std::array<float, 2> > points;
+        // std::vector<std::array<float, 2> > points;
         for (auto& obj : draw_buf) {
-            points.resize(obj.points.size());
+            // points.resize(obj.points.size());
             // Coordinate conversion: re-position all points in obj.points
             // onto current view in  output to points
             // (in case user moved view/zoomed the points should be moved)
-            for (size_t i = 0; i < points.size(); ++i) {
-                auto& pt = obj.points[i]; auto & npt = points[i];
-                npt[0] = static_cast<float>((pt[0] - view.xmin) * view.swid / (view.xmax - view.xmin));
-                npt[1] = static_cast<float>((view.ymax - pt[1]) * view.shigh / (view.ymax - view.ymin));
-            }
             // Draw the object
             if (obj.type == FuncDrawObj::POLYLINE) {
                 // Polyline
-                graph.polyline(points, obj.c, obj.thickness);
+                std::array<float, 2> pnpt;
+                std::array<float, 2> npt;
+                for (size_t i = 0; i < obj.points.size(); ++i) {
+                    auto& pt = obj.points[i];
+                    pnpt = npt;
+                    npt[0] = static_cast<float>((pt[0] - view.xmin) * view.swid / (view.xmax - view.xmin));
+                    npt[1] = static_cast<float>((view.ymax - pt[1]) * view.shigh / (view.ymax - view.ymin));
+                    if (i) {
+                        graph.line(pnpt[0], pnpt[1], npt[0], npt[1], obj.c, obj.thickness);
+                    }
+                }
             } else {
                 // Rectangle
-                graph.rectangle(points[0][0], points[0][1],
-                                  points[1][0] - points[0][0], points[1][1] - points[0][1],
+                graph.rectangle((float)obj.points[0][0], (float) obj.points[0][1],
+                                (float)obj.points[1][0] - (float) obj.points[0][0],
+                                (float)obj.points[1][1] - (float) obj.points[0][1],
                                   obj.type == FuncDrawObj::FILLED_RECT, obj.c);
             }
+        }
+        for (auto& ptm : pt_markers) {
+            if (ptm.passive) continue;
+            int sy = static_cast<int>((view.ymax - ptm.y) / (view.ymax - view.ymin) * view.shigh);
+            int sx = static_cast<int>((ptm.x - view.xmin) / (view.xmax - view.xmin) * view.swid);
+            graph.rectangle(sx-MARKER_DISP_RADIUS,
+                     sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
+                     2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
+            graph.rectangle(sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS,
+                    2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1,
+                    false,
+                    (~ptm.rel_func ? funcs[ptm.rel_func].line_color : color::GRAY));
         }
     }
 
@@ -579,6 +597,9 @@ public:
     // Marker data
     std::string marker_text;
     int marker_posx, marker_posy;
+
+    // Point marker display size / mouse selecting area size
+    static const int MARKER_DISP_RADIUS = 3;
 
     // Radius around a point for which a marker is clickable
     // should be increased for mobile.

@@ -190,7 +190,9 @@ double eval_ast(Environment& env, const Expr::AST& ast,
             case rifact: ARG2 = rising_factorial<double>(
                             (uint32_t)ARG1, (uint32_t)ARG2); --top; break;
             case betab: ARG2 = beta<double>(ARG1, ARG2); --top; break;
-            case polygammab: ARG2 = beta<double>((int)ARG1, ARG2); --top; break;
+            case polygammab:
+                        ARG2 = polygamma<double>((int)ARG1, ARG2); --top;
+                        break;
 #else
             case choose: {
                              double ad = std::round(ARG1);

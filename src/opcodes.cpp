@@ -176,9 +176,8 @@ const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
         func_opcodes["ifact"] = OpCode::factb;
         func_opcodes["lgamma"] = OpCode::lgammab;
         func_opcodes["digamma"] = OpCode::digammab;
-        // Not exposed to user since too slow
-        // func_opcodes["trigamma"] = OpCode::trigammab;
-        // func_opcodes["polygamma"] = OpCode::polygammab;
+        func_opcodes["trigamma"] = OpCode::trigammab;
+        func_opcodes["polygamma"] = OpCode::polygammab;
         func_opcodes["erf"] = OpCode::erfb;
         func_opcodes["zeta"] = OpCode::zetab;
         func_opcodes["beta"] = OpCode::betab;

@@ -56,7 +56,9 @@ void webworker_cback(char* data, int size, void* arg) {
     state_encoding_strm.str("");
     state_encoding_strm.write(data, size);
     plot.import_binary_render_result(state_encoding_strm);
-    redraw_canvas(true);
+    redraw_canvas(true);                // Redraw
+    plot.populate_grid();               // Populate grid of point
+                                        // markers for mouse events
     notify_js_func_error_changed();
 }
 
@@ -104,8 +106,6 @@ bool redraw_canvas(bool worker_req_update) {
         plot.require_update = false;
         // Redraw the grid and functions
         plot.draw_grid(adaptor, plot_view_pre);  // Draw axes and grid
-        plot.populate_grid();                    // Populate grid of point
-                                                 // markers for mouse events
         plot.draw(adaptor, plot_view_pre);       // Draw functions
 
         state_encoding_strm.str("");

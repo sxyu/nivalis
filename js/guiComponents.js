@@ -43,14 +43,14 @@ var FuncEdit = {
         FuncEdit.func_names.push(fname);
         FuncEdit.func_indices[fname] = fidx;
 
-        var obj = $('#function-expr-' + fname);
-        obj.val(Module.get_func_expr(fidx));
-        obj.on('input', function() {
+        var editor_tb = $('#function-expr-' + fname);
+        editor_tb.val(Module.get_func_expr(fidx));
+        editor_tb.on('input', function() {
             // Change editor
             var this_name = this.id.substr(14);
             FuncEdit.reparse(this_name);
         });
-        obj.on('keyup', function(e) {
+        editor_tb.on('keyup', function(e) {
             // Up/down
             var $this = $(this);
             var this_name = this.id.substr(14);
@@ -74,7 +74,7 @@ var FuncEdit = {
             }
             Module.redraw();
         });
-        obj.focus(function() {
+        editor_tb.focus(function() {
             // Focus (change curr func)
             var $this = $(this);
             var this_name = this.id.substr(14);
@@ -88,6 +88,11 @@ var FuncEdit = {
             Module.set_curr_func(idx);
             Module.redraw();
         });
+        editor_tb.blur(function() {
+            // blur: redraw
+            // hack to fix canvas size when closing mobile keyboard
+            setTimeout(onResizeCanvas, 100);
+        });
         $('#function-tmin-' + fname).val(Math.floor(Module.get_func_tmin(fidx) * 1e6)/1e6);
         $('#function-tmax-' + fname).val(Math.ceil(Module.get_func_tmax(fidx) * 1e6)/1e6);
         $('#function-tmin-' + fname).on('input', function() {
@@ -95,24 +100,16 @@ var FuncEdit = {
             var this_name = this.id.substr(14);
             var idx = FuncEdit.func_indices[this_name];
             var maxv = $('#function-tmax-' + fname).val();
-            if ($this.val() > maxv) {
-                $this.val(maxv - 1e-6);
-            } else {
-                Module.set_func_tmin(fidx, Number.parseFloat($this.val()));
-                Module.redraw();
-            }
+            Module.set_func_tmin(fidx, Number.parseFloat($this.val()));
+            Module.redraw();
         });
         $('#function-tmax-' + fname).on('input', function() {
             var $this = $(this);
             var this_name = this.id.substr(14);
             var idx = FuncEdit.func_indices[this_name];
             var minv = $('#function-tmin-' + fname).val();
-            if ($this.val() < minv) {
-                $this.val(minv + 1e-6);
-            } else {
-                Module.set_func_tmax(fidx, Number.parseFloat($this.val()));
-                Module.redraw();
-            }
+            Module.set_func_tmax(fidx, Number.parseFloat($this.val()));
+            Module.redraw();
         });
         $('#function-del-' + fname).click(function() {
             // Delete

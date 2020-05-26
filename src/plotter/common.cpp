@@ -163,8 +163,8 @@ void Plotter::render(const View& view) {
 
     // * Constants
     // Newton's method parameters
-    static const double EPS_STEP  = 1e-10 * ydiff;
-    static const double EPS_ABS   = 1e-10 * ydiff;
+    static const double EPS_STEP  = 1e-8 * ydiff;
+    static const double EPS_ABS   = 1e-8 * ydiff;
     static const int    MAX_ITER  = 30;
     // Shorthand for Newton's method arguments
 #define NEWTON_ARGS x_var, x, env, EPS_STEP, EPS_ABS, MAX_ITER, \
@@ -173,28 +173,26 @@ void Plotter::render(const View& view) {
     const double NEWTON_SIDE_ALLOW = xdiff / 20.;
 
     // Minimum x-distance between critical points
-    static const double MIN_DIST_BETWEEN_ROOTS  = 1e-4;
-    // Point marker display size / mouse selecting area size
-    static const int MARKER_DISP_RADIUS = 3;
+    const double MIN_DIST_BETWEEN_ROOTS  = 5e-8 * xdiff;
 
     // x-epsilon for domain bisection
     // (finding cutoff where function becomes undefined)
-    static const double DOMAIN_BISECTION_EPS = 1e-8;
+    const double DOMAIN_BISECTION_EPS = 1e-9 * xdiff;
 
     // Asymptote check constants:
     // Assume asymptote at discontinuity if slope between
     // x + ASYMPTOTE_CHECK_DELTA1, x + ASYMPTOTE_CHECK_DELTA2
-    static const double ASYMPTOTE_CHECK_DELTA1 = xdiff * 1e-9;
-    static const double ASYMPTOTE_CHECK_DELTA2 = xdiff * 1e-8;
-    static const double ASYMPTOTE_CHECK_EPS    = xdiff * 1e-10;
+    const double ASYMPTOTE_CHECK_DELTA1 = xdiff * 1e-9;
+    const double ASYMPTOTE_CHECK_DELTA2 = xdiff * 1e-8;
+    const double ASYMPTOTE_CHECK_EPS    = xdiff * 1e-10;
     // Special eps for boundary of domain
-    static const double ASYMPTOTE_CHECK_BOUNDARY_EPS = xdiff * 1e-3;
+    const double ASYMPTOTE_CHECK_BOUNDARY_EPS = xdiff * 1e-3;
 
     // For explicit functions
     // We will draw a function segment between every pair of adjacent
     // discontinuities (including 'edge of screen')
     // x-coordinate after a discontinuity to begin drawing function
-    static const double DISCONTINUITY_EPS = xdiff * 1e-3;
+    static const float DISCONTINUITY_EPS = 1e-4;
 
     // Number of different t values to evaluate for a parametric
     // equation
@@ -565,7 +563,7 @@ void Plotter::render(const View& view) {
                     size_t idx = 0;
                     // Push check helpers
                     // Push to st if no other item less than MIN_DIST_BETWEEN_ROOTS from value
-                    auto push_if_valid = [this, &view](double value, std::set<double>& st) {
+                    auto push_if_valid = [&](double value, std::set<double>& st) {
                         if (!std::isnan(value) && !std::isinf(value) &&
                                 value >= view.xmin && value <= view.xmax) {
                             auto it = st.lower_bound(value);
@@ -604,7 +602,7 @@ void Plotter::render(const View& view) {
                     std::vector<std::array<float, 2> > curr_line;
                     // Draw a line and construct markers along the line
                     // to allow clicking
-                    auto draw_line = [&](float psx, float psy, float sx, float sy, double x, double y) {
+                    auto draw_line = [&](float psx, float psy, float sx, float sy/*, double x, double y*/) {
                         float miny = std::min(sy, psy), maxy = sy + psy - miny;
                         // Draw the line
                         if (curr_line.empty() ||
@@ -632,38 +630,38 @@ void Plotter::render(const View& view) {
                             if (!is_y_nan) {
                                 double dy = func.diff(env);
                                 if (!std::isnan(dy)) {
-                                    double root = expr.newton(NEWTON_ARGS, &func.diff, y, dy);
-                                    push_critpt_if_valid(root, ROOT, roots_and_extrema);
+                                    // double root = expr.newton(NEWTON_ARGS, &func.diff, y, dy);
+                                    // push_critpt_if_valid(root, ROOT, roots_and_extrema);
                                     double asymp = func.recip.newton(NEWTON_ARGS,
                                             &func.drecip, 1. / y, -dy / (y*y));
                                     push_critpt_if_valid(asymp, DISCONT_ASYMPT, discont);
 
-                                    double ddy = func.ddiff(env);
-                                    if (!std::isnan(ddy)) {
-                                        double extr = func.diff.newton(NEWTON_ARGS,
-                                                &func.ddiff, dy, ddy);
-                                        push_critpt_if_valid(extr, EXTREMUM, roots_and_extrema);
-                                    }
+                                    // double ddy = func.ddiff(env);
+                                    // if (!std::isnan(ddy)) {
+                                    //     double extr = func.diff.newton(NEWTON_ARGS,
+                                    //             &func.ddiff, dy, ddy);
+                                    //     push_critpt_if_valid(extr, EXTREMUM, roots_and_extrema);
+                                    // }
                                 }
                             }
                             if (sx) {
-                                const bool is_prev_y_nan = std::isnan(prev_y);
-                                if (is_y_nan != is_prev_y_nan) {
-                                    // Search for cutoff via bisection
-                                    double lo = prev_x, hi = x;
-                                    while (hi - lo > DOMAIN_BISECTION_EPS) {
-                                        double mi = (lo + hi) * 0.5;
-                                        env.vars[x_var] = mi; double mi_y = expr(env);
-                                        if (std::isnan(mi_y) == is_prev_y_nan) {
-                                            lo = mi;
-                                        } else {
-                                            hi = mi;
-                                        }
-                                    }
-                                    double boundary_x_not_nan_side = is_prev_y_nan ? hi : lo;
-                                    push_critpt_if_valid(boundary_x_not_nan_side,
-                                            DISCONT_DOMAIN, discont);
-                                }
+                                // const bool is_prev_y_nan = std::isnan(prev_y);
+                                // if (is_y_nan != is_prev_y_nan) {
+                                //     // Search for cutoff via bisection
+                                //     double lo = prev_x, hi = x;
+                                //     while (hi - lo > DOMAIN_BISECTION_EPS) {
+                                //         double mi = (lo + hi) * 0.5;
+                                //         env.vars[x_var] = mi; double mi_y = expr(env);
+                                //         if (std::isnan(mi_y) == is_prev_y_nan) {
+                                //             lo = mi;
+                                //         } else {
+                                //             hi = mi;
+                                //         }
+                                //     }
+                                //     double boundary_x_not_nan_side = is_prev_y_nan ? hi : lo;
+                                //     push_critpt_if_valid(boundary_x_not_nan_side,
+                                //             DISCONT_DOMAIN, discont);
+                                // }
                             }
                             prev_x = x; prev_y = y;
                         }
@@ -678,17 +676,18 @@ void Plotter::render(const View& view) {
                     int prev_discont_type;
                     size_t as_idx = 0;
 
-                    float psx = -1.f, psy = -1.f;
                     // ** Main explicit func drawing code: draw function from discont to discont
                     for (const auto& discontinuity : discont) {
+                        float psx = -1.f, psy = -1.f;
                         double discont_x = discontinuity.first;
                         int discont_type = discontinuity.second;
                         float discont_sx = _X_TO_SX(discont_x);
+
                         if (as_idx > 0) {
                             bool connector = prev_discont_type != DISCONT_SCREEN;
                             // Draw func between asymptotes
                             for (float sxd = prev_discont_sx + DISCONTINUITY_EPS;
-                                    sxd < discont_sx;) {
+                                    sxd < discont_sx - DISCONTINUITY_EPS;) {
                                 const double x = sxd / view.swid * xdiff + view.xmin;
                                 env.vars[x_var] = x;
                                 double y = expr(env);
@@ -724,7 +723,7 @@ void Plotter::render(const View& view) {
                                         }
                                     }
                                     if (!reinit && psx >= 0) {
-                                        draw_line(psx, psy, sx, sy, x, y);
+                                        draw_line(psx, psy, sx, sy);
                                         if (y > view.ymax || y < view.ymin) {
                                             reinit = true;
                                             psx = -1;
@@ -769,7 +768,7 @@ void Plotter::render(const View& view) {
                                     sy = static_cast<float>(view.shigh);
                                 }
                                 if (sx >= 0.f) {
-                                    draw_line(psx, psy, sx, sy, discont_x - 1e-6f, yp);
+                                    draw_line(psx, psy, sx, sy);
                                 }
                             }
                         }
@@ -805,12 +804,12 @@ void Plotter::render(const View& view) {
                             return;
                         }
 
-                        int sy = static_cast<int>((view.ymax - y) / ydiff * view.shigh);
-                        int sx = static_cast<int>((x - view.xmin) / xdiff * view.swid);
-                        buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
-                                sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
-                                2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
-                        buf_add_rectangle(view, sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
+                        // int sy = static_cast<int>((view.ymax - y) / ydiff * view.shigh);
+                        // int sx = static_cast<int>((x - view.xmin) / xdiff * view.swid);
+                        // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
+                        //         sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
+                        //         2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
+                        // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS, sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1, false, func.line_color);
                         PointMarker ptm;
                         ptm.label = label;
                         ptm.y = y; ptm.x = x;
@@ -858,20 +857,20 @@ void Plotter::render(const View& view) {
                             for (double x : st) {
                                 env.vars[x_var] = x;
                                 double y = expr(env);
-                                int sy = static_cast<int>((view.ymax - y) /
-                                                          ydiff * view.shigh);
-                                int sx = static_cast<int>((x - view.xmin) /
-                                                          xdiff * view.swid);
-                                buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
-                                        sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS,
-                                        2*MARKER_DISP_RADIUS, true, color::LIGHT_GRAY);
-                                buf_add_rectangle(view, sx-MARKER_DISP_RADIUS-1,
-                                        sy-MARKER_DISP_RADIUS-1, 2*MARKER_DISP_RADIUS+1,
-                                        2*MARKER_DISP_RADIUS+1, false, func.line_color);
-                                buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
-                                        sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
-                                        2*MARKER_DISP_RADIUS+1, false,
-                                        func2.line_color);
+                                // int sy = static_cast<int>((view.ymax - y) /
+                                //                           ydiff * view.shigh);
+                                // int sx = static_cast<int>((x - view.xmin) /
+                                //                           xdiff * view.swid);
+                                // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
+                                //         sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS,
+                                //         2*MARKER_DISP_RADIUS, true, color::LIGHT_GRAY);
+                                // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS-1,
+                                //         sy-MARKER_DISP_RADIUS-1, 2*MARKER_DISP_RADIUS+1,
+                                //         2*MARKER_DISP_RADIUS+1, false, func.line_color);
+                                // buf_add_rectangle(view, sx-MARKER_DISP_RADIUS,
+                                //         sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
+                                //         2*MARKER_DISP_RADIUS+1, false,
+                                //         func2.line_color);
                                 size_t idx = pt_markers.size();
                                 PointMarker ptm;
                                 ptm.label = PointMarker::LABEL_INTERSECTION;

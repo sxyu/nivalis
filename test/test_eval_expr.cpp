@@ -55,6 +55,10 @@ int main() {
         env.set("y", 10.0);
         ASSERT_FLOAT_EQ(eval_ast(env, ast), 0.15580703096659532);
     }
+    {
+        AST ast = { polygammab, 2., 5. };
+        ASSERT_FLOAT_EQ(eval_ast(dummy_env, ast), -0.0487897322451144967254);
+    }
 
     {
         AST ast = { land, lxor, 0.0, 1.0, 0.0 };

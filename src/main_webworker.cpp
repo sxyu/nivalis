@@ -9,6 +9,7 @@ Plotter plot;
 bool updating = false;
 std::string result;
 size_t queue_sz;
+std::ostringstream os;
 }  // namespace
 
 extern "C" {
@@ -21,7 +22,7 @@ void webworker_sync(char* data, int size) {
 
     plot.render();
 
-    std::ostringstream os;
+    os.str("");
     plot.export_binary_render_result(os);
     result = os.str();
     emscripten_worker_respond(&result[0], result.size());
