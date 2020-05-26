@@ -17,8 +17,13 @@ let setupHandlers = function() {
             event.preventDefault();
         }
         Module.on_key(e.which, e.ctrlKey, e.shiftKey, e.altKey);
-        ViewConfig.updateViewPolar();
-        ViewConfig.updateViewBounds();
+        if (e.which === 69) {
+            $('function-expr-' + FuncEdit.func_names[
+                Module.get_curr_func()]).focus();
+        } else {
+            ViewConfig.updateViewPolar();
+            ViewConfig.updateViewBounds();
+        }
         Renderer.redraw();
     });
     canvas.addEventListener("mousedown", e=>{
@@ -262,9 +267,9 @@ let onInit = function() {
         pinch_zoom_dist = -1.;
     });
     if (Util.is_mobile) {
-        Module.set_marker_clickable_radius(12);
+        Module.set_marker_clickable_radius(16);
     } else {
-        Module.set_marker_clickable_radius(5);
+        Module.set_marker_clickable_radius(9);
     }
 
     $('.example').click(function(){

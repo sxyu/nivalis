@@ -56,6 +56,11 @@ void webworker_cback(char* data, int size, void* arg) {
     state_encoding_strm.str("");
     state_encoding_strm.write(data, size);
     plot.import_binary_render_result(state_encoding_strm);
+    // std::cout << "RECEIVE " << plot.draw_buf.size() << "; ";
+    // for (auto& b : plot.draw_buf) {
+    //     std::cout << " " << b.points.size();
+    // }
+    // std::cout << "\n";
     redraw_canvas(true);
 }
 
@@ -109,7 +114,7 @@ void redraw_canvas(bool worker_req_update) {
         plot.export_binary_func_and_env(state_encoding_strm);
         state_encoding = state_encoding_strm.str();
         if (!worker_req_update &&
-                emscripten_get_worker_queue_size(worker) == 0) {
+                emscripten_get_worker_queue_size(worker) < 1) {
             emscripten_call_worker(worker, "webworker_sync",
                     &state_encoding[0],
                     state_encoding.size(), webworker_cback, nullptr);

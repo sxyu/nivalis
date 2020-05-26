@@ -6,7 +6,6 @@
 #include "json.hpp"
 #include "shell.hpp"
 #include <iomanip>
-#include <iostream>
 
 namespace {
 using json = nlohmann::json;
@@ -904,30 +903,33 @@ void Plotter::populate_grid() {
     grid.resize(view.swid * view.shigh);
     std::fill(grid.begin(), grid.end(), -1);
 
-    thread_local std::deque<
+    thread_local std::vector<
             std::array<int, 4> // y x id dist
             > que;
+    que.resize(view.swid * view.shigh);
 
-    que.clear();
+    size_t lo = 0, hi = 0;
     auto bfs = [&]{
         // BFS to fill grid
-        while(!que.empty()) {
-            auto v = que.front();
+        while(lo < hi) {
+            const auto& v = que[lo++];
             int sy = v[0], sx = v[1], id = v[2], d = v[3];
-            grid[sy * view.swid + sx] = id;
-            que.pop_front();
             if (d >= marker_clickable_radius) continue;
             if (sy > 0 && grid[(sy - 1) * view.swid + sx] == -1) {
-                que.push_back({ sy - 1, sx, id, d + 1});
+                que[hi++] = { sy - 1, sx, id, d + 1};
+                grid[(sy - 1) * view.swid + sx] = id;
             }
             if (sx > 0 && grid[sy * view.swid + sx - 1] == -1) {
-                que.push_back({ sy, sx - 1, id, d + 1});
+                que[hi++] = { sy, sx - 1, id, d + 1};
+                grid[sy * view.swid + sx - 1] = id;
             }
             if (sx < view.swid - 1 && grid[sy * view.swid + sx + 1] == -1) {
-                que.push_back({ sy, sx + 1, id, d + 1});
+                que[hi++] = { sy, sx + 1, id, d + 1};
+                grid[sy * view.swid + sx + 1] = id;
             }
             if (sy < view.shigh - 1 && grid[(sy + 1) * view.swid + sx] == -1) {
-                que.push_back({ sy + 1, sx, id, d + 1});
+                que[hi++] = { sy + 1, sx, id, d + 1};
+                grid[(sy + 1) * view.swid + sx] = id;
             }
         }
     };
@@ -939,7 +941,9 @@ void Plotter::populate_grid() {
         int sy = (int)(0.5 + _Y_TO_SY(ptm.y));
         if (sx < 0 || sy < 0 || sx >= view.swid || sy >= view.shigh)
             continue;
-        que.push_back({ sy, sx, (int)id, 0 });
+        if (~grid[sy * view.swid + sx]) continue;
+        grid[sy * view.swid + sx] = id;
+        que[hi++] = { sy, sx, (int)id, 0 };
     }
     bfs();
 
@@ -969,7 +973,9 @@ void Plotter::populate_grid() {
                 int dir = qsy >= psy ? 1 : -1;
                 for (int r = std::min(std::max(psy, 0), view.shigh - 1);
                         r != std::min(std::max(qsy, 0), view.shigh - 1) + dir; r += dir) {
-                    que.push_back({ r, psx, (int)id - 1, 0 });
+                    if (~grid[r * view.swid + psx]) continue;
+                    grid[r * view.swid + psx] = id;
+                    que[hi++] = { r, psx, (int)id, 0 };
                 }
             }
         }
