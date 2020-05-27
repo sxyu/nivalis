@@ -62,7 +62,7 @@ bool Shell::eval_line(std::string line) {
         bool do_optim = cmd == "s";
         bool do_diff = cmd == "diff";
         if (do_optim) str_to_parse = line;
-        uint32_t diff_var_addr;
+        uint64_t diff_var_addr;
         if (do_diff) {
             std::string diff_var = get_word(line);
             util::trim(diff_var); util::trim(line);

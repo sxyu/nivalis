@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cmath>
 #include <sstream>
+#include <algorithm>
 namespace nivalis {
 namespace color {
 color::color() : color(0.0f, 0.0f, 0.0f) {}

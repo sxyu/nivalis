@@ -73,7 +73,7 @@ struct Function {
     std::vector<Expr> polyline;
 
     // Bounds on t, for parametric and polar types only
-    float tmin = 0., tmax = 2 * M_PI;
+    float tmin = 0.f, tmax = float(2.f * M_PI);
 
     // Binary serialization
     std::ostream& to_bin(std::ostream& os) const;

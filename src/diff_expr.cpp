@@ -122,7 +122,7 @@ struct Differentiator {
                               DIFF_NEXT;
                               const Expr::ASTNode* f_astptr = &fexpr.ast[0];
                               vis_asts.insert(&fexpr.ast[0]);
-                              if (!diff(&f_astptr, i)) return false;
+                              if (!diff(&f_astptr, (uint32_t)i)) return false;
                               vis_asts.erase(&fexpr.ast[0]);
                           }
                           argv.pop_back();

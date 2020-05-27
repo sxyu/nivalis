@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cctype>
 #include <utility>
+#include <algorithm>
 
 #include "plotter/common.hpp"
 #include "plotter/imgui_adaptor.hpp"
@@ -209,12 +210,12 @@ void main_loop_step() {
     }
 
     // Set to set current function to 'change_curr_func' at next loop step
-    static int change_curr_func = -1;
+    static size_t change_curr_func = (size_t)-1;
     // Change current function
     if (~change_curr_func) {
         // Seek to previous/next function after up/down arrow on textbox
         plot.set_curr_func(change_curr_func);
-        change_curr_func = -1;
+        change_curr_func = (size_t)-1;
     }
 
     // Render GUI
@@ -442,8 +443,8 @@ void main_loop_step() {
         ImGui::EndPopup();
     }
 
-    ImGui::SetNextWindowSize(ImVec2(std::min(600, plot.view.swid),
-                std::min(400, plot.view.shigh)));
+    ImGui::SetNextWindowSize(ImVec2(std::min<int>(600, plot.view.swid),
+                std::min<int>(400, plot.view.shigh)));
     if (ImGui::BeginPopupModal("Reference", &open_reference,
                 ImGuiWindowFlags_NoResize)) {
         // Reference popup
@@ -576,8 +577,8 @@ void main_loop_step() {
         ImGui::EndPopup();
     }
 
-    ImGui::SetNextWindowSize(ImVec2(std::min(700, plot.view.swid),
-                std::min(500, plot.view.shigh)));
+    ImGui::SetNextWindowSize(ImVec2(std::min<int>(700, plot.view.swid),
+                std::min<int>(500, plot.view.shigh)));
     if (ImGui::BeginPopupModal("Shell", &open_shell,
                 ImGuiWindowFlags_NoResize)) {
         // Shell popup
@@ -627,21 +628,21 @@ void main_loop_step() {
                     ImGuiInputTextFlags_CallbackHistory,
                     [](ImGuiTextEditCallbackData* data) -> int {
                         // Handle up/down arrow keys in textboxes
-                        const int prev_history_pos = shell_hist_pos;
+                        const size_t prev_history_pos = shell_hist_pos;
                         if (data->EventKey == ImGuiKey_UpArrow)
                         {
-                            if (shell_hist_pos == -1)
+                            if (shell_hist_pos == (size_t)-1)
                                 shell_hist_pos = shell_hist.size() - 1;
-                            else if (shell_hist_pos > 0)
+                            else if (shell_hist_pos)
                                 shell_hist_pos--;
                         } else if (data->EventKey == ImGuiKey_DownArrow) {
                             if (~shell_hist_pos)
                             if (++shell_hist_pos >= shell_hist.size())
-                                shell_hist_pos = -1;
+                                shell_hist_pos = (size_t)-1;
                         }
                         if (prev_history_pos != shell_hist_pos) {
                             data->DeleteChars(0, data->BufTextLen);
-                            if (shell_hist_pos != -1) {
+                            if (shell_hist_pos != (size_t)-1) {
                                 data->InsertChars(0,
                                         shell_hist[
                                             shell_hist_pos].c_str());
@@ -710,8 +711,8 @@ void main_loop_step() {
 
     if (!io.WantCaptureKeyboard || io.KeyCtrl) {
         for (size_t i = 0; i < IM_ARRAYSIZE(io.KeysDown); ++i) {
-            if (ImGui::IsKeyDown(i)) {
-                plot.handle_key(i,
+            if (ImGui::IsKeyDown((int)i)) {
+                plot.handle_key((int)i,
                         io.KeyCtrl, io.KeyShift, io.KeyAlt);
             }
         }

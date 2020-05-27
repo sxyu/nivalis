@@ -301,6 +301,9 @@ if ( BOOST_ENABLED )
         add_definitions(-D_HAS_AUTO_PTR_ETC=1)
     endif ()
 endif ()
+if (WIN32)
+	add_definitions(-DNOMINMAX)
+endif()
 # ensure M_PI, etc available
 add_definitions( -D_USE_MATH_DEFINES )
 

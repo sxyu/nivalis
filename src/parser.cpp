@@ -367,7 +367,7 @@ private:
                         expected_argcount = env.funcs[func_addr].n_args;
                         // Add call
                         result.ast.push_back(Expr::ASTNode::call((uint32_t) func_addr,
-                                    expected_argcount));
+                                    (uint32_t)expected_argcount));
                     } else {
                         // Else, look at built-in functions
                         const auto& func_opcodes = OpCode::funcname_to_opcode_map();
@@ -484,7 +484,7 @@ private:
                                expr.substr(left + 1, right - left - 1))) {
                     // Explicit function argument
                     int64_t idx = std::atoll(expr.substr(left + 1, right - left - 1).c_str());
-                    if (idx < 0 || idx >= max_args) {
+                    if (idx < 0 || (size_t)idx >= max_args) {
                         PARSE_ERR("Invalid explicit function argument $" << idx << "\n");
                     }
                     result.ast.emplace_back(OpCode::arg, idx);

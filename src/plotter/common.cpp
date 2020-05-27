@@ -192,7 +192,7 @@ void Plotter::render(const View& view) {
     // We will draw a function segment between every pair of adjacent
     // discontinuities (including 'edge of screen')
     // x-coordinate after a discontinuity to begin drawing function
-    static const float DISCONTINUITY_EPS = 1e-4;
+    static const float DISCONTINUITY_EPS = 1e-4f;
 
     // Number of different t values to evaluate for a parametric
     // equation

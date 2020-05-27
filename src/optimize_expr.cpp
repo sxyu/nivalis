@@ -169,7 +169,7 @@ uint32_t _ast_to_link_nodes(
     return node_idx;
 }
 // Convert ast nodes -> link form
-uint32_t ast_to_link_nodes(
+size_t ast_to_link_nodes(
         const Expr::AST& ast,
         std::vector<ASTLinkNode>& store) {
     const Expr::ASTNode* astptr = &ast[0];
@@ -183,7 +183,7 @@ uint32_t ast_to_link_nodes(
 
 // Convert link form AST nodes -> usual AST nodes
 void ast_from_link_nodes(const std::vector<ASTLinkNode>& nodes,
-        Expr::AST& out, uint32_t index = 0) {
+        Expr::AST& out, size_t index = 0) {
     const auto& node = nodes[index];
     if (index >= nodes.size()) {
         std::cerr << "ast_from_link_nodes ERROR: invalid AST. Node index " <<
