@@ -184,20 +184,8 @@ var Sliders = {
                 $('#slider-sli-' + this_sid).val(new_val);
             }
         };
-        {
-            var slider_val = $('#slider-val-' + sid);
-            slider_val.val(Module.get_slider_val(sidx))
-            slider_val.on('input', sliderChangeVal);
-        }
         var init_min = Module.get_slider_lo(sidx);
         var init_max = Module.get_slider_hi(sidx);
-        {
-            var slider = $('#slider-sli-' + sid);
-            slider.val(Module.get_slider_val(sidx))
-            slider.attr('min', init_min);
-            slider.attr('max', init_max);
-            slider.on('input', sliderChangeVal);
-        }
         {
             var sliderChangeBounds = function(e) {
                 var this_sid = this.id.substr(11);
@@ -215,6 +203,18 @@ var Sliders = {
             slider_max.val(init_max)
             slider_min.on('input', sliderChangeBounds);
             slider_max.on('input', sliderChangeBounds);
+        }
+        {
+            var slider = $('#slider-sli-' + sid);
+            slider.attr('min', init_min);
+            slider.attr('max', init_max);
+            slider.val(Module.get_slider_val(sidx))
+            slider.on('input', sliderChangeVal);
+        }
+        {
+            var slider_val = $('#slider-val-' + sid);
+            slider_val.val(Module.get_slider_val(sidx))
+            slider_val.on('input', sliderChangeVal);
         }
         {
             var slider_del = $('#slider-del-' + sid);
