@@ -148,7 +148,51 @@ define `sec(x) = 1/cos(x)`, or event function with multiple arguments
     - In desktop app: they are in the function editor window, below all textboxes
 - The files are in JSON format. Broadly, there are two formats supported:
 - **Function List**: a list of functions: `["<expr", "<expr>", ...]` for example `["x^2+3", "cos(x) < sin(x)"]`
-- **Full Format**: this format is used when you use the `Export` button.
+- **Full Format**: this format is used when you use the `Export` button. Examples below:
+```js
+{
+   "funcs":[
+      {
+         "color":"ff0000",
+         "expr":"x^2",
+         "id":0
+      },
+      {
+         "color":"4169e1",
+         "expr":"sin(x)<cos(y)",
+         "id":1
+      },
+      {
+         "color":"008000",
+         "expr":"(1.5*cos(t)-cos(30*t),1.5*sin(t)-sin(30*t))",
+         "id":2,
+         "tmax":6.2831854820251465,
+         "tmin":0.0
+      },
+      {
+         "color":"ffa500",
+         "expr":"",
+         "id":3
+      }
+   ],
+   "shell":[
+      "g($, $, $) = ($1 + ($2 + $0))",
+      "sec($) = (1 / cos($0))"
+   ],
+   "view":{
+      "height":578,
+      "polar":false,
+      "width":1000,
+      "xmax":10.0,
+      "xmin":-10.0,
+      "ymax":5.78,
+      "ymin":-5.78
+   }
+}
+```
+
+*Golden Gate*: <https://www.ocf.berkeley.edu/~sxyu/plot/goldengate.json>,
+Adapted from <https://www.desmos.com/calculator/s2uwllsxla>
 ```js
 {
    "funcs":[
