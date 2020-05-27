@@ -155,7 +155,7 @@ let onInit = function() {
     $('#open-shell').click(Shell.toggle);
 
     // IO
-    $('#open-export').click(function() {
+    $('#export-btn').click(function() {
         var now_str = new Date().toLocaleString().replace(/ /g, '_').replace(',', '');
         Util.download('nivalis_' +now_str + '.json', Module.export_json());
     });
@@ -173,9 +173,11 @@ let onInit = function() {
             } catch (e) {
                 err_txt.text('File is not in JSON format');
                 // Force dropdown open
-                if ($('#import-file-dropdown').is(":hidden")){
-                    $('#import-dropdown-toggle').dropdown('toggle');
-                }
+                setTimeout(function() {
+                    if ($('#import-file-dropdown').is(":hidden")){
+                        $('#import-dropdown-toggle').dropdown('toggle');
+                    }
+                }, 50);
                 return;
             }
             $('#import-file').siblings(".custom-file-label")
@@ -293,6 +295,9 @@ let onInit = function() {
         $('#function-expr-' + fn).focus();
         Module.redraw();
     });
+
+    // Saves
+    Saves.init();
 
     // Close loading screen
     document.getElementById("loading").style.opacity = '0.0';

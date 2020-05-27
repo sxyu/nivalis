@@ -16,7 +16,7 @@
         <div id="shell">
             <a id="shell-close" href="#"><ion-icon name='close'></ion-icon></a>
         </div>
-        <nav class="navbar navbar-expand-sm navbar-light bg-light" id="header">
+        <nav class="navbar navbar-expand-md navbar-light bg-light" id="header">
             <span class="navbar-brand">
                 Nivalis
                 <a href="https://github.com/sxyu/nivalis"
@@ -27,7 +27,7 @@
             <div class="collapse navbar-collapse" id="navbar-collapse">
                 <ul class="navbar-nav mr-auto">
                     <li class="nav-item">
-                        <a href="#" id="open-export" class="nav-link">
+                        <a href="#" id="export-btn" class="nav-link">
                             Export
                         </a>
                     </li>
@@ -51,10 +51,21 @@
                         </div> <!-- dropdown-menu -->
                     </li> <!-- nav-item  -->
                     <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="save-dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Saving/loading functions, sliders, and shell environment in your browser">
+                            Save
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="save-dropdown-toggle" id="save-dropdown">
+                              <a id="save-btn" class="dropdown-item" href="#" title="Save current state in your browser">Save current view</a>
+                              <div class="dropdown-divider" id="save-divider-top"></div>
+                              <div class="dropdown-divider" id="save-divider-bottom"></div>
+                              <a id="save-clear-btn" class="dropdown-item" title="Clear all saves" href="#"> Clear all </a>
+                        </div>
+                    </li>
+                    <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="example-dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                             Examples
                         </a>
-                        <div class="dropdown-menu" aria-labelledby="example-dropdown-toggle" id="example-file-dropdown">
+                        <div class="dropdown-menu" aria-labelledby="example-dropdown-toggle" id="example-dropdown">
                           <a class="dropdown-item example" href="#">
                               sin(x) &lt; cos(y)</a>
                           <a class="dropdown-item example" href="#">
@@ -233,6 +244,9 @@
                 </button>
             </div>
         </div>
+        </script>
+        <script type="text/template" id="save-template">
+        <a id="save-{name}" class="dropdown-item" href="#"> Load save {name}</a>
         </script>
 
         <script type="text/javascript" src="js/main.js"></script>

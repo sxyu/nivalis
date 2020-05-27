@@ -93,15 +93,17 @@ Under the hood: features an expression parser, expression (AST) evaluator, symbo
     - Click the x button to delete the current function
     - Desktop only: **Reference**: Click the `? Help` button for a reference documenting functions/operators etc.
         - It is similar to this page
-- **Shell**: Click the `Shell` button to get a virtual shell popup; this is in the function editor in the desktop GUI, top navbar in the web app. See next section for usage. Use cases:
-        - Evaluate a function you entered at some point. For example, if you entered `gamma(x)*digamma(x)` in the textbox labelled `f0`, you can enter `f0(5)` in the shell to evaluate `gamma(5)*digamma(5)`
-        - Define custom functions to use in the function editor. For example,
+- **Shell**: Click the `Shell` button to get a virtual shell popup;
+    this is in the function editor in the desktop GUI, top navbar in the web app. See next section for usage. Some use cases,
+    - Evaluate a function you entered at some point. For example,
+      if you entered `gamma(x)*digamma(x)` in the textbox labelled `f0`, you can enter `f0(5)` in the shell to evaluate `gamma(5)*digamma(5)`
+    - Define custom functions to use in the function editor. For example,
 define `sec(x) = 1/cos(x)`, or event function with multiple arguments
-        - Set variables manually, e.g. `C = 3.5`
-        - Use the symbolic differentiation/expression simplification engine
-            - `s <expr>` e.g. `s diff(x)[x]`
-- View window
-    - `Ctrl`+`H` or click the reset view button (View window) to reset to home view (around origin)
+    - Set variables manually, e.g. `C = 3.5`
+    - Use the symbolic differentiation/expression simplification engine
+        - `s <expr>` e.g. `s diff(x)[x]`
+- View window: top right; in web app, click `View` on top right
+    - `Ctrl`+`H` or click the reset view button (home icon in web app) to reset the view to initial zoom, around origin
     - Modify the bounds numbers on the View window to change view (minx maxx miny maxy) manually
 - Sliders window (attached below function window in web GUI)
     - Click `+ New slider` to add slider
@@ -137,3 +139,72 @@ define `sec(x) = 1/cos(x)`, or event function with multiple arguments
         - Disclaimer: should be correct (modulo removalble discontinuities), but does not simplify super reliably
     - Differentiate a function: `diff <var> <expr>` e.g. `diff x sin(x)*cos(2*x)`; outputs the derivative expression
         - Alternatively, use `s diff(x)[<expr>]`, which is more flexible since you can use `s diff2(x)[<expr>]`, etc.
+
+## I/O Format
+- To import/export a Nivalis view (including functions, sliders, etc.), use the import/export buttons
+    - In web app: they are top left, to the right of the branding in the top navbar
+        - Import usage: click import to open dropdown, click Browse to select the file, then click the blue Import button
+        - You also have the option to save the view to the browser's local storage, using the `Save` button.
+    - In desktop app: they are in the function editor window, below all textboxes
+- The files are in JSON format. Broadly, there are two formats supported:
+- **Function List**: a list of functions: `["<expr", "<expr>", ...]` for example `["x^2+3", "cos(x) < sin(x)"]`
+- **Full Format**: this format is used when you use the `Export` button.
+```js
+{
+   "funcs":[
+      {
+         "color":"4169e1",
+         "expr":"y<=-abs(sin(x))+1",
+         "id":0
+      },
+      {
+         "color":"008000",
+         "expr":"y<=-1/10*(abs(x)-40)^2+20",
+         "id":1
+      },
+      {
+         "color":"bc1717",
+         "expr":"10",
+         "id":2
+      },
+      {
+         "color":"bc1717",
+         "expr":"{-32<x&x<32: -20*abs(sin((x-a)/b))+30}",
+         "id":3
+      },
+      {
+         "color":"bc1717",
+         "expr":"y=-100*(abs(x)-16)^2+30",
+         "id":4
+      },
+      {
+         "color":"000000",
+         "expr":"",
+         "id":5
+      }
+   ],
+   "sliders":[
+      {
+         "max":20.0,
+         "min":15.0,
+         "val":15.99476432800293,
+         "var":"a"
+      },
+      {
+         "max":12.0,
+         "min":10.0,
+         "val":10.184000015258789,
+         "var":"b"
+      }
+   ],
+   "view":{
+      "height":578,
+      "polar":false,
+      "width":1000,
+      "xmax":41.52186541954958,
+      "xmin":-40.690648211519175,
+      "ymax":36.822471406969626,
+      "ymin":-10.696361471783993
+   }
+}
+```

@@ -296,7 +296,7 @@ label {
 .example {
     font-family: monospace
 }
-
+#btn-reset-view-small { margin-left: auto }
 @media (max-width: 768px) {
     #sidebar .slider-bounds .spacer{
         display:none;

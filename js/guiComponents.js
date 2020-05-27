@@ -343,6 +343,54 @@ var Shell = {
     },
 };
 
+var Saves = {
+    add_save_menu_item: function(i) {
+        let savei = localStorage['save' + i] || 0;
+        if (savei.length > 0) {
+            $('#save-divider-bottom').before($('#save-template').html().replace(
+                new RegExp('{name}', 'g'), i));
+            let menuitem = $('#save-' + i);
+            menuitem.click(function() {
+                let this_save = this.id.substr(5);
+                Module.import_json(localStorage['save' + this_save]);
+                resync();
+                Module.redraw();
+            });
+        }
+    },
+    _force_dropdown_open: function() {
+        // Force dropdown open
+        setTimeout(function() {
+            if ($('#save-dropdown').is(":hidden")){
+                $('#save-dropdown-toggle').dropdown('toggle');
+            }
+        }, 50);
+    },
+    init: function() {
+        $('#save-btn').click(function() {
+            let nsaves = Number.parseInt(localStorage['nsaves']) || 0;
+            localStorage.setItem('nsaves', nsaves + 1);
+            localStorage.setItem('save' + nsaves, Module.export_json());
+            Saves.add_save_menu_item(nsaves);
+            Saves._force_dropdown_open();
+        });
+        $('#save-clear-btn').click(function() {
+            let nsaves = Number.parseInt(localStorage['nsaves']) || 0;
+            localStorage.setItem('nsaves', 0);
+            for (var i = 0; i < nsaves; i++) {
+                localStorage.removeItem('save' + i);
+                $('#save-' + i).remove();
+            }
+            Saves._force_dropdown_open();
+        });
+
+        let nsaves = Number.parseInt(localStorage['nsaves']) || 0;
+        for (var i = 0; i < nsaves; i++) {
+            Saves.add_save_menu_item(i);
+        }
+    }
+}
+
 // Re-synchronize all functions/sliders
 var resync = function() {
     $('#functions').html('');

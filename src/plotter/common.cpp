@@ -1533,6 +1533,8 @@ std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
                 {"xmax", view.xmax},
                 {"ymin", view.ymin},
                 {"ymax", view.ymax},
+                {"width", view.swid},
+                {"height", view.shigh},
                 {"polar", polar_grid},
             }
         }
@@ -1582,6 +1584,12 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
                 if (jview.count("xmax")) view.xmax = jview["xmax"].get<double>();
                 if (jview.count("xmin")) view.ymin = jview["ymin"].get<double>();
                 if (jview.count("xmax")) view.ymax = jview["ymax"].get<double>();
+                int old_swid = view.swid, old_shigh = view.shigh;
+                if (jview.count("width")) view.swid = jview["width"].get<double>();
+                if (jview.count("height")) view.shigh = jview["height"].get<double>();
+                // Will resize bounds to fit screen
+                // else will become too distorted
+                resize(old_swid, old_shigh);
                 if (jview.count("polar")) polar_grid = jview["polar"].get<bool>();
             }
         }
