@@ -46,6 +46,7 @@ bool Shell::eval_line(std::string line) {
 
     std::string cmd = get_word(line);
     util::trim(line);
+    util::trim(cmd);
     if (cmd == "exit") {
         closed = true;
         return true;
@@ -58,7 +59,7 @@ bool Shell::eval_line(std::string line) {
             return false;
         }
     } else {
-        bool do_optim = cmd == "opt";
+        bool do_optim = cmd == "s";
         bool do_diff = cmd == "diff";
         if (do_optim) str_to_parse = line;
         uint32_t diff_var_addr;

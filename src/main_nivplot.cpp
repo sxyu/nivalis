@@ -510,8 +510,9 @@ void main_loop_step() {
         "Define custom function: <name>(<args>) = <expr>\ne.g. sec(x) = 1/cos(x) or f(x,y,z) = x+y+z\nYou can use this function in the function editor.");
         ImGui::BulletText("%s", "Symbolic operations");
         ImGui::Indent();
+        ImGui::BulletText("%s", "Simplify expression (not super reliable): s <expr>\ne.g. s (1+x)^2 + 2*(x+1)^2, s exp(x)*exp(2*x)");
         ImGui::BulletText("%s", "Differentiate a function: diff <var> <expr>\ne.g. diff x sin(x)*cos(2*x); outputs the derivative expression");
-        ImGui::BulletText("%s", "Simplify expression (not super reliable): opt <expr>\ne.g. opt (1+x)^2 + 2*(x+1)^2, opt exp(x)*exp(2*x)");
+        ImGui::BulletText("%s", "(Alternatively, use s diff(<var>)[<expr>])");
         ImGui::Unindent();
         ImGui::Unindent();
 
@@ -534,10 +535,13 @@ void main_loop_step() {
                 "ex. sum(x: 0, 100)[x]");
         ImGui::BulletText("%s", "Prod special form:\n"
                 "prod(<var>: <begin>, <end>)[<expr>]\n"
-                "ex. prdo(x: 0, 100)[1/x]");
-        ImGui::BulletText("%s", "Diff (derivative) special form:\n"
-                "prod(<var>: <begin>, <end>)[<expr>]\n"
-                "ex. prdo(x: 0, 100)[1/x]");
+                "ex. prod(x: 0, 100)[1/x]");
+        ImGui::BulletText("%s", "Diff (derivative) special form (evaluated at parse-time):\n"
+                "diff(<var>)[<expr>]\n"
+                "ex. diff(x)[1/x]");
+        ImGui::BulletText("%s", "Higher-order derivative special forms:\n"
+                "diff<ord>(<var>)[<expr>]\n"
+                "ex. diff2(x)[gamma(x)]");
         ImGui::Unindent();
 
         ImGui::TextUnformatted("Expressions: Functions");

@@ -308,27 +308,46 @@ private:
                         if (!_parse(arg_end + 1, right - 1, _PRI_LOWEST)) return false;
                         end_thunk();
                         return true;
-                    } else if (func_name == "diff") {
+                    } else if (func_name.size() >= 4 &&
+                               func_name.substr(0, 4) == "diff") {
                         // Derivative special form
-                        std::string varname =
-                            expr.substr(funname_end + 1, arg_end - funname_end-2);
-                        if (varname.empty() || !util::is_varname(varname)) {
-                            PARSE_ERR(func_name << " expected argument syntax "
-                                       "(<var>)\n");
+                        std::string ord_str = func_name.substr(4);
+                        int ord = 1;
+                        if (ord_str.size()) {
+                            if (!util::is_whole_number(ord_str)) {
+                                ord = -1;
+                            } else {
+                                ord = std::atoi(ord_str.c_str());
+                            }
+                            if (ord > 5) {
+                                PARSE_ERR("Derivative order is too high\n");
+                            }
                         }
-                        auto addr = env.addr_of(varname, false);
-                        decltype(result.ast) tmp;
-                        tmp.swap(result.ast);
-                        if (!_parse(arg_end + 1, right - 1, _PRI_LOWEST)) return false;
-                        Expr diff = result.diff(addr, env);
-                        diff.optimize();
-                        tmp.swap(result.ast);
-                        std::copy(diff.ast.begin(), diff.ast.end(),
-                                std::back_inserter(result.ast));
-                        return true;
-                    } else {
-                        PARSE_ERR("Unrecognized special form '" << func_name << "'\n");
+                        if (ord >= 0) {
+                            std::string varname;
+                            if (~var_end) varname = expr.substr(funname_end + 1, var_end - funname_end - 1);
+                            else varname = expr.substr(funname_end + 1, arg_end - funname_end-2);
+                            if (varname.empty() || !util::is_varname(varname)) {
+                                PARSE_ERR(func_name << " expected argument syntax "
+                                        "(<var>)\n");
+                            }
+                            auto addr = env.addr_of(varname, false);
+                            decltype(result.ast) tmp;
+                            tmp.swap(result.ast);
+                            if (!_parse(arg_end + 1, right - 1, _PRI_LOWEST)) return false;
+                            Expr diff = result;
+                            for (int i = 0; i < ord; ++i) {
+                                diff = diff.diff(addr, env);
+                                diff.optimize();
+                            }
+                            tmp.swap(result.ast);
+                            size_t sz = result.ast.size();
+                            result.ast.resize(sz + diff.ast.size());
+                            std::copy(diff.ast.begin(), diff.ast.end(), result.ast.begin() + sz);
+                            return true;
+                        }
                     }
+                    PARSE_ERR("Unrecognized special form '" << func_name << "'\n");
                 }
                 else if (cr == ')' && ~tok_link[left]) {
                     // Function
