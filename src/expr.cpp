@@ -137,30 +137,41 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
                const Environment* env, size_t idx) {
     std::string_view reprs = OpCode::repr(ast[idx].opcode);
     size_t n_idx = idx + 1;
-    for (char c : reprs) {
-        switch(c) {
-            case '@': n_idx = print_ast(os, ast, env, n_idx); break; // subexpr
-            case '#': os << ast[idx].val; break; // value
-            case '&':
-                  if (env != nullptr) {
-                      if (ast[idx].ref >= env->vars.size()) {
-                          os << "&NULL";
+    if (ast[idx].opcode == OpCode::call) {
+        // Special handling for user function
+        if (env != nullptr) {
+            os << env->funcs[ast[idx].call_info[0]].name << "(";
+        } else {
+            os << "<function id=" << ast[idx].call_info[0] << ", " << ast[idx].call_info[1] << " args>(";
+        }
+        size_t n_args = ast[idx].call_info[1];
+        for (size_t i = 0; i < n_args; ++i) {
+            if (i) os << ", ";
+            n_idx = print_ast(os, ast, env, n_idx);
+        }
+        os << ")";
+    } else {
+        for (char c : reprs) {
+            switch(c) {
+                case '@': n_idx = print_ast(os, ast, env, n_idx); break; // subexpr
+                case '#': os << ast[idx].val; break; // value
+                case '&':
+                          if (env != nullptr) {
+                              if (ast[idx].ref >= env->vars.size()) {
+                                  os << "&NULL";
+                                  break;
+                              } os << env->varname.at(ast[idx].ref);
+                          }
+                          else os << "@" << ast[idx].ref;
+                          break; // ref
+                case '\t':
+                          // Not used
                           break;
-                      } os << env->varname.at(ast[idx].ref);
-                  }
-                  else os << "@" << ast[idx].ref;
-                  break; // ref
-            case '\t':
-                  if (env != nullptr) {
-                      os << env->funcs[ast[idx].call_info[0]].name;
-                  } else {
-                      os << "<function id=" << ast[idx].call_info[0] << ", " << ast[idx].call_info[1] << " args>";
-                  }
-                  break;
-            case '$':
-                  os << "$" << ast[idx].ref;
-                  break;
-            default: os << c;
+                case '$':
+                          os << "$" << ast[idx].ref;
+                          break;
+                default: os << c;
+            }
         }
     }
     return n_idx;

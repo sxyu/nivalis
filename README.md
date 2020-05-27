@@ -98,7 +98,7 @@ Under the hood: features an expression parser, expression (AST) evaluator, symbo
     - Evaluate a function you entered at some point. For example,
       if you entered `gamma(x)*digamma(x)` in the textbox labelled `f0`, you can enter `f0(5)` in the shell to evaluate `gamma(5)*digamma(5)`
     - Define custom functions to use in the function editor. For example,
-define `sec(x) = 1/cos(x)`, or event function with multiple arguments
+define `sec(x) = 1/cos(x)`, or even a function with multiple arguments
     - Set variables manually, e.g. `C = 3.5`
     - Use the symbolic differentiation/expression simplification engine
         - `s <expr>` e.g. `s diff(x)[x]`
@@ -192,7 +192,8 @@ define `sec(x) = 1/cos(x)`, or event function with multiple arguments
 ```
 
 *Golden Gate*: <https://www.ocf.berkeley.edu/~sxyu/plot/goldengate.json>,
-Adapted from <https://www.desmos.com/calculator/s2uwllsxla>
+adapted from <https://www.desmos.com/calculator/s2uwllsxla>
+![Screenshot of Golden Gate plot](https://github.com/sxyu/nivalis/blob/master/readme_img/goldengate.png?raw=true)
 ```js
 {
    "funcs":[
