@@ -173,6 +173,7 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
                                         i - last_begin);
                     Expr e1 = parse(s, env,
                                 true, true, 0, &tmp_err);
+                    util::rtrim(tmp_err);
                     if (tmp_err.size()) {
                         func.exprs.push_back(parse(s, env,
                                     false, true, 0, &parse_err));
@@ -194,6 +195,7 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
                                         i - last_begin);
                     Expr e1 = parse(s, env,
                                 true, true, 0, &tmp_err);
+                    util::rtrim(tmp_err);
                     if (tmp_err.size()) {
                         func.exprs.push_back(parse(s, env,
                                     false, true, 0, &parse_err));
@@ -445,58 +447,53 @@ void Plotter::render(const View& view) {
     // BEGIN_PROFILE;
     for (size_t funcid = 0; funcid < funcs.size(); ++funcid) {
         auto& func = funcs[funcid];
-        switch (func.type & ~Function::FUNC_TYPE_MOD_ALL) {
-            case Function::FUNC_TYPE_POLYLINE:
-                {
-                    // Draw polyline
-                    if (func.exprs.size() && (func.exprs.size() & 1) == 0) {
-                        std::vector<std::array<float, 2> > line;
-                        double mark_radius = (curr_func == funcid) ? MARKER_DISP_RADIUS :
-                            MARKER_DISP_RADIUS-1;
-                        for (size_t i = 0; i < func.exprs.size(); i += 2) {
-                            PointMarker ptm;
-                            auto& expr_x = func.exprs[i],
-                                & expr_y = func.exprs[i+1];
-                            ptm.drag_var_x = ptm.drag_var_y = -1;
-                            bool require_restart = false;
-                            if (expr_x.is_ref()) {
-                                ptm.drag_var_x = expr_x[0].ref;
-                                if (std::isnan(env.vars[ptm.drag_var_x])) {
-                                    require_restart = true;
-                                    env.vars[ptm.drag_var_x] = 0.;
-                                }
-                            }
-                            if (expr_y.is_ref()) {
-                                ptm.drag_var_y = expr_y[0].ref;
-                                if (std::isnan(env.vars[ptm.drag_var_y])) {
-                                    require_restart = true;
-                                    env.vars[ptm.drag_var_y] = 0.;
-                                }
-                            }
-                            if (require_restart) {
-                                // New variable has been implicitly defined, must
-                                // re-start render
-                                funcid = -1;
-                                continue;
-                            }
-                            double x = expr_x(env), y = expr_y(env);
-                            if (std::isnan(x) || std::isnan(y) ||
-                                    std::isinf(x) || std::isinf(y)) {
-                                continue;
-                            }
-                            float sx = _X_TO_SX(x), sy = _Y_TO_SY(y);
-                            line.push_back({sx, sy});
-                            ptm.label = PointMarker::LABEL_NONE;
-                            ptm.y = y; ptm.x = x;
-                            ptm.passive = false;
-                            ptm.rel_func = funcid;
-                            pt_markers.push_back(std::move(ptm));
+        if ((func.type & ~Function::FUNC_TYPE_MOD_ALL) ==
+                Function::FUNC_TYPE_POLYLINE) {
+            // Draw polyline
+            // Do this first since it can affect other functions in the same frame
+            // e.g (p, q) moved
+            if (func.exprs.size() && (func.exprs.size() & 1) == 0) {
+                std::vector<std::array<float, 2> > line;
+                double mark_radius = (curr_func == funcid) ? MARKER_DISP_RADIUS :
+                    MARKER_DISP_RADIUS-1;
+                for (size_t i = 0; i < func.exprs.size(); i += 2) {
+                    PointMarker ptm;
+                    auto& expr_x = func.exprs[i],
+                    & expr_y = func.exprs[i+1];
+                    ptm.drag_var_x = ptm.drag_var_y = -1;
+                    if (expr_x.is_ref()) {
+                        ptm.drag_var_x = expr_x[0].ref;
+                        if (std::isnan(env.vars[ptm.drag_var_x])) {
+                            env.vars[ptm.drag_var_x] = 0.;
                         }
-                        buf_add_polyline(draw_buf, view, line, func.line_color, funcid, (curr_func == funcid) ? 3.f : 2.f,
-                                func.type == Function::FUNC_TYPE_POLYLINE_CLOSED);
                     }
+                    if (expr_y.is_ref()) {
+                        ptm.drag_var_y = expr_y[0].ref;
+                        if (std::isnan(env.vars[ptm.drag_var_y])) {
+                            env.vars[ptm.drag_var_y] = 0.;
+                        }
+                    }
+                    double x = expr_x(env), y = expr_y(env);
+                    if (std::isnan(x) || std::isnan(y) ||
+                            std::isinf(x) || std::isinf(y)) {
+                        continue;
+                    }
+                    float sx = _X_TO_SX(x), sy = _Y_TO_SY(y);
+                    line.push_back({sx, sy});
+                    ptm.label = PointMarker::LABEL_NONE;
+                    ptm.y = y; ptm.x = x;
+                    ptm.passive = false;
+                    ptm.rel_func = funcid;
+                    pt_markers.push_back(std::move(ptm));
                 }
-                break;
+                buf_add_polyline(draw_buf, view, line, func.line_color, funcid, (curr_func == funcid) ? 3.f : 2.f,
+                        func.type == Function::FUNC_TYPE_POLYLINE_CLOSED);
+            }
+        }
+    }
+    for (size_t funcid = 0; funcid < funcs.size(); ++funcid) {
+        auto& func = funcs[funcid];
+        switch (func.type & ~Function::FUNC_TYPE_MOD_ALL) {
             case Function::FUNC_TYPE_IMPLICIT:
                 plot_implicit(funcid); break;
             case Function::FUNC_TYPE_PARAMETRIC:

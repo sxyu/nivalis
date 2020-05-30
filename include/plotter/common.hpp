@@ -482,8 +482,10 @@ public:
                                   obj.type == FuncDrawObj::FILLED_RECT, obj.c);
             }
         }
-        for (auto& ptm : pt_markers) {
+        for(size_t i = pt_markers.size() - 1; ~i; --i) {
+            auto& ptm = pt_markers[i];
             // Draw point markers (crit points, polyline points)
+            // do backwards so that draggables are on top
             if (ptm.passive) continue;
             int sy = static_cast<int>((view.ymax - ptm.y) / (view.ymax - view.ymin) * view.shigh);
             int sx = static_cast<int>((ptm.x - view.xmin) / (view.xmax - view.xmin) * view.swid);
