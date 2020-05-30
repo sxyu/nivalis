@@ -27,6 +27,7 @@
 
 #include "shell.hpp"
 #include "util.hpp"
+EM_JS(double, get_ver, (), { return nivalis_ver_num; });
 EM_JS(int, canvas_get_width, (), { return Module.canvas.width; });
 EM_JS(int, canvas_get_height, (), { return Module.canvas.height; });
 EM_JS(void, notify_js_focus_editor, (int x), { cppNotifyFocusEditor(x); });
@@ -145,7 +146,7 @@ bool redraw_canvas(bool worker_req_update) {
         plot.handle_mouse_move(io.MousePos[0], io.MousePos[1]);
     }
 
-    // Set to set current function to 'change_curr_func' at next loop step
+    // Set to set current function to 'change_curr_func' at next redraw
     static int change_curr_func = -1;
     // Change current function
     if (~change_curr_func) {
@@ -467,5 +468,6 @@ int main(int argc, char ** argv) {
     int ems_js_canvas_height = canvas_get_height();
     glfwSetWindowSize(window, ems_js_canvas_width, ems_js_canvas_height);
 
-    worker = emscripten_create_worker("worker.js");
+    uint64_t ver_str = (uint64_t)get_ver();
+    worker = emscripten_create_worker(("worker.js?" + std::to_string(ver_str)).c_str());
 }

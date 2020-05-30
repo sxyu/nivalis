@@ -245,6 +245,7 @@ void main_loop_step() {
                         }
                         return 0;
                     })) {
+            std::lock_guard<std::mutex> lock(worker_mtx);
             plot.reparse_expr(fidx);
         }
         ImGui::PopItemWidth();

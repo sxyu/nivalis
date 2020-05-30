@@ -6,7 +6,7 @@
 #include "json.hpp"
 #include "shell.hpp"
 #include <iomanip>
-// #include <iostream>
+#include <iostream>
 
 namespace nivalis {
 
@@ -103,7 +103,20 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
         }
         lhs = expr_str.substr(0, lhs_end),
         rhs = expr_str.substr(rhs_start);
-        if (lhs == "y" || rhs == "y") {
+        if (lhs.size() && lhs.back() == ')') {
+            // A function definition?
+            for (size_t i = 0; i < lhs.size(); ++i) {
+                if (lhs[i] == '(') {
+                    auto fname = lhs.substr(0, i);
+                    if (util::is_varname(fname) &&
+                        OpCode::funcname_to_opcode_map().count(fname) == 0) {
+                        // Not name of a built-in function like sin,
+                        // so see it as a a function definition.
+                        return Function::FUNC_TYPE_FUNC_DEFINITION;
+                    }
+                }
+            }
+        } else if (lhs == "y" || rhs == "y") {
             Environment env;
             env.addr_of("y", false);
             if (lhs == "y") lhs = rhs;
@@ -113,8 +126,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
                 // treat as explicit function
                 return Function::FUNC_TYPE_EXPLICIT | type_mod;
             }
-        }
-        if (lhs == "x" || rhs == "x") {
+        } else if (lhs == "x" || rhs == "x") {
             Environment env;
             env.addr_of("x", false);
             if (lhs == "x") lhs = rhs;
@@ -124,8 +136,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
                 // treat as explicit function in y
                 return Function::FUNC_TYPE_EXPLICIT_Y | type_mod;
             }
-        }
-        if (lhs == "r" || rhs == "r") {
+        } else if (lhs == "r" || rhs == "r") {
             Environment env;
             if (lhs == "r") lhs = rhs;
             env.addr_of("x", false); env.addr_of("y", false);
@@ -135,6 +146,10 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
                 // treat as polar
                 return Function::FUNC_TYPE_POLAR | type_mod;
             }
+        } else if (util::is_varname(lhs)) {
+            // A function definition with no args
+            lhs.append("()");
+            return Function::FUNC_TYPE_FUNC_DEFINITION;
         }
         // o.w. it is implicit
         // here we can just swap the lhs/rhs so the
@@ -147,6 +162,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
     lhs = expr_str; rhs = "y";
     return Function::FUNC_TYPE_EXPLICIT;
 }
+
 bool parse_polyline_expr(const std::string& expr_str, Function& func,
                          Environment& env, int x_var, int y_var, int t_var,
                          std::string& parse_err) {
@@ -435,6 +451,10 @@ void Plotter::render(const View& view) {
     // Number of different t values to evaluate for a parametric
     // equation
     static const double PARAMETRIC_STEPS = 2500.0;
+    // If parametric function moves more than this amount (square of l2),
+    // disconnects the function line
+    const double PARAMETRIC_DISCONN_THRESH = 1e-3 * 150.;
+        // util::sqr_dist(view.xmax, view.ymax, view.xmin, view.ymin);
 
     bool prev_loss_detail = loss_detail;
     loss_detail = false; // Will set to show 'some detail may be lost'
@@ -464,13 +484,13 @@ void Plotter::render(const View& view) {
                     if (expr_x.is_ref()) {
                         ptm.drag_var_x = expr_x[0].ref;
                         if (std::isnan(env.vars[ptm.drag_var_x])) {
-                            env.vars[ptm.drag_var_x] = 0.;
+                            env.vars[ptm.drag_var_x] = 1.;
                         }
                     }
                     if (expr_y.is_ref()) {
                         ptm.drag_var_y = expr_y[0].ref;
                         if (std::isnan(env.vars[ptm.drag_var_y])) {
-                            env.vars[ptm.drag_var_y] = 0.;
+                            env.vars[ptm.drag_var_y] = 1.;
                         }
                     }
                     double x = expr_x(env), y = expr_y(env);
@@ -505,8 +525,9 @@ void Plotter::render(const View& view) {
                     double tmin = (double)func.tmin;
                     double tmax = (double)func.tmax;
                     if (tmin > tmax) std::swap(tmin, tmax);
-                    double tstep = (tmax - tmin) / PARAMETRIC_STEPS;
-                    for (double t = tmin; t <= tmax; t += tstep) {
+                    double tstep = std::max((tmax - tmin) / PARAMETRIC_STEPS, 1e-12);
+                    double px, py;
+                    for (double t = tmin; t < tmax; t += tstep) {
                         env.vars[t_var] = t;
                         double x, y;
                         if (func.type == Function::FUNC_TYPE_PARAMETRIC) {
@@ -516,8 +537,14 @@ void Plotter::render(const View& view) {
                             double r = func.expr(env);
                             x = r * cos(t); y = r * sin(t);
                         }
+                        if (t > tmin && util::sqr_dist(x, y, px, py) > PARAMETRIC_DISCONN_THRESH) {
+                            buf_add_polyline(draw_buf, view, curr_line, func.line_color, funcid,
+                                    curr_func == funcid ? 3 : 2.);
+                            curr_line.clear();
+                        }
                         float sx = _X_TO_SX(x), sy = _Y_TO_SY(y);
                         curr_line.push_back({sx, sy});
+                        px = x; py = y;
                     }
                     buf_add_polyline(draw_buf, view, curr_line, func.line_color, funcid,
                             curr_func == funcid ? 3 : 2.);
@@ -655,6 +682,7 @@ void Plotter::reparse_expr(size_t idx) {
     func.type = detect_func_type(func.expr_str, lhs, rhs);
 
     int ftype_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
+    bool want_reparse_all = false;
     switch(ftype_nomod) {
         case Function::FUNC_TYPE_EXPLICIT:
         case Function::FUNC_TYPE_EXPLICIT_Y:
@@ -666,7 +694,8 @@ void Plotter::reparse_expr(size_t idx) {
                         true, // mode explicit
                         true, // quiet
                         0, &func_error);
-            if (ftype_nomod != func.type) {
+            if (ftype_nomod == Function::FUNC_TYPE_POLAR &&
+                    ftype_nomod != func.type) {
                 func_error.append("Polar inequalities not currently supported");
             }
             break;
@@ -678,26 +707,83 @@ void Plotter::reparse_expr(size_t idx) {
         case Function::FUNC_TYPE_POLYLINE:
             // This is either polyline or parametric
             {
-                bool want_reparse = parse_polyline_expr(lhs, func, env,
+                want_reparse_all = parse_polyline_expr(lhs, func, env,
                         x_var, y_var, t_var, func_error);
-                if (want_reparse) {
-                    // New variable may have been registered implicitly:
-                    // (a,b) creates variables a,b
-                    // so have to reparse all
-                    for (size_t i = 0; i < funcs.size(); ++i) {
-                        if (i != idx) {
-                            reparse_expr(i);
+                // New variable may have been registered implicitly:
+                // (a,b) creates variables a,b
+                // so have to reparse all
+            }
+            break;
+        case Function::FUNC_TYPE_FUNC_DEFINITION:
+            {
+                size_t funname_end = lhs.find('(');
+                std::string funname = lhs.substr(0, funname_end);
+                int64_t stkh = 0, last_begin = funname_end + 1;
+                size_t argcount = 0, non_space_count = 0;
+                std::vector<uint64_t> bindings;
+                bool bad = false;
+                for (int64_t i = funname_end + 1; i < lhs.size()- 1; ++i) {
+                    const char cc = lhs[i];
+                    if (cc == '(') {
+                        ++stkh;
+                    } else if (cc == ')') {
+                        --stkh;
+                    } else if (cc == ',') {
+                        if (stkh == 0) {
+                            std::string arg = lhs.substr(last_begin, i - last_begin);
+                            if (!util::is_varname(arg)) {
+                                bad = true;
+                                break;
+                            }
+                            auto addr = env.addr_of(arg, false);
+                            bindings.push_back(addr);
+                            last_begin = i+1;
+                            ++argcount;
                         }
+                    } else if (!std::isspace(cc)) {
+                        ++non_space_count;
                     }
-                    require_update = true;
+                }
+                if (!bad && non_space_count) {
+                    ++argcount;
+                    std::string arg = lhs.substr(last_begin, lhs.size() - last_begin - 1);
+                    if (!util::is_varname(arg)) {
+                        bad = true;
+                    } else {
+                        auto addr = env.addr_of(arg, false);
+                        bindings.push_back(addr);
+                    }
+                } // else: function call with no args
+                if (bad) {
+                    func_error = "Invalid argument name in function definition " + lhs;
+                } else {
+                    Expr expr = parse(rhs, env,  true, true, 0, &func_error);
+                    if (env.addr_of_func(funname) == -1) {
+                        // Since new function defined, other expressions may change meaning,
+                        // so must reparse all
+                        want_reparse_all = true;
+                    }
+                    auto addr = env.def_func(funname, expr, bindings);
+                    if (env.error_msg.size()) {
+                        func_error = env.error_msg;
+                    }
                 }
             }
             break;
     }
+    if (want_reparse_all) {
+        for (size_t i = 0; i < funcs.size(); ++i) {
+            if (i != idx) {
+                reparse_expr(i);
+            }
+        }
+        require_update = true;
+    }
 
     if (!func.expr.is_null()) {
         // Optimize the main expression
-        if (func.type != Function::FUNC_TYPE_PARAMETRIC)
+        if (ftype_nomod != Function::FUNC_TYPE_PARAMETRIC &&
+            ftype_nomod != Function::FUNC_TYPE_FUNC_DEFINITION)
             func.expr.optimize();
 
         // Compute derivatives, if explicit
@@ -723,11 +809,11 @@ void Plotter::reparse_expr(size_t idx) {
     if (ftype_nomod == Function::FUNC_TYPE_EXPLICIT
         || ftype_nomod == Function::FUNC_TYPE_EXPLICIT_Y) {
         // Register a function in env
-        env.def_func(func.name, func.expr, { x_var });
+        env.def_func(func.name, func.expr, { ftype_nomod == Function::FUNC_TYPE_EXPLICIT_Y ? y_var : x_var });
         if (env.error_msg.size()) {
             func_error = env.error_msg;
         }
-    } else {
+    } else if (ftype_nomod != Function::FUNC_TYPE_FUNC_DEFINITION) {
         env.del_func(func.name);
     }
     loss_detail = false;
@@ -1703,7 +1789,7 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
     static const float DISCONTINUITY_EPS = 1e-4f;
 
     // Minimum x-distance between critical points
-    const double MIN_DIST_BETWEEN_ROOTS  = 5e-8 * xdiff;
+    const double MIN_DIST_BETWEEN_ROOTS  = 1e-9 * xdiff;
 
     env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
     // Discontinuity/root/extremum type enum
@@ -1805,7 +1891,7 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
     // ** Find roots, asymptotes, extrema
     if (!func.diff.is_null()) {
         double prev_x, prev_y = 0.;
-        for (int sx = 0; sx < swid; sx += 10) {
+        for (int sx = 0; sx < swid; sx += 4) {
             const double x = reverse_xy ? _SY_TO_Y(sx) : _SX_TO_X(sx);
             env.vars[var] = x;
             double y = func.expr(env);
@@ -2054,9 +2140,12 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
                 diff_comp_expr.optimize();
                 if (diff_comp_expr.is_null()) continue;
                 std::set<double> st;
-                for (int sxd = 0; sxd < swid; sxd += 10) {
+                for (int sxd = 0; sxd < swid; sxd += 2) {
                     const double x = reverse_xy ? _SY_TO_Y(sxd) : _SX_TO_X(sxd);
-                    double root = comp_expr.newton(NEWTON_ARGS, &diff_comp_expr);
+                    double root = comp_expr.newton(
+                            var, x, env, EPS_STEP * 10.f, EPS_ABS * 10.f, MAX_ITER,
+                            xmin - NEWTON_SIDE_ALLOW, xmax + NEWTON_SIDE_ALLOW,
+                            &diff_comp_expr);
                     push_if_valid(root, st);
                 }
                 for (double x : st) {

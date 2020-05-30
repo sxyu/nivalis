@@ -9,7 +9,7 @@ endif (POLICY CMP0048)
 
 project( nivalis )
 
-set( _VERSION_ "0.1.0a-3 (alpha)" )
+set( _VERSION_ "0.1.0a-4 (alpha)" )
 set( _COPYRIGHT_ "Alex Yu 2020" )
 
 set( CMAKE_CXX_STACK_SIZE "10000000" )
@@ -153,12 +153,16 @@ if (EMSCRIPTEN)
     ENDFOREACH()
     STRING(SUBSTRING ${JSFILES} 1 -1 JSFILES)
     add_custom_command(
-        OUTPUT "${PROJECT_BINARY_DIR}/js/main.js"
-        COMMAND ${CMAKE_COMMAND} -DFILELIST=${JSFILES} -DOUTPUT=${PROJECT_BINARY_DIR}/js/main.js -P ${CMAKE_MODULE_PATH}/concat.cmake
-        DEPENDS ${SOURCES_JS}
-        COMMENT "Concatenating JS sources to js/main.js"
+        OUTPUT "${PROJECT_BINARY_DIR}/out/js/main.js"
+        COMMAND ${CMAKE_COMMAND} -DFILELIST=${JSFILES},$<TARGET_FILE:${PLOT_GUI_PROJ_NAME}> -DOUTPUT=${PROJECT_BINARY_DIR}/out/js/main.js -P ${CMAKE_MODULE_PATH}/concat.cmake
+        DEPENDS ${SOURCES_JS} ${PLOT_GUI_PROJ_NAME} worker
+        COMMENT "Concatenating JS sources to out/js/main.js"
         VERBATIM )
-    add_custom_target(main_js ALL DEPENDS "${PROJECT_BINARY_DIR}/js/main.js")
+    add_custom_target(main_js ALL DEPENDS "${PROJECT_BINARY_DIR}/out/js/main.js")
+    find_package(PythonInterp REQUIRED)
+    add_custom_command(
+        TARGET main_js POST_BUILD
+        COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_BINARY_DIR}/build.py)
 else(EMSCRIPTEN)
     set(_EMSCRIPTEN_ "//")
 
@@ -184,7 +188,7 @@ else(EMSCRIPTEN)
     set ( _READLINE_ENABLED_ "//" )
     if (NOT WIN32)
         # Find Readline
-        find_package( Readline QUIET )
+        find_package( Readline )
         if ( READLINE_FOUND )
             set ( _READLINE_ENABLED_ "" )
             set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} ${READLINE_LIBRARIES} )
@@ -302,7 +306,7 @@ if ( BOOST_ENABLED )
     endif ()
 endif ()
 if (WIN32)
-	add_definitions(-DNOMINMAX)
+    add_definitions(-DNOMINMAX)
 endif()
 # ensure M_PI, etc available
 add_definitions( -D_USE_MATH_DEFINES )

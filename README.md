@@ -29,6 +29,7 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
 - Install a modern version of GCC which supports C++17 (GCC 7 will work)
 - Install OpenGL3
     - `sudo apt update && sudo apt install -y pkg-config mesa-common-dev freeglut3 freeglut3-dev`
+- For Readline functionality in Nivalis shell (like history), also install libreadline-dev
 - Configure project with CMake:
     - `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release`
     - CMake options:
@@ -49,13 +50,15 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
         - To force using glfw3 in the repo (as opposed to the one you installed) use `-DUSE_SYSTEM_GLFW=OFF`
 - Build project: `cmake --build . --config Release`, or open the solution in VS and build in "Release" configuration manually
 
-### Webasm (building on Ubuntu)
+### Emscripten (building on Ubuntu)
 - Configure project with CMake:
     - `cd build-emcc && emcmake cmake ..`
 - Build: `make -j8`
-- Host `build-emcc/` on a server and open index in a browser.
-  - Using Python 3: in build-emcc/, run: `python3 -m http.server` then run `firefox localhost:8000`
-- To deploy, simply upload `index.html`, `nivplot.js`, `nivplot.wasm`
+    - Python3 is required
+    - jinja2 is required for templating: `pip3 install jinja2`
+- Host `build-emcc/out/` on a server and open index in a browser.
+  - Using Python 3: in build-emcc/out/, run: `python3 -m http.server` then run `firefox localhost:8000`
+- To deploy, simply upload all files in `build-emcc/out` onto a server
 
 ### Testing
 - Tests are built by default. To disable, add `-DBUILD_TESTS=OFF` to cmake command line
@@ -90,6 +93,9 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
                 - If size >1, e.g. `(1,2)(2,3)`, draws all points and connects them in order
                 - Add `()` at the end to close the polygon, e.g. `(1,1)(2,2)(2,1)()` closes the polygon.
                 - If any point coordinate contains only a single variable, e.g. `(p,q)`, then the point can be dragged with your mouse to adjust `p,q` (note: this functionality is implemented in a super hacky way)
+          - Inline function definition: `a = 3`, `f(x,y,z) = x+y+z`, `zz = a+b+c` etc
+                - Note if the left-hand-side has no parentheses, this defines a *function with no arguments* and not a variable; e.g. `zz = ...` is equivalent to `zz() = ...`. This is more conventient in the plotter as it allows variables to depend on other variables.
+          - Comment: any function starting with `#` will be ignored
           - The expression syntax is standard and mostly Python-like.
             For details, see the next section (shell).
         - Updates plot automatically
@@ -126,17 +132,21 @@ define `sec(x) = 1/cos(x)`, or even a function with multiple arguments
     - Comparison operators: `<`,`>`,`<=`,`>=`,`==`/`=` (but `=` can mean assignment statement in shell; all mean equality/inequality in plotter)
     - Logical operators: `&`, `|` for and/or (e.g. `x<0 & x>-1`)
         - Related functions: `not(_)`, `xor(_, _)`
-    - Some mathematical functions available: `sqrt exp exp2 ln log10 log2 log sin cos tan asin acos atan sinh cosh tanh abs sgn max min floor ceil round fact gamma digamma trigamma polygamma erf zeta beta N` where `N(x)` is standard Gaussian pdf
-        - erf, zeta, beta, polygamma, digamma only available with Boost math (included in web version)
-        - Note all functions take a fixed number of arguments, except `log(x, base)`, which takes 1 OR 2 arguments (default base `e`)
-    - Some integer functions: `gcd lcm choose rifact fafact ifact` (rifact/fafact are rising/falling factorial)
-    - Some utility functions: `max(_, _)`, `min(_, _)`,
+    - Function call: `<func_name>(<arg>[, <arg>, ...])`; a function `f` with no arguments can be called with 
+        either `f()` or just `f`.
+        - Some mathematical functions available: `sqrt exp exp2 ln log10 log2 log sin cos tan asin acos atan sinh cosh tanh abs sgn max min floor ceil round fact gamma digamma trigamma polygamma erf zeta beta N` where `N(x)` is standard Gaussian pdf
+            - erf, zeta, beta, polygamma, digamma only available with Boost math (included in web version)
+            - Note all functions take a fixed number of arguments, except `log(x, base)`, which takes 1 OR 2 arguments (default base `e`)
+        - Some integer functions: `gcd lcm choose rifact fafact ifact` (rifact/fafact are rising/falling factorial)
+        - Some utility functions: `max(_, _)`, `min(_, _)`,
     - Piecewise functions aka. conditionals: `{<if-pred>:<if-expr>,<elif-pred>:<elif-expr>,...,<else-expr>}` e.g. `{x<0 : x, x>=0 : x^2}` or `{x<0 : x, x^2}` (last case is else by default)
     - Sum/prod special forms: `sum(x:1:10)[<expr>]` and `prod(x:1:10)[<expr>]` (inclusive indexing, upper index can be < lower)
     - Derivative special form: `diff(<var>)[<expr>]` takes the derivative of `<expr>` wrt `<var>` and evaluates it at current value of `<var>`. E.g. `diff(x)[sin(x)]`
     - Higher-order derivative special forms: `diff<ord>(<var>)[<expr>]`, where ord should be a number in 0...5
 - Define variable: for example, `a = 3+4`, then you can use `a` anywhere. Variables may contain: `0-9a-zA-Z_'` but cannot start with a number, e.g. `x3'` is valid.
     - Operator assignment: `a+=3`, `a*=3`, etc., as in usual languages
+    - Deleting variable: `del <varname>`
+    - Deleting function: `delf <funcname>`
 - Define custom function: `<name>(<args>) = <expr>` e.g. `sec(x) = 1/cos(x)` or `f(x,y,z) = x+y+z`
 - Symbolic operations
     - Symbolic simplification: `s <expr>` e.g. `s (1+x)^2 + 2*(x+1)^2`, `s exp(x)*exp(2*x)`

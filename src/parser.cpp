@@ -395,7 +395,7 @@ private:
                     if (~expected_argcount) {
                         // Valid function, process args
                         int64_t stkh = 0, last_begin = funname_end + 1;
-                        size_t argcount = 1;
+                        size_t argcount = 0, non_space_count = 0;
                         for (int64_t i = funname_end + 1; i < right - 1; ++i) {
                             const char cc = expr[i];
                             if (cc == '(') {
@@ -408,9 +408,14 @@ private:
                                     last_begin = i+1;
                                     ++argcount;
                                 }
+                            } else if (!std::isspace(cc)) {
+                                ++non_space_count;
                             }
                         }
-                        if (!_parse(last_begin, right-1, _PRI_LOWEST)) return false;
+                        if (non_space_count) {
+                            ++argcount;
+                            if (!_parse(last_begin, right-1, _PRI_LOWEST)) return false;
+                        } // else: function call with no args
                         if (argcount != expected_argcount) {
                             if (func_opcode == OpCode::logbase &&
                                     argcount == 1) {
@@ -445,33 +450,44 @@ private:
                     // Variable name
                     const std::string varname =
                         expr.substr(left, right - left);
-                    auto addr = env.addr_of(varname, true);
+                    uint64_t addr = env.addr_of(varname, true);
                     if (addr == -1) {
-                        // Parse-time constant
-                        const auto& constant_values =
-                            OpCode::constant_value_map();
-                        auto it = constant_values.find(varname);
-                        if (it != constant_values.end()) {
-                            // Fixed constant value (e.g. pi)
-                            if (std::isnan(it->second)) {
-                                result.ast.push_back(OpCode::null);
-                            } else {
-                                result.ast.push_back(// val
-                                        it->second);
+                        // If variable not found, try finding function with 0 args
+                        addr = env.addr_of_func(varname);
+                        if (addr == -1 || env.funcs[addr].n_args != 0) {
+                            // If such function not found, look for parse-time constant like pi
+                            const auto& constant_values =
+                                OpCode::constant_value_map();
+                            auto it = constant_values.find(varname);
+                            if (it != constant_values.end()) {
+                                if (std::isnan(it->second)) {
+                                    result.ast.push_back(OpCode::null);
+                                } else {
+                                    result.ast.push_back(// val
+                                            it->second);
+                                }
+                                return true;
                             }
-                            return true;
-                        }
-                        if (!mode_explicit) {
-                            result.ast.push_back(Expr::ASTNode(OpCode::ref,
-                                        env.addr_of(varname, false)));
+                            // If no constant not found either,
+                            // (1) mode explicit: return error
+                            // (2) else: create the variable in env
+                            if (!mode_explicit) {
+                                result.ast.push_back(Expr::ASTNode(OpCode::ref,
+                                            env.addr_of(varname, false)));
+                            } else {
+                                PARSE_ERR("Undefined variable or 0-argument function \"" << varname + "\"\n");
+                            }
                         } else {
-                            PARSE_ERR("Undefined variable \"" << varname + "\"\n");
+                            // Function call
+                            result.ast.push_back(Expr::ASTNode::call((uint32_t) addr, uint32_t(0)));
                         }
                     } else {
+                        // Variable reference
                         result.ast.push_back(Expr::ASTNode(OpCode::ref, addr));
                     }
-                    if (result.ast.back().ref >= env.vars.size()) {
-                        PARSE_ERR("Variable address of bounds \"" <<
+                    if (result.ast.back().opcode == OpCode::ref &&
+                        result.ast.back().ref >= env.vars.size()) {
+                        PARSE_ERR("Internal error: variable address out of bounds \"" <<
                                 result.ast.back().ref <<
                                 "\"\n");
                         result.ast.back().opcode = OpCode::null;

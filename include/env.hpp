@@ -34,7 +34,7 @@ struct Environment {
     void set(const std::string& var_name, double val = 0.0);
     // Get variable value
     double get(const std::string& var_name) const;
-    // Free variable
+    // Free variable (return true if success, false if var not found)
     bool del(const std::string& var_name);
 
     // Return address of variable (advanced)
@@ -52,8 +52,8 @@ struct Environment {
     // Get a function's address (in funcs) by name; -1 if not present
     uint64_t addr_of_func(const std::string& func_name) const;
 
-    // Delete function
-    void del_func(const std::string& func_name);
+    // Delete function (return true if success, false if func not found)
+    bool del_func(const std::string& func_name);
 
     // Clear all vars/funcs
     void clear();

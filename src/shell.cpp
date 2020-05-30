@@ -58,6 +58,14 @@ bool Shell::eval_line(std::string line) {
             os << "Undefined variable " << line << "\n";
             return false;
         }
+    } else if (cmd == "delf") {
+        // Delete function
+        if (env.del_func(line)) {
+            os << "delf " << line << std::endl;
+        } else {
+            os << "Undefined function " << line << "\n";
+            return false;
+        }
     } else {
         bool do_optim = cmd == "s";
         bool do_diff = cmd == "diff";
@@ -96,10 +104,16 @@ bool Shell::eval_line(std::string line) {
                                 def_fn_args.push_back(var.substr(
                                             prev_comma, i - prev_comma));
                                 util::trim(def_fn_args.back());
-                                if (def_fn_args[0].empty() ||
-                                    (def_fn_args[0][0] != '$' &&
-                                    !util::is_varname(def_fn_args[0]))) {
-                                    os << "'" << def_fn_args[0] <<
+                                if (var[i] == ')' && def_fn_args.size() == 1 &&
+                                    def_fn_args.back().empty()) {
+                                    // Function with no arguments
+                                    def_fn_args.clear();
+                                    break;
+                                }
+                                if (def_fn_args.back().empty() ||
+                                    (def_fn_args.back()[0] != '$' &&
+                                    !util::is_varname(def_fn_args.back()))) {
+                                    os << "'" << def_fn_args.back() <<
                                         "': invalid argument variable name\n";
                                     def_fn = false;
                                     break;

@@ -162,7 +162,7 @@ uint64_t Environment::addr_of_func(const std::string& func_name) const {
     return -1;
 }
 
-void Environment::del_func(const std::string& func_name) {
+bool Environment::del_func(const std::string& func_name) {
     error_msg.clear();
     auto it = freg.find(func_name);
     if (it != freg.end()) {
@@ -174,7 +174,9 @@ void Environment::del_func(const std::string& func_name) {
         funcs[it->second].deps.clear();
         funcs[it->second].deps.shrink_to_fit();
         freg.erase(it);
+        return true;
     }
+    return false;
 }
 
 void Environment::clear() {

@@ -239,7 +239,8 @@ void print_link_nodes(const std::vector<ASTLinkNode>& nodes) {
 void optim_link_nodes_main(Environment& env,
         std::vector<ASTLinkNode>& nodes, size_t vi = 0) {
     auto& v = nodes[vi];
-    if (OpCode::has_ref(v.opcode) && ~v.ref) v.nonconst_flag = true;
+    if ((OpCode::has_ref(v.opcode) && ~v.ref) ||
+         v.opcode == OpCode::call) v.nonconst_flag = true;
     size_t i = 0;
     for (; i < v.c.size(); ++i) {
         auto ui = v.c[i];
@@ -754,7 +755,6 @@ void optim_link_nodes_second_pass(Environment& env,
 
 // Implementation of optimize in Expr class
 void Expr::optimize() {
-     // diff x prod(i:1,3)[2*x]
     std::vector<ASTLinkNode> nodes;
     ast_to_link_nodes(ast, nodes);
 

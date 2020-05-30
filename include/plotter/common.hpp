@@ -82,6 +82,7 @@ struct Function {
         FUNC_TYPE_POLYLINE = 32,         // poly-lines (x,y) (x',y') (x'',y'')...
         FUNC_TYPE_POLYLINE_CLOSED = 33,  // closed poly-line (preprocessed into POLYLINE)
         FUNC_TYPE_PARAMETRIC = 40,       // parameteric equation
+        FUNC_TYPE_FUNC_DEFINITION = 64,  // definition
     };
     int type;
 
@@ -497,6 +498,15 @@ public:
                 // Draggable marker
                 fill_col = border_col;
                 r += 1;
+                std::string vn_str;
+                if (~ptm.drag_var_x) {
+                    vn_str.append(env.varname[ptm.drag_var_x]);
+                    if (~ptm.drag_var_y) vn_str.append(",");
+                }
+                if (~ptm.drag_var_y) {
+                    vn_str.append(env.varname[ptm.drag_var_y]);
+                }
+                graph.string(sx-r -7, sy+5, vn_str, color::GRAY);
             }
             graph.rectangle(sx-r, sy-r, 2*r+1, 2*r+1, true, fill_col);
             graph.rectangle(sx-r, sy-r, 2*r+1, 2*r+1, false, border_col);
