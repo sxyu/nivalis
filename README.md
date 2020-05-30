@@ -88,6 +88,7 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
            - *Polylines*: draws a series of points and lines e.g. `(5,1)`, or `(1,1) (2,2) (a,b)`
                 - If size 1, e.g. `(1,2)`, it draws a single point
                 - If size >1, e.g. `(1,2)(2,3)`, draws all points and connects them in order
+                - Add `()` at the end to close the polygon, e.g. `(1,1)(2,2)(2,1)()` closes the polygon.
                 - If any point coordinate contains only a single variable, e.g. `(p,q)`, then the point can be dragged with your mouse to adjust `p,q` (note: this functionality is implemented in a super hacky way)
           - The expression syntax is standard and mostly Python-like.
             For details, see the next section (shell).

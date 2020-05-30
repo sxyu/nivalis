@@ -223,8 +223,8 @@ a:hover { text-decoration: none }
     z-index: 2000;
     padding: 0.6em 0.8em;
     background: #fff;
-    max-width: 270px;
-    min-width: 270px;
+    max-width: 280px;
+    min-width: 280px;
     border: 1px solid #ced4da;
     border-radius: 5px;
     display:none;
