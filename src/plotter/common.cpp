@@ -967,7 +967,7 @@ void Plotter::handle_mouse_down(int px, int py) {
 void Plotter::handle_mouse_move(int px, int py) {
     if (~drag_marker &&
         drag_marker < pt_markers.size() &&
-            (~pt_markers[drag_marker].drag_var_y ||
+            (~pt_markers[drag_marker].drag_var_x ||
              ~pt_markers[drag_marker].drag_var_y)) {
         // Draggable marker
         auto& ptm = pt_markers[drag_marker];
