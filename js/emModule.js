@@ -79,15 +79,15 @@ var Module = {
     preRun: [],
     postRun: [],
     print: (function() {})(),
-    printErr: function(text) {},
+    printErr: function() {},
     canvas: (function() {
         var canvas = document.getElementById('canvas');
         canvas.addEventListener("webglcontextlost", function(e) {
             e.preventDefault(); }, false);
         return canvas;
     })(),
-    setStatus: function(text) {},
+    setStatus: function() {},
     totalDependencies: 0,
-    monitorRunDependencies: function(left) {},
+    monitorRunDependencies: function() {},
     onRuntimeInitialized: function() { $(document).ready(onInit); }
 };

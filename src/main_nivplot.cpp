@@ -42,6 +42,7 @@ GLFWwindow* window; // GLFW window
 
 // Worker state
 bool run_worker_flag;
+volatile bool worker_quit_flag;
 std::condition_variable worker_cv;
 std::mutex worker_mtx;
 std::stringstream state_encoding;
@@ -52,11 +53,12 @@ bool worker_req_update;
 
 // Draw worker thread entry point
 void draw_worker(nivalis::Plotter& plot) {
-    while (true) {
+    while (!worker_quit_flag) {
         Plotter::View view;
         {
             std::unique_lock<std::mutex> lock(worker_mtx);
             worker_cv.wait(lock, []{return run_worker_flag;});
+            if (worker_quit_flag) break;
             view = worker_plot.view;
             run_worker_flag = false;
             worker_plot.import_binary_func_and_env(state_encoding);
@@ -690,16 +692,20 @@ void main_loop_step() {
     int mouse_y = static_cast<int>(io.MousePos[1]);
     static int mouse_prev_x = 0, mouse_prev_y = 0;
     if (io.MouseReleased[0]) {
+        std::lock_guard<std::mutex> lock(worker_mtx);
         plot.handle_mouse_up(mouse_x, mouse_y);
     }
     if (!io.WantCaptureMouse) {
         if (io.MouseDown[0]) {
+            std::lock_guard<std::mutex> lock(worker_mtx);
             plot.handle_mouse_down(mouse_x, mouse_y);
         }
         if (mouse_x != mouse_prev_x || mouse_y != mouse_prev_y) {
+            std::lock_guard<std::mutex> lock(worker_mtx);
             plot.handle_mouse_move(mouse_x, mouse_y);
         }
         if (io.MouseWheel) {
+            std::lock_guard<std::mutex> lock(worker_mtx);
             plot.handle_mouse_wheel(
                     io.MouseWheel > 0,
                     static_cast<int>(std::fabs(io.MouseWheel) * 120),
@@ -712,6 +718,11 @@ void main_loop_step() {
     if (!io.WantCaptureKeyboard || io.KeyCtrl) {
         for (size_t i = 0; i < IM_ARRAYSIZE(io.KeysDown); ++i) {
             if (ImGui::IsKeyDown((int)i)) {
+                std::lock_guard<std::mutex> lock(worker_mtx);
+                if ((i == 'Q' || i == 'W') && io.KeyCtrl) {
+                    glfwSetWindowShouldClose(window, true);
+                    return;
+                }
                 plot.handle_key((int)i,
                         io.KeyCtrl, io.KeyShift, io.KeyAlt);
             }
@@ -797,7 +808,11 @@ int main(int argc, char ** argv) {
         main_loop_step();
     } // Main loop
     // Cleanup
+    run_worker_flag = true;
+    worker_quit_flag = true;
+    worker_cv.notify_one();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+    glfwDestroyWindow(window);
 }

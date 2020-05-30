@@ -76,7 +76,6 @@ var FuncEdit = {
         });
         editor_tb.focus(function() {
             // Focus (change curr func)
-            var $this = $(this);
             var this_name = this.id.substr(14);
             var idx = FuncEdit.func_indices[this_name];
             if (idx === Module.num_funcs() - 1) {
@@ -96,24 +95,15 @@ var FuncEdit = {
         $('#function-tmin-' + fname).val(Math.floor(Module.get_func_tmin(fidx) * 1e6)/1e6);
         $('#function-tmax-' + fname).val(Math.ceil(Module.get_func_tmax(fidx) * 1e6)/1e6);
         $('#function-tmin-' + fname).on('input', function() {
-            var $this = $(this);
-            var this_name = this.id.substr(14);
-            var idx = FuncEdit.func_indices[this_name];
-            var maxv = $('#function-tmax-' + fname).val();
-            Module.set_func_tmin(fidx, Number.parseFloat($this.val()));
+            Module.set_func_tmin(fidx, Number.parseFloat(this.value));
             Module.redraw();
         });
         $('#function-tmax-' + fname).on('input', function() {
-            var $this = $(this);
-            var this_name = this.id.substr(14);
-            var idx = FuncEdit.func_indices[this_name];
-            var minv = $('#function-tmin-' + fname).val();
-            Module.set_func_tmax(fidx, Number.parseFloat($this.val()));
+            Module.set_func_tmax(fidx, Number.parseFloat(this.value));
             Module.redraw();
         });
         $('#function-del-' + fname).click(function() {
             // Delete
-            var $this = $(this);
             var this_name = this.id.substr(13);
             var idx = FuncEdit.func_indices[this_name];
             if (FuncEdit.func_names.length > idx + 1) {
@@ -401,6 +391,7 @@ var resync = function() {
     Sliders.slider_indices = [];
     for (let i = 0; i < Module.num_funcs(); i++ ){
         FuncEdit.new_func(false);
+        FuncEdit.reparse(FuncEdit.func_names[i]);
     }
     for (let i = 0; i < Module.num_funcs() - 1; i++){
         let fn = FuncEdit.func_names[i];

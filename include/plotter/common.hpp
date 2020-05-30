@@ -47,34 +47,6 @@ const int MARKER_DISP_RADIUS = 3;
 
 // Represents function in plotter
 struct Function {
-    // Function name (f0 f1 etc)
-    std::string name;
-    // Function expression
-    Expr expr;
-    // Derivative, 2nd derivative (only for explicit)
-    Expr diff, ddiff;
-    // Reciprocal, derivative of reciprocal (only for explicit)
-    Expr recip, drecip;
-    // Color of function's line; made translucent for inequality region
-    color::color line_color;
-    // Should be set by GUI implementation: expression string from editor.
-    std::string expr_str;
-    enum {
-        FUNC_TYPE_EXPLICIT,             // normal func like x^2
-        FUNC_TYPE_IMPLICIT,             // implicit func like abs(x)=abs(y)
-        FUNC_TYPE_IMPLICIT_INEQ,        // implicit inequality >= 0
-        FUNC_TYPE_IMPLICIT_INEQ_STRICT, // implicit inequality > 0
-        FUNC_TYPE_PARAMETRIC,           // parameteric equation
-        FUNC_TYPE_POLAR,                // polar equation
-        FUNC_TYPE_POLYLINE,             // poly-lines (x,y) (x',y') (x'',y'')...
-    } type;
-    // Polyline type: stores line point expressions,
-    // Parameteric type: polyline[0] is x, ..[1] is y
-    std::vector<Expr> polyline;
-
-    // Bounds on t, for parametric and polar types only
-    float tmin = 0.f, tmax = float(2.f * M_PI);
-
     // Binary serialization
     std::ostream& to_bin(std::ostream& os) const;
     std::istream& from_bin(std::istream& is);
@@ -82,6 +54,50 @@ struct Function {
     // as opposed to just x/y.
     // Currently true for polar/parametric types.
     bool uses_parameter_t() const;
+
+    // Function name (f0 f1 etc)
+    std::string name;
+    // Color of function's line; made translucent for inequality region
+    color::color line_color;
+    // Should be set by GUI implementation: expression string from editor.
+    std::string expr_str;
+
+    // Function type modifiers (| with to type use, note binary codes above)
+    static const int
+          FUNC_TYPE_MOD_INEQ = 1,
+          FUNC_TYPE_MOD_INEQ_STRICT = 2,
+          FUNC_TYPE_MOD_INEQ_LESS = 4,
+          FUNC_TYPE_MOD_ALL = FUNC_TYPE_MOD_INEQ | FUNC_TYPE_MOD_INEQ_STRICT | FUNC_TYPE_MOD_INEQ_LESS;
+
+    enum _Type {
+        FUNC_TYPE_EXPLICIT,               // normal func like x^2
+
+        FUNC_TYPE_EXPLICIT_Y = 8,         // explicit, but in terms of y e.g. x = y^2
+
+        FUNC_TYPE_IMPLICIT = 16,         // implicit func like abs(x)=abs(y)
+
+        FUNC_TYPE_POLAR = 24,            // polar equation
+
+        // These have no usual inequality modifiers
+        FUNC_TYPE_POLYLINE = 32,         // poly-lines (x,y) (x',y') (x'',y'')...
+        FUNC_TYPE_POLYLINE_CLOSED = 33,  // closed poly-line (preprocessed into POLYLINE)
+        FUNC_TYPE_PARAMETRIC = 40,       // parameteric equation
+    };
+    int type;
+
+    // Bounds on t, for parametric and polar types only
+    float tmin = 0.f, tmax = float(2.f * M_PI) + 1e-6;
+
+    // Internal
+    // Function expression
+    Expr expr;
+    // Derivative, 2nd derivative (only for explicit)
+    Expr diff, ddiff;
+    // Reciprocal, derivative of reciprocal (only for explicit)
+    Expr recip, drecip;
+    // Polyline type: stores line point expressions,
+    // Parameteric type: polyline[0] is x, ..[1] is y
+    std::vector<Expr> exprs;
 };
 
 // Marks a single point on the plot which can be clicked
@@ -111,6 +127,10 @@ struct PointMarker {
         LABEL_INFLECTION_PT,
     } label;
     size_t rel_func; // associated function, -1 if N/A
+
+    // Draggable x, y coords (-1 = N/A)
+    uint64_t drag_var_x, drag_var_y;
+
     // passive: show marker with title,position on click
     // else: show .. on hover
     bool passive;
@@ -134,8 +154,9 @@ struct FuncDrawObj {
     size_t rel_func;
     enum{
         POLYLINE,
+        POLYLINE_CLOSED,
         FILLED_RECT,
-        RECT
+        RECT,
     } type;
     // Binary serialization
     std::ostream& to_bin(std::ostream& os) const;
@@ -167,14 +188,16 @@ public:
     // Construct a Plotter.
     // init_expr: initial expression for first function (which is automatically added)
     Plotter();
-    Plotter(const Plotter& other) =default;
-    Plotter& operator=(const Plotter& other) =default;
+    Plotter(const Plotter& other) =delete;
+    Plotter& operator=(const Plotter& other) =delete;
 
     /* Draw axes and grid onto given graphics adaptor
      * * Required Graphics adaptor API
      * void line(float ax, float ay, float bx, float by, const color::color&, float thickness = 1.0);               draw line (ax, ay) -- (bx, by)
-     * void polyline(const std::vector<std::array<float, 2> >& points, const color::color&, float thickness = 1.);  draw polyline (not closed)
+     * void polyline(const std::vector<std::array<float, 2> >& points, const color::color&, float thickness = 1., bool closed);  draw polyline
      * void rectangle(float x, float y, float w, float h, bool fill, const color::color&);                          draw rectangle (filled or non-filled)
+     * void triangle(float x1, float y1, float x2, float y2,
+                  float x3, float y3, bool fill, const color::color& c);
      * void circle(float x, float y, float r, bool fill, const color::color&);                                      draw circle (filled or non-filled)
      * void ellipse(float x, float y, float rx, float ry bool fill, const color::color&);                           draw axis-aligned ellipse (filled or non-filled)
      * void string(float x, float y, std::string s, const color::color&);                                           draw a string
@@ -449,9 +472,9 @@ public:
                 npt[1] = static_cast<float>((view.ymax - pt[1]) * view.shigh / (view.ymax - view.ymin));
             }
             // Draw the object
-            if (obj.type == FuncDrawObj::POLYLINE) {
+            if (obj.type <= 1) {
                 // Polyline
-                graph.polyline(points, obj.c, obj.thickness);
+                graph.polyline(points, obj.c, obj.thickness, obj.type == FuncDrawObj::POLYLINE_CLOSED);
             } else {
                 // Rectangle
                 graph.rectangle(points[0][0], points[0][1],
@@ -460,17 +483,21 @@ public:
             }
         }
         for (auto& ptm : pt_markers) {
+            // Draw point markers (crit points, polyline points)
             if (ptm.passive) continue;
             int sy = static_cast<int>((view.ymax - ptm.y) / (view.ymax - view.ymin) * view.shigh);
             int sx = static_cast<int>((ptm.x - view.xmin) / (view.xmax - view.xmin) * view.swid);
-            graph.rectangle(sx-MARKER_DISP_RADIUS,
-                     sy-MARKER_DISP_RADIUS, 2*MARKER_DISP_RADIUS+1,
-                     2*MARKER_DISP_RADIUS+1, true, color::LIGHT_GRAY);
-            graph.rectangle(sx-MARKER_DISP_RADIUS,
-                    sy-MARKER_DISP_RADIUS,
-                    2*MARKER_DISP_RADIUS+1, 2*MARKER_DISP_RADIUS+1,
-                    false,
-                    (~ptm.rel_func ? funcs[ptm.rel_func].line_color : color::GRAY));
+            color::color border_col = ~ptm.rel_func ? funcs[ptm.rel_func].line_color : color::GRAY;
+            color::color fill_col((border_col.r + 1.f) / 2.f, (border_col.g + 1.f / 2.f),
+                                  (border_col.b + 1.f) / 2, 1.f);
+            int r = MARKER_DISP_RADIUS;
+            if (~ptm.drag_var_x || ~ptm.drag_var_y) {
+                // Draggable marker
+                fill_col = border_col;
+                r += 1;
+            }
+            graph.rectangle(sx-r, sy-r, 2*r+1, 2*r+1, true, fill_col);
+            graph.rectangle(sx-r, sy-r, 2*r+1, 2*r+1, false, border_col);
         }
     }
 
@@ -557,14 +584,11 @@ private:
     // Helper for detecting if px, py activates a marker (in grid);
     // if so sets marker_* and current function
     // no_passive: if set, ignores passive markers
-    void detect_marker_click(int px, int py, bool no_passive = false);
-    // Helpers for adding polylines/rectangles to the buffer
-    void buf_add_polyline(const View& recalc_view,
-            const std::vector<std::array<float, 2> >& points,
-            const color::color& c, size_t rel_func,  float thickness = 1);
-    void buf_add_rectangle(const View& recalc_view,
-            float x, float y, float w, float h,
-            bool fill, const color::color& c);
+    // drag_var: if set, allows user to begin dragging a marker
+    void detect_marker_click(int px, int py, bool no_passive, bool drag_var);
+    // Plotting helpser for specific function types, used in render() code
+    void plot_implicit(size_t funcid);
+    void plot_explicit(size_t funcid, bool reverse_xy);
 public:
     // Public plotter state data
     View view;                              // Curr view data
@@ -598,6 +622,18 @@ public:
     // Radius around a point for which a marker is clickable
     // should be increased for mobile.
     int marker_clickable_radius = 8;
+
+    // WHat to do when user clicks on a function, then moves mouse
+    // drag trace: enter 'drag trace mode', so that when user moves mouse,
+    //             they can see function point positions
+    // drag view:  drag the view, as if user clicked on plotter's background
+    //             this is useful on mobile, as drag trace mode may make it
+    //             impossible to move the view when function occupies much
+    //             of screen
+    enum {
+       PASSIVE_MARKER_CLICK_DRAG_TRACE,
+       PASSIVE_MARKER_CLICK_DRAG_VIEW
+    } passive_marker_click_behavior = PASSIVE_MARKER_CLICK_DRAG_TRACE;
 
     // The environment object, contains defined functions and variables
     // (owned)
@@ -633,12 +669,11 @@ private:
     uint32_t x_var, y_var, t_var, r_var;      // x,y,t,r variable addresses
 
     // For use with mouth dragging
-    bool dragdown, draglabel;
+    bool drag_view, drag_trace;
     int dragx, dragy;
+    int drag_marker;
 
     size_t next_func_name = 0;                // Next available function name
 };
-
-
 }  // namespace nivalis
 #endif // ifndef _COMMON_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77

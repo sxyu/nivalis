@@ -106,7 +106,7 @@ let setupHandlers = function() {
             Renderer.redraw();
         }
     });
-    canvas.addEventListener("touchend", e=>{
+    canvas.addEventListener("touchend", ()=>{
         Module.on_mouseup(0, 0);
         Renderer.redraw();
         pinch_zoom_dist = -1.;
@@ -126,7 +126,7 @@ let onInit = function() {
     glfwPatch();
 
     // Hide marker if mouse somehow enters it
-    $('#marker').mouseenter(e => {
+    $('#marker').mouseenter(() => {
         $('#marker').css('opacity', '0');
         setTimeout(
             function() {$('#marker').css('display', 'none');}, 200)
@@ -249,7 +249,7 @@ let onInit = function() {
             sbar_drag = true;
         }
     });
-    $('#sidebar-dragger').dblclick(e => {
+    $('#sidebar-dragger').dblclick(() => {
         if (!$('#sidebar').hasClass('collapse')) {
             let drag = $('#sidebar-dragger');
             if (drag.width() < drag.height()) {
@@ -264,14 +264,16 @@ let onInit = function() {
             onResizeCanvas();
         }, 400);
     });
-    $(document).on('mouseup touchend', e => {
+    $(document).on('mouseup touchend', () => {
         sbar_drag = false;
         pinch_zoom_dist = -1.;
     });
     if (Util.is_mobile) {
         Module.set_marker_clickable_radius(16);
+        Module.set_passive_marker_click_drag_view(tru);
     } else {
-        Module.set_marker_clickable_radius(9);
+        Module.set_marker_clickable_radius(10);
+        Module.set_passive_marker_click_drag_view(false);
     }
 
     $('.example').click(function(){

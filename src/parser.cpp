@@ -14,8 +14,8 @@ namespace nivalis {
 #define PARSE_ERR(errmsg) do { \
      std::stringstream error_msg_stream; \
      error_msg_stream << errmsg;\
-     if (error_msg) *error_msg = error_msg_stream.str(); \
-     if(!quiet) std::cout << error_msg_stream.str(); \
+     if (error_msg) error_msg->append(error_msg_stream.str()); \
+     if(!quiet) std::cout << errmsg; \
      return false; \
    } while(false)
 
@@ -223,11 +223,9 @@ private:
                         const char cc = expr[i];
                         if (util::is_open_bracket(cc)) {
                             ++stkh;
-                        }
-                        else if (util::is_close_bracket(cc)) {
+                        } else if (util::is_close_bracket(cc)) {
                             --stkh;
-                        }
-                        else if (stkh == 0) {
+                        } else if (stkh == 0) {
                             if (cc == ':') {
                                 if (last_colon) {
                                     PARSE_ERR("Syntax error: consecutive : "
@@ -542,7 +540,8 @@ Expr parse(const std::string& expr, Environment& env,
         bool mode_explicit, bool quiet, size_t max_args,
         std::string* error_msg) {
     if (expr.empty()) return Expr();
-    if (error_msg) error_msg->clear();
+    // If already error, add newline
+    if (error_msg && error_msg->size() && error_msg->back() != '\n') error_msg->push_back('\n');
     if (expr.size() && expr[0] == '#') return Expr::AST(1); // Comment
     ParseSession sess(
             expr, env, error_msg, mode_explicit, quiet, max_args);

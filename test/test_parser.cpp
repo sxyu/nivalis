@@ -26,12 +26,15 @@ int main() {
     // Syntax error
     ASSERT_EQ(parse("()()", dummy_env, true, true, 0, &err).ast, AST(1));
     ASSERT_EQ(err.substr(0,6), "Syntax");
+    err.clear();
     // Numeric parsing error
     ASSERT_EQ(parse("2x+(3)", dummy_env, true, true, 0, &err).ast, AST(1));
     ASSERT_EQ(err.substr(0,7), "Numeric");
+    err.clear();
     // Undefined variable
     ASSERT_EQ(parse("2*x", dummy_env, true, true, 0, &err).ast, AST(1));
     ASSERT_EQ(err.substr(0,9), "Undefined");
+    err.clear();
     {
         Environment env_tmp;
         ASSERT_EQ(parse("(3)*x", dummy_env, false, false, 0, &err).ast,

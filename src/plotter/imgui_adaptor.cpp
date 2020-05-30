@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cmath>
+#include <iostream>
 #include "plotter/imgui_adaptor.hpp"
 
 namespace nivalis {
@@ -8,20 +10,31 @@ void ImGuiDrawListGraphicsAdaptor::line(float ax, float ay, float bx, float by,
             ImColor(c.r, c.g, c.b, c.a), thickness);
 }
 void ImGuiDrawListGraphicsAdaptor::polyline(const std::vector<std::array<float, 2> >& points,
-        const color::color& c, float thickness) {
+        const color::color& c, float thickness, bool closed) {
     std::vector<ImVec2> line(points.size());
-    for (size_t i = 0; i < points.size(); ++i) {
-        line[i].x = points[i][0];
-        line[i].y = points[i][1];
+    size_t j = 0;
+    for (size_t i = 0; i < points.size(); ++i, ++j) {
+        line[j] = ImVec2(points[i][0], points[i][1]);
+        if (j >= 2) {
+            double ax = (line[j].x - line[j-1].x);
+            double ay = (line[j].y - line[j-1].y);
+            double bx = (line[j-1].x - line[j-2].x);
+            double by = (line[j-1].y - line[j-2].y);
+            double theta_a = std::fmod(std::atan2(ay, ax) + 2*M_PI, 2*M_PI);
+            double theta_b = std::fmod(std::atan2(by, bx) + 2*M_PI, 2*M_PI);
+            double angle_between = std::min(std::fabs(theta_a - theta_b),
+                    std::fabs(theta_a + 2*M_PI - theta_b));
+            if (std::fabs(angle_between - M_PI) < 1e-1) {
+                // Near-colinear, currently ImGui's polyline drawing may will break
+                // in this case. We split the line here.
+                draw_list->AddPolyline(&line[0], (int)j, ImColor(c.r, c.g, c.b, c.a), closed, thickness);
+                line[0] = line[j-1]; line[1] = line[j];
+                j = 1;
+            }
+        }
     }
-    // for (size_t i = 0; i < points.size()-1; ++i) {
-    //     draw_list->AddLine(ImVec2(points[i][0], points[i][1]),
-    //                        ImVec2(points[i+1][0], points[i+1][1]),
-    //                        ImColor(c.r, c.g, c.b, c.a), thickness);
-    // }
-    // ImGui's polyline is bugged currently, has weird artifacts
-    // (even though I am already using code from a PR purporting to fix it)
-    draw_list->AddPolyline(&line[0], (int)line.size(), ImColor(c.r, c.g, c.b, c.a), false, thickness);
+    line.resize(j);
+    draw_list->AddPolyline(&line[0], (int)j, ImColor(c.r, c.g, c.b, c.a), closed, thickness);
 }
 void ImGuiDrawListGraphicsAdaptor::rectangle(float x, float y, float w, float h, bool fill, const color::color& c) {
     if (fill) {
@@ -29,6 +42,16 @@ void ImGuiDrawListGraphicsAdaptor::rectangle(float x, float y, float w, float h,
                 ImColor(c.r, c.g, c.b, c.a));
     } else {
         draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
+                ImColor(c.r, c.g, c.b, c.a));
+    }
+}
+void ImGuiDrawListGraphicsAdaptor::triangle(float x1, float y1, float x2, float y2,
+        float x3, float y3, bool fill, const color::color& c) {
+    if (fill) {
+        draw_list->AddTriangleFilled(ImVec2(x1, y1), ImVec2(x2, y2), ImVec2(x3, y3),
+                ImColor(c.r, c.g, c.b, c.a));
+    } else {
+        draw_list->AddTriangle(ImVec2(x1, y1), ImVec2(x2, y2), ImVec2(x3, y3),
                 ImColor(c.r, c.g, c.b, c.a));
     }
 }

@@ -213,6 +213,11 @@ std::string export_json() {
 void set_marker_clickable_radius(int radius) {
     plot.marker_clickable_radius = radius;
 }
+void set_passive_marker_click_drag_view(bool val) {
+    plot.passive_marker_click_behavior =
+        val ? Plotter::PASSIVE_MARKER_CLICK_DRAG_VIEW :
+              Plotter::PASSIVE_MARKER_CLICK_DRAG_TRACE;
+}
 
 // Returns error
 std::string import_json(const std::string& data) {
@@ -356,6 +361,7 @@ EMSCRIPTEN_BINDINGS(nivplot) {
     function("redraw", &redraw_canvas_not_worker);
 
     function("set_marker_clickable_radius", &set_marker_clickable_radius);
+    function("set_passive_marker_click_drag_view", &set_passive_marker_click_drag_view);
 
     // Function Editor API
     function("add_func", &add_function);

@@ -54,6 +54,9 @@ bool Expr::has_var(uint32_t addr) const {
 void Expr::sub_var(uint32_t addr, double value) {
     return detail::sub_var_ast(ast, addr, value);
 }
+void Expr::sub_var(uint32_t addr, const Expr& expr) {
+    return detail::sub_var_ast(ast, addr, expr);
+}
 
 Expr Expr::null() { return Expr(); }
 Expr Expr::zero() { return constant(0); }
@@ -88,6 +91,17 @@ bool Expr::is_null() const {
     return ast.empty() || ast[0].opcode == OpCode::null ||
            (ast[0].opcode == OpCode::val && std::isnan(ast[0].val));
 }
+
+bool Expr::is_val() const {
+    return ast.size() >= 1 && ast[0].opcode == OpCode::val;
+}
+
+bool Expr::is_ref() const {
+    return ast.size() >= 1 && ast[0].opcode == OpCode::ref;
+}
+
+const Expr::ASTNode& Expr::operator[](int idx) const { return ast[idx]; }
+Expr::ASTNode& Expr::operator[](int idx) { return ast[idx]; }
 
 Expr::ASTNode::ASTNode() : opcode(OpCode::null) {}
 Expr::ASTNode::ASTNode(uint32_t opcode, uint64_t ref)
@@ -178,12 +192,26 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
 }
 void sub_var_ast(Expr::AST& ast, int64_t addr, double value) {
     for (size_t i = 0; i < ast.size(); ++i) {
-        if (ast[i].opcode == OpCode::ref &&
+        if (OpCode::has_ref(ast[i].opcode) &&
+            ast[i].opcode != OpCode::arg &&
             ast[i].ref == addr) {
             ast[i].opcode = OpCode::val;
             ast[i].val = value;
         }
     }
+}
+
+void sub_var_ast(Expr::AST& ast, int64_t addr, const Expr& expr) {
+    Expr::AST new_ast;
+    for (size_t i = 0; i < ast.size(); ++i) {
+        if (ast[i].opcode == OpCode::ref &&
+            ast[i].ref == addr) {
+            std::copy(expr.ast.begin(), expr.ast.end(), std::back_inserter(new_ast));
+        } else {
+            new_ast.push_back(ast[i]);
+        }
+    }
+    ast = new_ast;
 }
 
 bool has_var_ast(const Expr::AST& ast, uint32_t addr) {

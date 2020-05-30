@@ -64,8 +64,13 @@ struct Expr {
     // Checks if expression contains given variable
     bool has_var(uint32_t addr) const;
 
-    // Substitute variable
+    // Substitute variable with value in-place
     void sub_var(uint32_t addr, double value);
+
+    // Substitute variable with another expression
+    // will copy internally
+    // Only substitutes OpCode ref's
+    void sub_var(uint32_t addr, const Expr& expr);
 
     // Null expr
     static Expr null();
@@ -81,8 +86,19 @@ struct Expr {
     std::ostream& to_bin(std::ostream& os) const;
     std::istream& from_bin(std::istream& is);
 
-    // Checks if this is a null expression
+    // Checks if this is a null expression OR a value which is nan
     bool is_null() const;
+
+    // Checks if this is a value
+    bool is_val() const;
+
+    // Checks if this is a ref
+    bool is_ref() const;
+
+    // Shorthand for ast[]
+    const ASTNode& operator[](int idx) const;
+    // Shorthand for ast[]
+    ASTNode& operator[](int idx);
 
     // Next section implemented optimize_expr.cpp
     // Optimize expression in-place
@@ -122,6 +138,9 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
 
 // Substitute variables in AST, in-place (advanced)
 void sub_var_ast(Expr::AST& ast, int64_t addr, double value);
+
+// Substitute variables in AST, in-place (advanced)
+void sub_var_ast(Expr::AST& ast, int64_t addr, const Expr& expr);
 
 // Checks if AST contains given variable
 bool has_var_ast(const Expr::AST& ast, uint32_t addr);

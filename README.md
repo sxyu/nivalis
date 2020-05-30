@@ -77,15 +77,17 @@ Under the hood: features an expression parser, expression (AST) evaluator, symbo
             - Functions parameterized by `x` e.g. `x^2` or `y=ln(x)` or `x^3=y`. Syntax is same as in shel
             - Implicit function (less detail, no subpixel render):
               e.g. `x=3` or `abs(x)=abs(y)` or `cos(x)=sin(y)` or `cos(x*y) = 0`
-            - Inequalities (implicit): e.g. `x<y`, `cos(y)<sin(y)`, `x^2>y`
+            - Inequalities (explicit/implicit): e.g. `x<y`, `cos(y)<sin(y)`, `x^2>y`
             - Parametric: `(<x-expr>, <y-expr>)`, where expressions should be in terms of `t` e.g. `(4*sin(4*t), 3*sin(3*t))`
             - Polar: `r=<expr>`, where `<expr>` should be in terms of angle `t` e.g. `r = 1-cos(t)`
                  -After entering a parametric/polar function,
                   inputs will appear to allow adjusting bounds on `t`
                   (you can directly set the value or drag *t min*, *t max* to change)
+                - Polar inequalities are not currently supported due to limitations in current graphics engine
            - *Polylines*: draws a series of points and lines e.g. `(5,1)`, or `(1,1) (2,2) (a,b)`
-                - If size 1, e.g. `(a,b)`, it draws a single point
-                - If size >1, e.g. `(a,b)(c,d)`, draws all points and connects them in order
+                - If size 1, e.g. `(1,2)`, it draws a single point
+                - If size >1, e.g. `(1,2)(2,3)`, draws all points and connects them in order
+                - If any point coordinate contains only a single variable, e.g. `(p,q)`, then the point can be dragged with your mouse to adjust `p,q` (note: this functionality is implemented in a super hacky way)
           - The expression syntax is standard and mostly Python-like.
             For details, see the next section (shell).
         - Updates plot automatically
