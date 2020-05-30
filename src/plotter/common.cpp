@@ -6,7 +6,7 @@
 #include "json.hpp"
 #include "shell.hpp"
 #include <iomanip>
-#include <iostream>
+// #include <iostream>
 
 namespace nivalis {
 
@@ -2042,13 +2042,14 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
                 } // for x : st
             } else if (ft_nomod + f2t_nomod == 8) {
                 // Inverse direction, use Newton on composition.
-                Expr comp_expr = func2.expr; comp_expr.sub_var(
-                        var == x_var ? y_var : x_var, func.expr);
+                Expr comp_expr = func2.expr;
+                auto other_var = var == x_var ? y_var  : x_var;
+                comp_expr.sub_var(other_var, func.expr);
                 comp_expr = comp_expr - Expr::AST{Expr::ASTNode::varref(var)};
                 comp_expr.optimize();
 
                 Expr diff_comp_expr = func2.diff;
-                diff_comp_expr.sub_var(var, func.expr);
+                diff_comp_expr.sub_var(other_var, func.expr);
                 diff_comp_expr = diff_comp_expr * func.diff - Expr::constant(1.);
                 diff_comp_expr.optimize();
                 if (diff_comp_expr.is_null()) continue;

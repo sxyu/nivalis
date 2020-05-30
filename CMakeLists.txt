@@ -9,7 +9,7 @@ endif (POLICY CMP0048)
 
 project( nivalis )
 
-set( _VERSION_ "0.1.0a-2 (alpha)" )
+set( _VERSION_ "0.1.0a-3 (alpha)" )
 set( _COPYRIGHT_ "Alex Yu 2020" )
 
 set( CMAKE_CXX_STACK_SIZE "10000000" )
