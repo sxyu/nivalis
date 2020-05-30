@@ -4,7 +4,8 @@ A Desmos-like interactive function plotter in C++ supporting implicit functions 
 Under the hood: features an expression parser, expression (AST) evaluator, symbolic differentiator and expression simplifier, which can be used directly through the shell.
 
 - **Live online demo** using WebAssembly:
-<https://www.ocf.berkeley.edu/~sxyu/plot/>
+<https://funcplot.com>
+Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
 
 - **Pre-built binaries** for Windows 10 and Ubuntu 16/18 LTS (x86-64) in
 <https://github.com/sxyu/nivalis/releases>
