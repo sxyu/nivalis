@@ -103,7 +103,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
         }
         lhs = expr_str.substr(0, lhs_end),
         rhs = expr_str.substr(rhs_start);
-        if (lhs.size() && lhs.back() == ')') {
+        if (type_mod == 0 && lhs.size() && lhs.back() == ')') {
             // A function definition?
             for (size_t i = 0; i < lhs.size(); ++i) {
                 if (lhs[i] == '(') {
@@ -146,7 +146,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
                 // treat as polar
                 return Function::FUNC_TYPE_POLAR | type_mod;
             }
-        } else if (util::is_varname(lhs)) {
+        } else if (type_mod == 0 && util::is_varname(lhs)) {
             // A function definition with no args
             lhs.append("()");
             return Function::FUNC_TYPE_FUNC_DEFINITION;
