@@ -447,6 +447,11 @@ Plotter::Plotter() : view{SCREEN_WIDTH, SCREEN_HEIGHT, 0., 0., 0., 0.}
 }
 
 void Plotter::render(const View& view) {
+    // Re-register some special vars, just in case they got deleted
+    x_var = env.addr_of("x", false);
+    y_var = env.addr_of("y", false);
+    t_var = env.addr_of("t", false);
+
     // * Constants
     // Number of different t values to evaluate for a parametric
     // equation
@@ -673,13 +678,32 @@ void Plotter::populate_grid() {
 }
 
 void Plotter::reparse_expr(size_t idx) {
+    // Re-register some special vars, just in case they got deleted
+    x_var = env.addr_of("x", false);
+    y_var = env.addr_of("y", false);
+    t_var = env.addr_of("t", false);
+
     if (idx == -1 ) idx = curr_func;
     auto& func = funcs[idx];
     func_error.clear();
     func.exprs.clear();
-    util::trim(func.expr_str);
+    {
+        // Remove all spaces, unless comment
+        if (func.expr_str.size() && func.expr_str[0] != '#') {
+            std::string tmp = func.expr_str;
+            func.expr_str.clear();
+            for (auto c : tmp) {
+                if (std::isspace(c)) continue;
+                func.expr_str.push_back(c);
+            }
+        }
+    }
     std::string lhs, rhs;
     func.type = detect_func_type(func.expr_str, lhs, rhs);
+    if (func.expr_str.size() && func.expr_str[0] == '#') {
+        // Comment
+        lhs.clear(); rhs.clear();
+    }
 
     int ftype_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
     bool want_reparse_all = false;
@@ -1122,19 +1146,11 @@ void Plotter::handle_mouse_wheel(bool upwards, int distance, int px, int py) {
 std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
     std::vector<json> jshell, jfuncs, jsliders;
     {
-        std::vector<int> slider_ids;
-        for (auto& sl : sliders) {
-            slider_ids.push_back(sl.var_addr);
-        }
-        std::sort(slider_ids.begin(), slider_ids.end());
         size_t j = 0;
         // Export variable values
         for (size_t i = 0; i < env.vars.size(); ++i) {
             // Do not store x,y,z, etc.
             if (is_var_name_reserved(env.varname[i])) continue;
-            while (j < slider_ids.size() && slider_ids[j] < i) ++j;
-            // Do not store slider variables
-            if (j < slider_ids.size() && slider_ids[j] == i) continue;
             // Do not store nan-valued variables
             if (std::isnan(env.vars[i]) ||
                     std::isinf(env.vars[i])) continue;
@@ -1231,6 +1247,8 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
         error_msg->clear();
     }
     try {
+        funcs.clear();
+
         json j; is >> j;
         if (j.is_array()) {
             // Interpret as function list
@@ -1251,7 +1269,9 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
             if (j.count("shell") && j["shell"].is_array()) {
                 for (auto& line : j["shell"]) {
                     if (line.is_string()) {
-                        tmpshell.eval_line(line.get<std::string>());
+                        if (!tmpshell.eval_line(line.get<std::string>())) {
+                            std::cout << "json_load_err " << ss.str() << "\n";
+                        }
                     }
                 }
             }
@@ -1301,7 +1321,6 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
                 }
             }
         }
-        funcs.clear();
         if (j.count("funcs") && j["funcs"].is_array()) {
             size_t idx = 0;
             for (auto& jfunc : j["funcs"]) {

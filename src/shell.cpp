@@ -43,14 +43,20 @@ bool Shell::eval_line(std::string line) {
     for (char c : line) {
         if (!std::isspace(c)) str_to_parse.push_back(c);
     }
-
-    std::string cmd = get_word(line);
     util::trim(line);
-    util::trim(cmd);
-    if (cmd == "exit") {
+    if (line == "exit") {
+        // Exit shell, if applicable
         closed = true;
         return true;
-    } else if (cmd == "del") {
+    }
+
+    std::string cmd;
+    if (line.size() && line[0] == '%') {
+        cmd = get_word(line);
+    }
+    util::trim(line);
+    util::trim(cmd);
+    if (cmd == "%del") {
         // Delete variable
         if (env.del(line)) {
             os << "del " << line << std::endl;
@@ -58,7 +64,7 @@ bool Shell::eval_line(std::string line) {
             os << "Undefined variable " << line << "\n";
             return false;
         }
-    } else if (cmd == "delf") {
+    } else if (cmd == "%delf") {
         // Delete function
         if (env.del_func(line)) {
             os << "delf " << line << std::endl;
@@ -67,8 +73,8 @@ bool Shell::eval_line(std::string line) {
             return false;
         }
     } else {
-        bool do_optim = cmd == "s";
-        bool do_diff = cmd == "diff";
+        bool do_optim = cmd == "%";
+        bool do_diff = cmd == "%diff";
         if (do_optim) str_to_parse = line;
         uint64_t diff_var_addr;
         if (do_diff) {

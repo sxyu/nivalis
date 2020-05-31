@@ -284,18 +284,31 @@ let onInit = function() {
             fidx = 0;
         }
         let fn = FuncEdit.func_names[fidx];
-        $('#function-expr-' + fn).val($this.text().trim());
-        if (this.hasAttribute('tmax')) {
-            $('#function-tmax-' + fn).val($this.attr('tmax'));
-            Module.set_func_tmax(fidx, Number.parseFloat($this.attr('tmax')));
+        let expr_ele = $('#function-expr-' + fn);
+        if (this.hasAttribute('load')) {
+            Util.getFile($this.attr("load"), function(err, data) {
+                if (err === null) {
+                    Module.import_json(data);
+                    resync();
+                    Module.redraw();
+                } else {
+                    console.log("Failed to retrieve sample JSON file");
+                }
+            });
+        } else {
+            expr_ele.val($this.text().trim());
+            if (this.hasAttribute('tmax')) {
+                $('#function-tmax-' + fn).val($this.attr('tmax'));
+                Module.set_func_tmax(fidx, Number.parseFloat($this.attr('tmax')));
+            }
+            if (this.hasAttribute('tmin')) {
+                $('#function-tmin-' + fn).val($this.attr('tmin'));
+                Module.set_func_tmin(fidx, Number.parseFloat($this.attr('tmin')));
+            }
+            FuncEdit.reparse(fn);
+            $('#function-expr-' + fn).focus();
+            Module.redraw();
         }
-        if (this.hasAttribute('tmin')) {
-            $('#function-tmin-' + fn).val($this.attr('tmin'));
-            Module.set_func_tmin(fidx, Number.parseFloat($this.attr('tmin')));
-        }
-        FuncEdit.reparse(fn);
-        $('#function-expr-' + fn).focus();
-        Module.redraw();
     });
 
     // Saves

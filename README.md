@@ -111,7 +111,7 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
 define `sec(x) = 1/cos(x)`, or even a function with multiple arguments
     - Set variables manually, e.g. `C = 3.5`
     - Use the symbolic differentiation/expression simplification engine
-        - `s <expr>` e.g. `s diff(x)[x]`
+        - `% <expr>` e.g. `% diff(x)[x]`
 - View window: top right; in web app, click `View` on top right
     - `Ctrl`+`H` or click the reset view button (home icon in web app) to reset the view to initial zoom, around origin
     - Modify the bounds numbers on the View window to change view (minx maxx miny maxy) manually
@@ -145,14 +145,14 @@ define `sec(x) = 1/cos(x)`, or even a function with multiple arguments
     - Higher-order derivative special forms: `diff<ord>(<var>)[<expr>]`, where ord should be a number in 0...5
 - Define variable: for example, `a = 3+4`, then you can use `a` anywhere. Variables may contain: `0-9a-zA-Z_'` but cannot start with a number, e.g. `x3'` is valid.
     - Operator assignment: `a+=3`, `a*=3`, etc., as in usual languages
-    - Deleting variable: `del <varname>`
-    - Deleting function: `delf <funcname>`
+    - Deleting variable: `%del <varname>`
+    - Deleting function: `%delf <funcname>`
 - Define custom function: `<name>(<args>) = <expr>` e.g. `sec(x) = 1/cos(x)` or `f(x,y,z) = x+y+z`
 - Symbolic operations
-    - Symbolic simplification: `s <expr>` e.g. `s (1+x)^2 + 2*(x+1)^2`, `s exp(x)*exp(2*x)`
+    - Symbolic simplification: `% <expr>` e.g. `s (1+x)^2 + 2*(x+1)^2`, `s exp(x)*exp(2*x)`
         - Disclaimer: should be correct (modulo removalble discontinuities), but does not simplify super reliably
-    - Differentiate a function: `diff <var> <expr>` e.g. `diff x sin(x)*cos(2*x)`; outputs the derivative expression
-        - Alternatively, use `s diff(x)[<expr>]`, which is more flexible since you can use `s diff2(x)[<expr>]`, etc.
+    - Differentiate a function: `%diff <var> <expr>` e.g. `%diff x sin(x)*cos(2*x)`; outputs the derivative expression
+        - Alternatively, use `% diff(x)[<expr>]`, which is more flexible since you can use `% diff2(x)[<expr>]`, etc.
 
 ## I/O Format
 - To import/export a Nivalis view (including functions, sliders, etc.), use the import/export buttons
