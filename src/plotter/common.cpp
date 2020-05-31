@@ -2044,7 +2044,7 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
                     sx = sx_end;
                     sy = static_cast<float>(shigh);
                 }
-                if (sx >= 0.f) {
+                if (psx >= 0.f && sx >= 0.f) {
                     draw_line(psx, psy, sx, sy);
                 }
             }
