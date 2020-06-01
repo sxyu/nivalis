@@ -36,6 +36,7 @@ set ( IMGUI_DIR "3rdparty/imgui" )
 set ( NANOVG_DIR "3rdparty/nanovg" )
 set ( GLEW_DIR "3rdparty/glew" )
 set ( GLFW_DIR "3rdparty/glfw3" )
+set ( INCLUDE_DIR_3RDPARTY "3rdparty/include" )
 
 if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -g" )
@@ -103,6 +104,7 @@ set ( SOURCES ${SOURCES} ${IMGUI_SOURCES} )
 
 include_directories(
     ${INCLUDE_DIR}
+    ${INCLUDE_DIR_3RDPARTY}
     ${PROJECT_BINARY_DIR}/include
     ${X11_INCLUDE_DIR}
     ${Fontconfig_INCLUDE_DIRS}

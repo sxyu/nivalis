@@ -65,7 +65,10 @@ struct Function {
     // Function type modifiers (| with to type use, note binary codes above)
     static const int
           FUNC_TYPE_MOD_INEQ = 1,
+          FUNC_TYPE_MOD_CLOSED = 1,
           FUNC_TYPE_MOD_INEQ_STRICT = 2,
+          FUNC_TYPE_MOD_FILLED = 2,
+          FUNC_TYPE_MOD_NOLINE = 4,
           FUNC_TYPE_MOD_INEQ_LESS = 4,
           FUNC_TYPE_MOD_ALL = FUNC_TYPE_MOD_INEQ | FUNC_TYPE_MOD_INEQ_STRICT | FUNC_TYPE_MOD_INEQ_LESS;
 
@@ -79,10 +82,18 @@ struct Function {
         FUNC_TYPE_POLAR = 24,            // polar equation
 
         // These have no usual inequality modifiers
-        FUNC_TYPE_POLYLINE = 32,         // poly-lines (x,y) (x',y') (x'',y'')...
-        FUNC_TYPE_POLYLINE_CLOSED = 33,  // closed poly-line (preprocessed into POLYLINE)
         FUNC_TYPE_PARAMETRIC = 40,       // parameteric equation
         FUNC_TYPE_FUNC_DEFINITION = 64,  // definition
+
+        // Geometry. These (except text) have fill/noline modifiers.
+        // POLYLINE also has closed modifier
+        FUNC_TYPE_GEOM_POLYLINE = 128,           // poly-lines (x,y) (x',y') (x'',y'')...
+        FUNC_TYPE_GEOM_RECT = 136,               // rectangle
+        FUNC_TYPE_GEOM_CIRCLE = 144,             // circle
+        FUNC_TYPE_GEOM_ELLIPSE = 152,            // ellipse
+        FUNC_TYPE_GEOM_TEXT = 160,               // text (no modifiers)
+
+        FUNC_TYPE_COMMENT = 256,         // comment
     };
     int type;
 
@@ -96,6 +107,8 @@ struct Function {
     Expr diff, ddiff;
     // Reciprocal, derivative of reciprocal (only for explicit)
     Expr recip, drecip;
+    // Stores string data
+    std::string str;
     // Polyline type: stores line point expressions,
     // Parameteric type: polyline[0] is x, ..[1] is y
     std::vector<Expr> exprs;
@@ -152,16 +165,38 @@ struct SliderData {
     std::string var_name_pre;
 };
 
-struct FuncDrawObj {
+// Geometric object in draw buffer (draw_buf)
+// These objects are in plot (aka. math) coordinates
+// so that they can be correctly drawn on the screen, even
+// if user changes the view before a redraw finishes
+// render() writes to buffer, in plot coords (x, y)
+// draw() reads from buffer, in current screen coords (sx, sy)
+struct DrawBufferObject {
     std::vector<std::array<double, 2> > points;
     float thickness;
     color::color c;
     size_t rel_func;
+    std::string str;
     enum{
+        // Polyline/polygon
         POLYLINE,
-        POLYLINE_CLOSED,
-        FILLED_RECT,
+        POLYGON,
+        FILLED_POLYGON,
+
+        // Rectangle
         RECT,
+        FILLED_RECT,
+
+        // Circle
+        CIRCLE,
+        FILLED_CIRCLE,
+
+        // Axis-aligned ellipse
+        ELLIPSE,
+        FILLED_ELLIPSE,
+
+        // Text
+        TEXT,
     } type;
     // Binary serialization
     std::ostream& to_bin(std::ostream& os) const;
@@ -199,7 +234,7 @@ public:
     /* Draw axes and grid onto given graphics adaptor
      * * Required Graphics adaptor API
      * void line(float ax, float ay, float bx, float by, const color::color&, float thickness = 1.0);               draw line (ax, ay) -- (bx, by)
-     * void polyline(const std::vector<std::array<float, 2> >& points, const color::color&, float thickness = 1., bool closed);  draw polyline
+     * void polyline(const std::vector<std::array<float, 2> >& points, const color::color&, float thickness = 1., bool closed, bool fill);  draw polyline/polygon (filled or non-filled; if filled set then closed is ignored)
      * void rectangle(float x, float y, float w, float h, bool fill, const color::color&);                          draw rectangle (filled or non-filled)
      * void triangle(float x1, float y1, float x2, float y2,
                   float x3, float y3, bool fill, const color::color& c);
@@ -498,14 +533,27 @@ public:
                 npt[1] = static_cast<float>((view.ymax - pt[1]) * view.shigh / (view.ymax - view.ymin));
             }
             // Draw the object
-            if (obj.type <= 1) {
+            if (obj.type <= DrawBufferObject::FILLED_POLYGON) {
                 // Polyline
-                graph.polyline(points, obj.c, obj.thickness, obj.type == FuncDrawObj::POLYLINE_CLOSED);
-            } else {
+                graph.polyline(points, obj.c, obj.thickness, obj.type == DrawBufferObject::POLYGON,
+                        obj.type == DrawBufferObject::FILLED_POLYGON);
+            } else if (obj.type <= DrawBufferObject::FILLED_RECT) {
                 // Rectangle
                 graph.rectangle(points[0][0], points[0][1],
                                   points[1][0] - points[0][0], points[1][1] - points[0][1],
-                                  obj.type == FuncDrawObj::FILLED_RECT, obj.c);
+                                  obj.type == DrawBufferObject::FILLED_RECT, obj.c);
+            } else if (obj.type <= DrawBufferObject::FILLED_CIRCLE) {
+                // Circle
+                graph.circle(points[0][0], points[0][1], points[1][0] - points[0][0],
+                                  obj.type == DrawBufferObject::FILLED_CIRCLE, obj.c);
+            } else if (obj.type <= DrawBufferObject::FILLED_ELLIPSE) {
+                // Ellipse
+                graph.ellipse(points[0][0], points[0][1],
+                              points[1][0] - points[0][0], -points[1][1] + points[0][1],
+                                  obj.type == DrawBufferObject::FILLED_ELLIPSE, obj.c);
+            } else { // if (obj.type == DrawBufferObject::TEXT)
+                // String
+                graph.string(points[0][0], points[0][1], obj.str, obj.c, 0.5f, 0.5f /* Center text */);
             }
         }
         for(size_t i = pt_markers.size() - 1; ~i; --i) {
@@ -702,7 +750,7 @@ public:
     std::mutex mtx;
 #endif
 
-    std::vector<FuncDrawObj> draw_buf;       // Function draw buffer
+    std::vector<DrawBufferObject> draw_buf;       // Function draw buffer
                                              // render() populates it
                                              // draw() draws these shapes to
                                              // an adaptor

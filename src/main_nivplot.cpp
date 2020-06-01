@@ -457,23 +457,34 @@ void main_loop_step() {
         // Reference popup
         ImGui::TextUnformatted("GUI: Function editor");
         ImGui::Indent();
-        ImGui::BulletText("%s", "The function editor is the window initially on top-left with\ntextboxes. You can enter expressions in textboxes here to draw:");
-        ImGui::Indent();
-        ImGui::BulletText("%s", "Explicit functions: Simply enter an expression with x\ne.g. x^2, gamma(x). Equivalently, enter y=<expr>");
-        ImGui::BulletText("%s", "Implicit functions: Enter an equation with x, y in the textbox\ne.g. cos(x*y)=0, sin(x)=cos(y)");
-        ImGui::BulletText("%s", "Inequalities (implicit): e.g. x<y, cos(y)<sin(y), x^2>y");
-        ImGui::BulletText("%s", "Parametric: (<x-expr>, <y-expr>), where expressions should be\nin terms of t e.g. (4*sin(4*t),3*sin(3*t))");
-        ImGui::BulletText("%s", "Polar: r=<expr>, where <expr> should be in terms of angle t\ne.g. r = 1-cos(t)");
-        ImGui::Indent();
-            ImGui::BulletText("%s", "After entering a parametric/polar function, "
-                "inputs will\nappear to allow adjusting bounds on t "
-                "(you can directly set\nthe value or drag 't min', 't max' to change)");
-        ImGui::Unindent();
-        ImGui::BulletText("%s", "'Polylines' (points and lines)");
-        ImGui::Indent();
-        ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>)\ne.g. (1, 2). Coords can have slider variables.");
-        ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>)(<x2>,<y2>)... e.g. (1,1)(2,2)(3,2)");
-        ImGui::Unindent();
+            ImGui::BulletText("%s", "The function editor is the window initially on top-left with\ntextboxes. You can enter expressions in textboxes here to draw:");
+            ImGui::Indent();
+            ImGui::BulletText("%s", "Explicit functions: Simply enter an expression with x\ne.g. x^2, gamma(x). Equivalently, enter y=<expr>");
+            ImGui::BulletText("%s", "Implicit functions: Enter an equation with x, y in the textbox\ne.g. cos(x*y)=0, sin(x)=cos(y)");
+            ImGui::BulletText("%s", "Inequalities (implicit): e.g. x<y, cos(y)<sin(y), x^2>y");
+            ImGui::BulletText("%s", "Parametric: (<x-expr>, <y-expr>), where expressions should be\nin terms of t e.g. (4*sin(4*t),3*sin(3*t))");
+            ImGui::BulletText("%s", "Polar: r=<expr>, where <expr> should be in terms of angle t\ne.g. r = 1-cos(t)");
+            ImGui::Indent();
+                ImGui::BulletText("%s", "After entering a parametric/polar function, "
+                    "inputs will\nappear to allow adjusting bounds on t "
+                    "(you can directly set\nthe value or drag 't min', 't max' to change)");
+            ImGui::Unindent();
+            ImGui::BulletText("%s", "'Polylines' (points and lines)");
+            ImGui::Indent();
+                ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>)\ne.g. (1, 2). Coords can have slider variables.");
+                ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>)(<x2>,<y2>)... e.g. (1,1)(2,2)(3,2)");
+            ImGui::Unindent();
+            ImGui::BulletText("%s", "2D Geometry Primitives");
+            ImGui::Indent();
+                ImGui::BulletText("%s", "Line/polygon: %poly [polyline expression], e.g. %poly (0,0)(1,1)(2,0)\nSimilar to polyline but closes the path automatically");
+                ImGui::BulletText("%s", "Rectangle: %rect (ax, ay) (bx, by) e.g. %rect (0,0)(1,1)");
+                ImGui::BulletText("%s", "Circle: %circ radius @ (cenx, ceny)");
+                ImGui::BulletText("%s", "Ellipse: %ellipse (rx, ry) @ (cenx, ceny)");
+                ImGui::BulletText("%s", "*Filling*: replace %<command> with %f<command> to fill the\nprimitive, for example %fpoly or %frect");
+                ImGui::BulletText("%s", "*Borderless filling*: replace %<command> with %F<command> to fill\nthe primitive AND remove the border, for example %Fpoly or %Frect");
+                ImGui::BulletText("%s", "%circle is an alias for %circ and %rectangle for %rect");
+            ImGui::Unindent();
+            ImGui::BulletText("%s", "Text: %text text-to-draw  @ (posx, posy) e.g. %text hello world @ (0,0)\nThe text will be center-aligned. Left/right whitespaces will be trimmed.");
         ImGui::Unindent();
         ImGui::BulletText("%s", "Each function is given a unique name, e.g. f0, f1,\nshown to its right. You can use it in other function:\ne.g. expression of another function may be f0(x^2)");
         ImGui::BulletText("%s", "Press the colored button to the right of the function name\nto change function color.");

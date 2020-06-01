@@ -14,7 +14,8 @@ struct ImGuiDrawListGraphicsAdaptor {
     void line(float ax, float ay, float bx, float by,
             const color::color& c, float thickness = 1.);
     void polyline(const std::vector<std::array<float, 2> >& points,
-            const color::color& c, float thickness = 1., bool closed = false);
+            const color::color& c, float thickness = 1., bool closed = false,
+            bool fill = false);
     void rectangle(float x, float y, float w, float h, bool fill, const color::color& c);
     void triangle(float x1, float y1, float x2, float y2,
                   float x3, float y3, bool fill, const color::color& c);

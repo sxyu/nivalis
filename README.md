@@ -91,8 +91,16 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
            - *Polylines*: draws a series of points and lines e.g. `(5,1)`, or `(1,1) (2,2) (a,b)`
                 - If size 1, e.g. `(1,2)`, it draws a single point
                 - If size >1, e.g. `(1,2)(2,3)`, draws all points and connects them in order
-                - Add `()` at the end to close the polygon, e.g. `(1,1)(2,2)(2,1)()` closes the polygon.
                 - If any point coordinate contains only a single variable, e.g. `(p,q)`, then the point can be dragged with your mouse to adjust `p,q` (note: this functionality is implemented in a super hacky way)
+            - 2D Geometry Primitives
+                - Line/polygon: `%poly [polyline expression]`, e.g. `%poly (0,0)(1,1)(2,0)`. Similar to polyline but closes the path automatically.
+                - Rectangle: `%rect (ax, ay) (bx, by)` e.g. `%rect (0,0)(1,1)`
+                - Circle: `%circ radius @ (cenx, ceny)`
+                - Ellipse: `%ellipse (rx, ry) @ (cenx, ceny)`
+                - *Filling*: replace `%<command>` with `%f<command>` to fill the primitive, for example `%fpoly` or `%frect`
+                - *Borderless filling*: replace `%<command>` with `%F<command>` to fill the primitive AND remove the border, for example `%Fpoly` or `%Frect`
+                - `%circle` is an alias for `%circ` and `%rectangle` for `%rect`
+            - Text: `%text text-to-draw  @ (posx, posy)` e.g. `%text hello world @ (0,0)`. The text will be center-aligned. Left/right whitespaces will be trimmed.
           - Inline function definition: `a = 3`, `f(x,y,z) = x+y+z`, `zz = a+b+c` etc
                 - Note if the left-hand-side has no parentheses, this defines a *function with no arguments* and not a variable; e.g. `zz = ...` is equivalent to `zz() = ...`. This is more conventient in the plotter as it allows variables to depend on other variables.
           - Comment: any function starting with `#` will be ignored

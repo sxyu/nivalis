@@ -17,32 +17,55 @@ color::color get_ineq_color(const color::color& func_line_color) {
     return ret;
 }
 
+// Buffer anagement
+// Add polyline/polygon to buffer
+template<class Scalar>
 void buf_add_polyline(
-        std::vector<FuncDrawObj>& draw_buf,
+        std::vector<DrawBufferObject>& draw_buf,
         const Plotter::View& render_view,
-        const std::vector<std::array<float, 2> >& points,
-        const color::color& c, size_t rel_func, float thickness = 1., bool closed = false) {
-    FuncDrawObj obj;
-    obj.points.resize(points.size());
-    for (size_t i = 0; i < points.size(); ++i) {
-        obj.points[i][0] = points[i][0]*1. / render_view.swid *
-            (render_view.xmax - render_view.xmin) + render_view.xmin;
-        obj.points[i][1] = (render_view.shigh - points[i][1])*1. /
-            render_view.shigh * (render_view.ymax - render_view.ymin) + render_view.ymin;
+        const std::vector<std::array<Scalar, 2> >& points,
+        const color::color& c, size_t rel_func, float thickness = 1.,
+        bool closed = false, bool line = true, bool filled = false,
+        bool screen_coords = true) {
+    DrawBufferObject obj;
+    if (screen_coords) {
+        obj.points.resize(points.size());
+        for (size_t i = 0; i < points.size(); ++i) {
+            obj.points[i][0] = points[i][0]*1. / render_view.swid *
+                (render_view.xmax - render_view.xmin) + render_view.xmin;
+            obj.points[i][1] = (render_view.shigh - points[i][1])*1. /
+                render_view.shigh * (render_view.ymax - render_view.ymin) + render_view.ymin;
+        }
+    } else {
+        obj.points.resize(points.size());
+        for (size_t i = 0; i < points.size(); ++i) {
+            obj.points[i][0] = (double)points[i][0];
+            obj.points[i][1] = (double)points[i][1];
+        }
     }
-    obj.type = closed ? FuncDrawObj::POLYLINE_CLOSED : FuncDrawObj::POLYLINE;
+    obj.type = closed ? DrawBufferObject::POLYGON :
+                        DrawBufferObject::POLYLINE;
     obj.rel_func = rel_func;
     obj.c = c;
     obj.thickness = thickness;
-    draw_buf.push_back(std::move(obj));
+    if (filled) {
+        DrawBufferObject obj2;
+        obj2 = obj;
+        obj2.type = DrawBufferObject::FILLED_POLYGON;
+        obj2.c = get_ineq_color(c);
+        draw_buf.push_back(std::move(obj2));
+    }
+    if (line) {
+        draw_buf.push_back(std::move(obj));
+    }
 }
 void buf_add_rectangle(
-        std::vector<FuncDrawObj>& draw_buf,
+        std::vector<DrawBufferObject>& draw_buf,
         const Plotter::View& render_view,
         float x, float y, float w, float h, bool fill, const color::color& c) {
     if (w <= 0. || h <= 0.) return;
-    FuncDrawObj rect;
-    rect.type = fill ? FuncDrawObj::FILLED_RECT : FuncDrawObj::RECT;
+    DrawBufferObject rect;
+    rect.type = fill ? DrawBufferObject::FILLED_RECT : DrawBufferObject::RECT;
     rect.points = {{(double)x, (double)y}, {(double)(x+w), (double)(y+h)}};
     rect.rel_func = -1; // Not used
     auto xdiff = render_view.xmax - render_view.xmin;
@@ -53,7 +76,7 @@ void buf_add_rectangle(
     }
     if (fill && draw_buf.size()) {
         auto& last_rect = draw_buf.back();
-        if (last_rect.type == FuncDrawObj::FILLED_RECT &&
+        if (last_rect.type == DrawBufferObject::FILLED_RECT &&
                 std::fabs(last_rect.points[0][1] - rect.points[0][1]) < 1e-6 * ydiff &&
                 std::fabs(last_rect.points[1][1] - rect.points[1][1]) < 1e-6 * ydiff &&
                 std::fabs(last_rect.points[1][0] - rect.points[0][0]) < 1e-6 * xdiff &&
@@ -61,7 +84,7 @@ void buf_add_rectangle(
             // Reduce shape count by merging with rectangle to left
             last_rect.points[1][0] = rect.points[1][0];
             return;
-        } else if (last_rect.type == FuncDrawObj::FILLED_RECT &&
+        } else if (last_rect.type == DrawBufferObject::FILLED_RECT &&
                 std::fabs(last_rect.points[0][0] - rect.points[0][0]) < 1e-6 * xdiff &&
                 std::fabs(last_rect.points[1][0] - rect.points[1][0]) < 1e-6 * xdiff &&
                 std::fabs(last_rect.points[1][1] - rect.points[0][1]) < 1e-6 * ydiff &&
@@ -103,12 +126,12 @@ void Plotter::render(const View& view) {
     for (size_t funcid = 0; funcid < funcs.size(); ++funcid) {
         auto& func = funcs[funcid];
         if ((func.type & ~Function::FUNC_TYPE_MOD_ALL) ==
-                Function::FUNC_TYPE_POLYLINE) {
+                Function::FUNC_TYPE_GEOM_POLYLINE) {
             // Draw polyline
             // Do this first since it can affect other functions in the same frame
             // e.g (p, q) moved
             if (func.exprs.size() && (func.exprs.size() & 1) == 0) {
-                std::vector<std::array<float, 2> > line;
+                std::vector<std::array<double, 2> > line;
                 double mark_radius = (curr_func == funcid) ? MARKER_DISP_RADIUS :
                     MARKER_DISP_RADIUS-1;
                 for (size_t i = 0; i < func.exprs.size(); i += 2) {
@@ -133,22 +156,26 @@ void Plotter::render(const View& view) {
                             std::isinf(x) || std::isinf(y)) {
                         continue;
                     }
-                    float sx = _X_TO_SX(x), sy = _Y_TO_SY(y);
-                    line.push_back({sx, sy});
+                    line.push_back({x, y});
                     ptm.label = PointMarker::LABEL_NONE;
                     ptm.y = y; ptm.x = x;
                     ptm.passive = false;
                     ptm.rel_func = funcid;
                     pt_markers.push_back(std::move(ptm));
                 }
-                buf_add_polyline(draw_buf, view, line, func.line_color, funcid, (curr_func == funcid) ? 3.f : 2.f,
-                        func.type == Function::FUNC_TYPE_POLYLINE_CLOSED);
+                buf_add_polyline(draw_buf, view, line, func.line_color,
+                        funcid, (curr_func == funcid) ? 3.f : 2.f,
+                        func.type & Function::FUNC_TYPE_MOD_CLOSED,
+                        (func.type & Function::FUNC_TYPE_MOD_NOLINE) == 0,
+                        func.type & Function::FUNC_TYPE_MOD_FILLED,
+                        false /* use plot coords */);
             }
         }
     }
     for (size_t funcid = 0; funcid < funcs.size(); ++funcid) {
         auto& func = funcs[funcid];
-        switch (func.type & ~Function::FUNC_TYPE_MOD_ALL) {
+        auto ftype_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
+        switch (ftype_nomod) {
             case Function::FUNC_TYPE_IMPLICIT:
                 plot_implicit(funcid); break;
             case Function::FUNC_TYPE_PARAMETRIC:
@@ -189,6 +216,76 @@ void Plotter::render(const View& view) {
                 plot_explicit(funcid, false); break;
             case Function::FUNC_TYPE_EXPLICIT_Y:
                 plot_explicit(funcid, true); break;
+
+            // Geometry (other than polyline)
+            case Function::FUNC_TYPE_GEOM_RECT:
+                {
+                    if (func.exprs.size() != 4) break;
+                    DrawBufferObject obj;
+                    obj.rel_func = funcid;
+                    obj.c = func.line_color;
+                    obj.thickness = 2.;
+                    obj.type = DrawBufferObject::RECT;
+                    obj.points.resize(2);
+                    auto& a = obj.points[0], &b = obj.points[1];
+                    a[0] = func.exprs[0](env);
+                    a[1] = func.exprs[1](env);
+                    b[0] = func.exprs[2](env);
+                    b[1] = func.exprs[3](env);
+                    if (b[0] < a[0]) std::swap(a[0], b[0]);
+                    if (b[1] < a[1]) std::swap(a[1], b[1]);
+                    b[0] -= a[0]; b[1] -= a[1];
+                    if (func.type & Function::FUNC_TYPE_MOD_FILLED) {
+                        DrawBufferObject obj2 = obj;
+                        obj2.type = DrawBufferObject::FILLED_RECT;
+                        obj2.c = get_ineq_color(func.line_color);
+                        draw_buf.push_back(std::move(obj2));
+                    }
+                    if ((func.type & Function::FUNC_TYPE_MOD_NOLINE) == 0) {
+                        draw_buf.push_back(std::move(obj));
+                    }
+                }
+                break;
+            case Function::FUNC_TYPE_GEOM_CIRCLE:
+            case Function::FUNC_TYPE_GEOM_ELLIPSE:
+                {
+                    size_t is_ellipse = (ftype_nomod == Function::FUNC_TYPE_GEOM_ELLIPSE);
+                    if (func.exprs.size() != 3 + is_ellipse) break;
+                    DrawBufferObject obj;
+                    obj.rel_func = funcid;
+                    obj.c = func.line_color;
+                    obj.thickness = 2.;
+                    obj.type = is_ellipse ? DrawBufferObject::ELLIPSE : DrawBufferObject::CIRCLE;
+                    obj.points.resize(2);
+                    auto& a = obj.points[0], &right = obj.points[1];
+                    a[0] = func.exprs[0](env);
+                    a[1] = func.exprs[1](env);
+                    right[0] = a[0] + func.exprs[2](env);
+                    right[1] = a[1];
+                    if (is_ellipse) right[1] += func.exprs[3](env);
+                    if (func.type & Function::FUNC_TYPE_MOD_FILLED) {
+                        DrawBufferObject obj2 = obj;
+                        obj2.type = is_ellipse ? DrawBufferObject::FILLED_ELLIPSE :
+                            DrawBufferObject::FILLED_CIRCLE;
+                        obj2.c = get_ineq_color(func.line_color);
+                        draw_buf.push_back(std::move(obj2));
+                    }
+                    if ((func.type & Function::FUNC_TYPE_MOD_NOLINE) == 0) {
+                        draw_buf.push_back(std::move(obj));
+                    }
+                }
+            case Function::FUNC_TYPE_GEOM_TEXT:
+                {
+                    if (func.exprs.size() != 2) break;
+                    DrawBufferObject obj;
+                    obj.rel_func = funcid;
+                    obj.c = func.line_color;
+                    obj.type = DrawBufferObject::TEXT;
+                    obj.points = { { func.exprs[0](env), func.exprs[1](env) } };
+                    obj.str = func.str;
+                    draw_buf.push_back(std::move(obj));
+                }
+                break;
         }
     }
     // PROFILE(all);
@@ -273,7 +370,7 @@ void Plotter::populate_grid() {
     // Pass 3: Construct and push passive markers (for clicking on functions)
     for (size_t i = 0; i < draw_buf.size(); ++i) {
         const auto & obj = draw_buf[i];
-        if (obj.type == FuncDrawObj::POLYLINE) {
+        if (obj.type == DrawBufferObject::POLYLINE) {
             const auto& points = obj.points;
             for (size_t j = 1; j < points.size(); ++j) {
                 const std::array<double, 2>& p = points[j - 1];

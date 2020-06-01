@@ -38,13 +38,48 @@ constexpr char result_var_name_for_type(int func_type) {
     }
 }
 int detect_func_type(const std::string& expr_str, std::string& lhs, std::string& rhs) {
-    if (expr_str.empty()) return Function::FUNC_TYPE_EXPLICIT;
-    if (expr_str[0] == '(' && expr_str.back() == ')') {
-        int close = expr_str[expr_str.size() - 2] == '(';
+    if (expr_str.empty()) return Function::FUNC_TYPE_COMMENT;
+    std::string expr_str_trimmed = expr_str;
+    util::trim(expr_str_trimmed);
+    if (expr_str_trimmed[0] == '#') {
+        // Comment
+        return Function::FUNC_TYPE_COMMENT;
+    }
+
+    if (expr_str_trimmed[0] == '%') {
+        // Special command
+        size_t cmd_end_pos = expr_str_trimmed.find(' ');
+        int type_mod = 0;
+        if (cmd_end_pos != std::string::npos &&
+                cmd_end_pos != expr_str_trimmed.size() - 1) {
+            std::string cmd = expr_str_trimmed.substr(1, cmd_end_pos - 1);
+            lhs = expr_str_trimmed.substr(cmd_end_pos + 1);
+            util::trim(lhs);
+            if (cmd == "text" ) {
+                return Function::FUNC_TYPE_GEOM_TEXT;
+            }
+            if (cmd.size() >= 1 && cmd[0] == 'F') {
+                type_mod = Function::FUNC_TYPE_MOD_FILLED | Function::FUNC_TYPE_MOD_NOLINE;
+                cmd = cmd.substr(1);
+            } else if (cmd.size() >= 1 && cmd[0] == 'f') {
+                type_mod = Function::FUNC_TYPE_MOD_FILLED;
+                cmd = cmd.substr(1);
+            }
+            if (cmd == "poly") return Function::FUNC_TYPE_GEOM_POLYLINE | Function::FUNC_TYPE_MOD_CLOSED | type_mod;
+            else if (cmd == "rect" || cmd == "rectangle")
+                return Function::FUNC_TYPE_GEOM_RECT | type_mod;
+            else if (cmd == "circ" || cmd == "circle")
+                return Function::FUNC_TYPE_GEOM_CIRCLE | type_mod;
+            else if (cmd == "ellipse") return Function::FUNC_TYPE_GEOM_ELLIPSE | type_mod;
+            lhs.clear();
+        }
+    }
+
+    if (expr_str_trimmed[0] == '(' && expr_str_trimmed.back() == ')') {
         int stkh = 0;
         bool has_comma = false;
-        for (size_t i = 0; i < expr_str.size() - (close ? 2 : 0); ++i) {
-            char c = expr_str[i];
+        for (size_t i = 0; i < expr_str_trimmed.size(); ++i) {
+            char c = expr_str_trimmed[i];
             if (util::is_open_bracket(c)) {
                 ++stkh;
             } else if (util::is_close_bracket(c)) {
@@ -57,20 +92,19 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
             }
         }
         if (has_comma) {
-            // POLYLINE or POLYGON or PARAMETRIC
-            lhs = expr_str;
-            if (close) lhs.resize(lhs.size() - 2);
-            return Function::FUNC_TYPE_POLYLINE + close;
+            // POLYLINE or PARAMETRIC
+            lhs = expr_str_trimmed;
+            return Function::FUNC_TYPE_GEOM_POLYLINE;
         }
     }
     int lhs_end = util::find_equality(
-            expr_str, true  /* allow_ineq */ ,
+            expr_str_trimmed, true  /* allow_ineq */ ,
             false /* enforce_no_adj_comparison */);
     if (~lhs_end) {
         // If has equality/inequality at root level
         int rhs_start = lhs_end + 1;
-        const char eq_ch = expr_str[lhs_end];
-        const char next_ch = expr_str[rhs_start];
+        const char eq_ch = expr_str_trimmed[lhs_end];
+        const char next_ch = expr_str_trimmed[rhs_start];
         if (next_ch == '=') ++rhs_start; // <=, >= detection
         int type_mod = 0;
         bool ineq_is_less = 0;
@@ -80,8 +114,8 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
             if (rhs_start == lhs_end + 1) type_mod |= Function::FUNC_TYPE_MOD_INEQ_STRICT;
             if (eq_ch == '<') type_mod |= Function::FUNC_TYPE_MOD_INEQ_LESS;
         }
-        lhs = expr_str.substr(0, lhs_end),
-        rhs = expr_str.substr(rhs_start);
+        lhs = expr_str_trimmed.substr(0, lhs_end),
+        rhs = expr_str_trimmed.substr(rhs_start);
         if (type_mod == 0 && lhs.size() && lhs.back() == ')') {
             // A function definition?
             for (size_t i = 0; i < lhs.size(); ++i) {
@@ -138,7 +172,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
         return Function::FUNC_TYPE_IMPLICIT | type_mod;
     }
     // o.w. explicit
-    lhs = expr_str; rhs = "y";
+    lhs = expr_str_trimmed; rhs = "y";
     return Function::FUNC_TYPE_EXPLICIT;
 }
 
@@ -149,6 +183,8 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
     size_t last_begin = 0, stkh = 0;
     bool has_comma = false;
     bool want_reparse = false;
+    const bool is_polyline_type = ((func.type& ~Function::FUNC_TYPE_MOD_ALL)
+                            == Function::FUNC_TYPE_GEOM_POLYLINE);
     for (size_t i = 0; i < expr_str.size(); ++i) {
         const char c = expr_str[i];
         if (std::isspace(c)) continue;
@@ -169,11 +205,14 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
                     Expr e1 = parse(s, env,
                                 true, true, 0, &tmp_err);
                     util::rtrim(tmp_err);
-                    if (tmp_err.size()) {
+                    if (is_polyline_type && tmp_err.size()) {
                         func.exprs.push_back(parse(s, env,
                                     false, true, 0, &parse_err));
                         want_reparse = true;
-                    } else func.exprs.push_back(e1);
+                    } else {
+                        func.exprs.push_back(e1);
+                        if (!is_polyline_type) parse_err.append(tmp_err + "\n");
+                    }
                     last_begin = i + 1;
                     has_comma = true;
                 }
@@ -191,21 +230,24 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
                     Expr e1 = parse(s, env,
                                 true, true, 0, &tmp_err);
                     util::rtrim(tmp_err);
-                    if (tmp_err.size()) {
+                    if (is_polyline_type && tmp_err.size()) {
                         func.exprs.push_back(parse(s, env,
                                     false, true, 0, &parse_err));
                         want_reparse = true;
-                    } else func.exprs.push_back(e1);
+                    } else {
+                        func.exprs.push_back(e1);
+                        if (!is_polyline_type) parse_err.append(tmp_err + "\n");
+                    }
+
                     has_comma = false;
                 }
                 break;
             default:
                 // Can't have things between ), (
                 // shouldn't happen since should not detect as polyline
-                if (stkh == 0) return false;
+                if (!std::isspace(c) && stkh == 0) return false;
         }
     }
-    // Polyline.
     if (parse_err.empty()) {
         for (Expr& e1 : func.exprs) {
             if (e1.has_var(x_var) || e1.has_var(y_var)) {
@@ -214,7 +256,8 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
                 parse_err.append("x, y disallowed in tuple "
                     "(polyline/parametric equation)\n");
                 break;
-            } else if (e1.has_var(t_var)) {
+            } else if (func.type == Function::FUNC_TYPE_GEOM_POLYLINE &&
+                       e1.has_var(t_var)) {
                 // Detect parametric equation
                 if (func.exprs.size() != 2) {
                     func.exprs.clear();
@@ -282,6 +325,9 @@ std::ostream& Function::to_bin(std::ostream& os) const {
     for (size_t i = 0; i < exprs.size(); ++i) {
         exprs[i].to_bin(os);
     }
+
+    util::write_bin(os, str.size());
+    os.write(str.c_str(), str.size());
     return os;
 }
 std::istream& Function::from_bin(std::istream& is) {
@@ -302,10 +348,12 @@ std::istream& Function::from_bin(std::istream& is) {
     for (size_t i = 0; i < exprs.size(); ++i) {
         exprs[i].from_bin(is);
     }
+    util::resize_from_read_bin(is, str);
+    is.read(&str[0], str.size());
     return is;
 }
 
-std::ostream& FuncDrawObj::to_bin(std::ostream& os) const {
+std::ostream& DrawBufferObject::to_bin(std::ostream& os) const {
     util::write_bin(os, points.size());
     for (size_t i = 0; i < points.size(); ++i) {
         util::write_bin(os, points[i]);
@@ -314,10 +362,12 @@ std::ostream& FuncDrawObj::to_bin(std::ostream& os) const {
     for (int i = 0; i < 4; ++i) util::write_bin(os, c.data[i]);
     util::write_bin(os, rel_func);
     util::write_bin(os, type);
+    util::write_bin(os, str.size());
+    os.write(str.c_str(), str.size());
     return os;
 }
 
-std::istream& FuncDrawObj::from_bin(std::istream& is) {
+std::istream& DrawBufferObject::from_bin(std::istream& is) {
     util::resize_from_read_bin(is, points);
     for (size_t i = 0; i < points.size(); ++i) {
         util::read_bin(is, points[i]);
@@ -327,7 +377,8 @@ std::istream& FuncDrawObj::from_bin(std::istream& is) {
     for (int i = 0; i < 4; ++i) util::read_bin(is, c.data[i]);
     util::read_bin(is, rel_func);
     util::read_bin(is, type);
-
+    util::resize_from_read_bin(is, str);
+    is.read(&str[0], str.size());
     return is;
 }
 
@@ -377,23 +428,8 @@ void Plotter::reparse_expr(size_t idx) {
     auto& func = funcs[idx];
     func_error.clear();
     func.exprs.clear();
-    {
-        // Remove all spaces, unless comment
-        if (func.expr_str.size() && func.expr_str[0] != '#') {
-            std::string tmp = func.expr_str;
-            func.expr_str.clear();
-            for (auto c : tmp) {
-                if (std::isspace(c)) continue;
-                func.expr_str.push_back(c);
-            }
-        }
-    }
     std::string lhs, rhs;
     func.type = detect_func_type(func.expr_str, lhs, rhs);
-    if (func.expr_str.size() && func.expr_str[0] == '#') {
-        // Comment
-        lhs.clear(); rhs.clear();
-    }
 
     int ftype_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
     bool want_reparse_all = false;
@@ -417,21 +453,72 @@ void Plotter::reparse_expr(size_t idx) {
             func.expr = parse("(" + lhs + ")-(" + rhs + ")",
                     env, true, true, 0, &func_error);
             break;
-        case Function::FUNC_TYPE_POLYLINE_CLOSED:
-        case Function::FUNC_TYPE_POLYLINE:
+        case Function::FUNC_TYPE_GEOM_POLYLINE:
+        case Function::FUNC_TYPE_GEOM_RECT:
             // This is either polyline or parametric
             {
-                want_reparse_all = parse_polyline_expr(lhs, func, env,
-                        x_var, y_var, t_var, func_error);
                 // New variable may have been registered implicitly:
                 // (a,b) creates variables a,b
-                // so have to reparse all
+                // so possibly have to reparse all
+                want_reparse_all = parse_polyline_expr(lhs, func, env,
+                        x_var, y_var, t_var, func_error);
+                if (ftype_nomod == Function::FUNC_TYPE_GEOM_RECT && func.exprs.size() != 4) {
+                    func_error = "Illegal %rect. Syntax: %rect (ax, ay) (bx, by)\n";
+                }
+            }
+            break;
+        case Function::FUNC_TYPE_GEOM_CIRCLE:
+            {
+                size_t rad_end_pos = lhs.find('@');
+                if (rad_end_pos == std::string::npos) {
+                    func_error = "%circ radius/center not specified. Syntax: %circ radius @ (cenx, ceny)\n";
+                } else {
+                    parse_polyline_expr(lhs.substr(rad_end_pos + 1), func, env,
+                            x_var, y_var, t_var, func_error);
+                    func.exprs.push_back(parse(lhs.substr(0, rad_end_pos), env, true, true, 0, &func_error));
+                    if (func.exprs.size() != 3) {
+                        func_error = "Illegal %circ. Syntax: %circ radius @ (cenx, ceny)\n";
+                    }
+                }
+            }
+            break;
+        case Function::FUNC_TYPE_GEOM_ELLIPSE:
+            {
+                size_t rad_end_pos = lhs.find('@');
+                if (rad_end_pos == std::string::npos) {
+                    func_error = "%ellipse radius/center not specified. Syntax: %ellipse (rx, ry) @ (cenx, ceny)\n";
+                } else {
+                    parse_polyline_expr(lhs.substr(rad_end_pos + 1), func, env,
+                            x_var, y_var, t_var, func_error);
+                    parse_polyline_expr(lhs.substr(0, rad_end_pos), func, env,
+                            x_var, y_var, t_var, func_error);
+                    if (func.exprs.size() != 4) {
+                        func_error = "Illegal %ellipse. Syntax: %ellipse (rx, ry) @ (cenx, ceny)\n";
+                    }
+                }
+            }
+            break;
+        case Function::FUNC_TYPE_GEOM_TEXT:
+            {
+                size_t rad_end_pos = lhs.find('@');
+                if (rad_end_pos == std::string::npos) {
+                    func_error = "%text text/position not specified. Syntax: %text text @ (x, y)\n";
+                } else {
+                    parse_polyline_expr(lhs.substr(rad_end_pos + 1), func, env,
+                            x_var, y_var, t_var, func_error);
+                    func.str = lhs.substr(0, rad_end_pos);
+                    util::trim(func.str);
+                    if (func.exprs.size() != 2) {
+                        func_error = "Illegal %text. Syntax: %text text @ (x, y)\n";
+                    }
+                }
             }
             break;
         case Function::FUNC_TYPE_FUNC_DEFINITION:
             {
                 size_t funname_end = lhs.find('(');
                 std::string funname = lhs.substr(0, funname_end);
+                util::trim(funname);
                 int64_t stkh = 0, last_begin = funname_end + 1;
                 size_t argcount = 0, non_space_count = 0;
                 std::vector<uint64_t> bindings;
@@ -445,6 +532,7 @@ void Plotter::reparse_expr(size_t idx) {
                     } else if (cc == ',') {
                         if (stkh == 0) {
                             std::string arg = lhs.substr(last_begin, i - last_begin);
+                            util::trim(arg);
                             if (!util::is_varname(arg)) {
                                 bad = true;
                                 break;
@@ -461,6 +549,7 @@ void Plotter::reparse_expr(size_t idx) {
                 if (!bad && non_space_count) {
                     ++argcount;
                     std::string arg = lhs.substr(last_begin, lhs.size() - last_begin - 1);
+                    util::trim(funname);
                     if (!util::is_varname(arg)) {
                         bad = true;
                     } else {
@@ -469,9 +558,9 @@ void Plotter::reparse_expr(size_t idx) {
                     }
                 } // else: function call with no args
                 if (bad) {
-                    func_error = "Invalid argument name in function definition " + lhs;
+                    func_error = "Invalid argument name in function definition " + lhs + "\n";
                 } else {
-                    Expr expr = parse(rhs, env,  true, true, 0, &func_error);
+                    Expr expr = parse(rhs, env, true, true, 0, &func_error);
                     if (env.addr_of_func(funname) == -1) {
                         // Since new function defined, other expressions may change meaning,
                         // so must reparse all
