@@ -12,7 +12,7 @@
 #include <cctype>
 #include <utility>
 
-#include "plotter/common.hpp"
+#include "plotter/plotter.hpp"
 #include "plotter/imgui_adaptor.hpp"
 #include "imstb_textedit.h"
 #include "imgui_impl_opengl3.h"

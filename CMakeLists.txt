@@ -62,7 +62,8 @@ set(
     opcodes.hpp
     shell.hpp
     color.hpp
-    plotter/common.hpp
+    plotter/plotter.hpp
+    plotter/internal.hpp
     plotter/imgui_adaptor.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
@@ -79,7 +80,8 @@ set(
     diff_expr.cpp
     shell.cpp
     color.cpp
-    plotter/common.cpp
+    plotter/gui.cpp
+    plotter/render.cpp
     plotter/imgui_adaptor.cpp
 )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)

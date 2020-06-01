@@ -3,8 +3,8 @@
 #pragma warning( disable : 4244 )
 #endif
 
-#ifndef _COMMON_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
-#define _COMMON_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
+#ifndef _PLOTTER_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
+#define _PLOTTER_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
 #include "version.hpp"
 #include <cctype>
 #include <cstddef>
@@ -688,4 +688,4 @@ private:
     size_t next_func_name = 0;                // Next available function name
 };
 }  // namespace nivalis
-#endif // ifndef _COMMON_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
+#endif // ifndef _PLOTTER_H_54FCC6EA_4F60_4EBB_88F4_C6E918887C77
