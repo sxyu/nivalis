@@ -155,11 +155,10 @@ void main_loop_step() {
     }
     // Clear plot
     glClear(GL_COLOR_BUFFER_BIT);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
-    float ratio = width / (float) height;
+    glViewport(0, 0, width, height);
+
     glOrtho(0, width, height, 0, 0, 1);
 
     // feed inputs to dear imgui, start new frame
@@ -767,6 +766,8 @@ bool init_gl() {
     }
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
 
     // Init glew context
     if (glewInit() != GLEW_OK)

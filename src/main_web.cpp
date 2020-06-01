@@ -86,26 +86,26 @@ bool redraw_canvas(bool worker_req_update) {
         notify_js_anim_sliders();
     }
 
+    // Handle resize (can cause require_update to become true)
+    int wwidth, wheight, pwwidth = -1, pwheight;
+    glfwGetWindowSize(window, &wwidth, &wheight);
+    if (wwidth != plot.view.swid || wheight != plot.view.shigh) {
+        pwwidth = plot.view.swid; pwheight = plot.view.shigh;
+        plot.resize(wwidth, wheight);
+    }
+
     if (plot.require_update) {
         // Clear plot
         glClear(GL_COLOR_BUFFER_BIT);
         int width, height;
         glfwGetFramebufferSize(window, &width, &height);
+        glViewport(0, 0, width, height);
 
         // Dear imgui start new frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Handle resize
-        int wwidth, wheight, pwwidth = -1, pwheight;
-        glfwGetWindowSize(window, &wwidth, &wheight);
-        if (wwidth != plot.view.swid || wheight != plot.view.shigh) {
-            pwwidth = plot.view.swid; pwheight = plot.view.shigh;
-            plot.resize(wwidth, wheight);
-        }
-
-        // static ImDrawList draw_list_pre(ImGui::GetDrawListSharedData());
         static Plotter::View plot_view_pre = plot.view;
 
         ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
