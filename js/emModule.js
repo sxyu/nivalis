@@ -80,8 +80,12 @@ var onResizeCanvas = function() {
         else customWidth = $('#sidebar').width();
     }
     fromXSMode = xs;
-    document.getElementById("canvas").width = new_wid;
-    document.getElementById("canvas").height = new_hi;
+    if (document.getElementById("canvas").width != new_wid) {
+        document.getElementById("canvas").width = new_wid;
+    }
+    if (document.getElementById("canvas").height != new_hi) {
+        document.getElementById("canvas").height = new_hi;
+    }
     Module.redraw();
 };
 

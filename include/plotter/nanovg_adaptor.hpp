@@ -1,16 +1,17 @@
 #pragma once
-#ifndef _IMGUI_ADAPTOR_H_0EB7F921_D939_4011_AA3A_9C87F33527DD
-#define _IMGUI_ADAPTOR_H_0EB7F921_D939_4011_AA3A_9C87F33527DD
+#ifndef _NANOVG_ADAPTOR_H_508FF868_0044_47FC_A7CF_4C90ABD4DCFB
+#define _NANOVG_ADAPTOR_H_508FF868_0044_47FC_A7CF_4C90ABD4DCFB
 
 #include <vector>
 #include <array>
 #include <string>
-#include "imgui.h"
+#include "nanovg.h"
 #include "color.hpp"
 
 namespace nivalis {
-// ImGUi drawlist graphics adaptor for Plotter
-struct ImGuiDrawListGraphicsAdaptor {
+// NanoVG-based graphics adaptor for Plotter
+struct NanoVGGraphicsAdaptor {
+    void init_fonts();
     void line(float ax, float ay, float bx, float by,
             const color::color& c, float thickness = 1.);
     void polyline(const std::vector<std::array<float, 2> >& points,
@@ -23,8 +24,9 @@ struct ImGuiDrawListGraphicsAdaptor {
     void ellipse(float x, float y, float rx, float ry,
                  bool fill, const color::color& c);
     void string(float x, float y, const std::string& s, const color::color& c);
-    ImDrawList* draw_list = nullptr;
-};
 
+    NVGcontext* ctx = nullptr;
+    int nvg_font_normal = 0;
+};
 }  // namespace nivalis
-#endif // ifndef _IMGUI_ADAPTOR_H_0EB7F921_D939_4011_AA3A_9C87F33527DD
+#endif // ifndef _NANOVG_ADAPTOR_H_508FF868_0044_47FC_A7CF_4C90ABD4DCFB

@@ -340,11 +340,13 @@ public:
             }
 
             // Angle label text
+// #define _PI_STR "pi"
+#define _PI_STR "\u03C0"
             static const char* angle_labels[] = {
-                "0", "pi/6", "pi/3",
-                "pi/2", "2pi/3", "5pi/6",
-                "pi", "7pi/6", "4pi/3",
-                "3pi/2", "5pi/3", "11pi/6"
+                "0", _PI_STR "/6", _PI_STR "/3",
+                _PI_STR "/2", "2" _PI_STR "/3", "5" _PI_STR "/6",
+                _PI_STR "", "7" _PI_STR "/6", "4" _PI_STR "/3",
+                "3" _PI_STR "/2", "5" _PI_STR "/3", "11" _PI_STR "/6"
             };
             double angle_text_disp_r = rmloi + rmstep * 1.8;
             // 0, pi/6, ...

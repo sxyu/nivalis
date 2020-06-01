@@ -33,6 +33,7 @@ set( SRC_DIR "${PROJECT_SOURCE_DIR}/src" )
 set( TEST_DIR "${PROJECT_SOURCE_DIR}/test" )
 
 set ( IMGUI_DIR "3rdparty/imgui" )
+set ( NANOVG_DIR "3rdparty/nanovg" )
 set ( GLEW_DIR "3rdparty/glew" )
 set ( GLFW_DIR "3rdparty/glfw3" )
 
@@ -51,7 +52,7 @@ set(
     test_eval_expr
     test_optimize_expr
     test_diff_expr
-    )
+)
 
 set(
     HEADERS
@@ -65,6 +66,7 @@ set(
     plotter/plotter.hpp
     plotter/internal.hpp
     plotter/imgui_adaptor.hpp
+    # plotter/nanovg_adaptor.hpp
 )
 list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 
@@ -83,6 +85,7 @@ set(
     plotter/gui.cpp
     plotter/render.cpp
     plotter/imgui_adaptor.cpp
+    # plotter/nanovg_adaptor.cpp
 )
 list(TRANSFORM SOURCES PREPEND ${SRC_DIR}/)
 set(
@@ -96,6 +99,7 @@ set(
 )
 list(TRANSFORM IMGUI_SOURCES PREPEND ${IMGUI_DIR}/)
 set ( SOURCES ${SOURCES} ${IMGUI_SOURCES} )
+# set ( SOURCES ${SOURCES} "${NANOVG_DIR}/nanovg.c" )
 
 include_directories(
     ${INCLUDE_DIR}
@@ -103,6 +107,7 @@ include_directories(
     ${X11_INCLUDE_DIR}
     ${Fontconfig_INCLUDE_DIRS}
     ${IMGUI_DIR}
+    ${NANOVG_DIR}
 )
 
 set( PROJ_DEPENDENCIES )
@@ -132,6 +137,8 @@ if (EMSCRIPTEN)
         set ( _BOOST_ENABLED_ "" )
         set ( BOOST_ENABLED ON )
     endif()
+
+    add_definitions( -DNANOVG_GLES3_IMPLEMENTATION )
 
     add_library( ${LIB_PROJ_NAME} STATIC ${HEADERS} ${SOURCES} )
     set_target_properties(${LIB_PROJ_NAME} PROPERTIES OUTPUT_NAME
@@ -184,6 +191,8 @@ else(EMSCRIPTEN)
     else ( USE_BOOST_MATH )
         message ( STATUS "Boost math was disabled by user" )
     endif ( USE_BOOST_MATH )
+
+    add_definitions( -DNANOVG_GL3_IMPLEMENTATION )
 
     find_package(Threads REQUIRED)
 

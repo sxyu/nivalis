@@ -1,7 +1,8 @@
+#include "plotter/imgui_adaptor.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
-#include "plotter/imgui_adaptor.hpp"
 
 namespace nivalis {
 void ImGuiDrawListGraphicsAdaptor::line(float ax, float ay, float bx, float by,

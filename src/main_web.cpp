@@ -79,12 +79,6 @@ bool redraw_canvas(bool worker_req_update) {
 
     glfwPollEvents();
 
-    // Clear plot
-    glClear(GL_COLOR_BUFFER_BIT);
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-    float ratio = width / (float) height;
-
     // Update slider animations
     plot.slider_animation_step();
     if (plot.animating_sliders.size()) {
@@ -92,25 +86,30 @@ bool redraw_canvas(bool worker_req_update) {
         notify_js_anim_sliders();
     }
 
-    // feed inputs to dear imgui, start new frame
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    // Handle resize
-    int wwidth, wheight, pwwidth = -1, pwheight;
-    glfwGetWindowSize(window, &wwidth, &wheight);
-    if (wwidth != plot.view.swid || wheight != plot.view.shigh) {
-        pwwidth = plot.view.swid; pwheight = plot.view.shigh;
-        plot.resize(wwidth, wheight);
-    }
-
-    static ImDrawList draw_list_pre(ImGui::GetDrawListSharedData());
-    static Plotter::View plot_view_pre = plot.view;
-
-    ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
-    adaptor.draw_list = draw_list;
     if (plot.require_update) {
+        // Clear plot
+        glClear(GL_COLOR_BUFFER_BIT);
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        // Dear imgui start new frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        // Handle resize
+        int wwidth, wheight, pwwidth = -1, pwheight;
+        glfwGetWindowSize(window, &wwidth, &wheight);
+        if (wwidth != plot.view.swid || wheight != plot.view.shigh) {
+            pwwidth = plot.view.swid; pwheight = plot.view.shigh;
+            plot.resize(wwidth, wheight);
+        }
+
+        // static ImDrawList draw_list_pre(ImGui::GetDrawListSharedData());
+        static Plotter::View plot_view_pre = plot.view;
+
+        ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+        adaptor.draw_list = draw_list;
         // Redraw
         plot.require_update = false;
         // Redraw the grid and functions
@@ -125,7 +124,7 @@ bool redraw_canvas(bool worker_req_update) {
             ++ missed_messages;
         }
         if (!(worker_req_update && plot.view == plot_view_pre &&
-              missed_messages == 0) && success) {
+                    missed_messages == 0) && success) {
             if (missed_messages && worker_req_update)
                 --missed_messages;
             emscripten_call_worker(worker, "webworker_sync",
@@ -137,15 +136,12 @@ bool redraw_canvas(bool worker_req_update) {
         // in a single frame, we don't get border artifacts due to user movement
         plot_view_pre = plot.view;
 
-        // Cache the draw list
-        draw_list_pre.CmdBuffer = draw_list->CmdBuffer;
-        draw_list_pre.IdxBuffer = draw_list->IdxBuffer;
-        draw_list_pre.VtxBuffer = draw_list->VtxBuffer;
-        draw_list_pre.Flags = draw_list->Flags;
-    } else {
-        // Load cache
-        // No update, load draw list from cache
-        *draw_list = draw_list_pre;
+        // Render dear imgui into screen
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        glfwSwapBuffers(window);
+        glfwPollEvents();
     }
 
     auto& io = ImGui::GetIO();
@@ -162,13 +158,6 @@ bool redraw_canvas(bool worker_req_update) {
         plot.set_curr_func(change_curr_func);
         change_curr_func = -1;
     }
-
-    // Render dear imgui into screen
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-    glfwSwapBuffers(window);
-    glfwPollEvents();
     return success;
 }  // void redraw_canvas()
 void redraw_canvas_not_worker() {
