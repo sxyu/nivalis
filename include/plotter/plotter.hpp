@@ -239,7 +239,7 @@ public:
             graph.line(sx_min, 0.f, sx_min, view.shigh, color::DARK_GRAY, 3.);
             ++cnt_visible_axis;
         } else if (view.xmax < 0) {
-            sx_min = view.swid - 10;
+            sx_min = view.swid - 5;
             y_ax_label_align_x = 1.f;
         }
 
@@ -447,7 +447,7 @@ public:
 
                     // Draw text
                     if (ymb != 0) {
-                        graph.string(sx_min-5, syi - 2, prec4(ymb), color::BLACK,
+                        graph.string(sx_min + 10. - y_ax_label_align_x * 15., syi - 2, prec4(ymb), color::BLACK,
                                 y_ax_label_align_x, y_ax_label_align_y);
                     }
                     ++idx;
