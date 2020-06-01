@@ -55,7 +55,7 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
     - `cd build-emcc && emcmake cmake ..`
 - Build: `make -j8`
     - Python3 is required
-    - jinja2 is required for templating: `pip3 install jinja2`
+    - jinja2 and css_html_js_minify are required for templating: `pip3 install jinja2 css_html_js_minify `
 - Host `build-emcc/out/` on a server and open index in a browser.
   - Using Python 3: in build-emcc/out/, run: `python3 -m http.server` then run `firefox localhost:8000`
 - To deploy, simply upload all files in `build-emcc/out` onto a server
@@ -132,7 +132,7 @@ define `sec(x) = 1/cos(x)`, or even a function with multiple arguments
     - Comparison operators: `<`,`>`,`<=`,`>=`,`==`/`=` (but `=` can mean assignment statement in shell; all mean equality/inequality in plotter)
     - Logical operators: `&`, `|` for and/or (e.g. `x<0 & x>-1`)
         - Related functions: `not(_)`, `xor(_, _)`
-    - Function call: `<func_name>(<arg>[, <arg>, ...])`; a function `f` with no arguments can be called with 
+    - Function call: `<func_name>(<arg>[, <arg>, ...])`; a function `f` with no arguments can be called with
         either `f()` or just `f`.
         - Some mathematical functions available: `sqrt exp exp2 ln log10 log2 log sin cos tan asin acos atan sinh cosh tanh abs sgn max min floor ceil round fact gamma digamma trigamma polygamma erf zeta beta N` where `N(x)` is standard Gaussian pdf
             - erf, zeta, beta, polygamma, digamma only available with Boost math (included in web version)

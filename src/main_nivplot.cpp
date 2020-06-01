@@ -141,9 +141,10 @@ void main_loop_step() {
         save_file_dialog.SetTitle("Export JSON");
     }
 
-    if (active_counter > 0) {
+    if (active_counter > 0 || plot.animating_sliders.size()) {
         // After move, keep updating for a while to
         // prevent UI freeze
+        // Also do so if there are animating sliders
         glfwPollEvents();
         --active_counter;
     } else {
@@ -219,6 +220,7 @@ void main_loop_step() {
         plot.set_curr_func(change_curr_func);
         change_curr_func = (size_t)-1;
     }
+    plot.slider_animation_step();
 
     // Render GUI
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
@@ -327,7 +329,7 @@ void main_loop_step() {
                 static_cast<float>(
                     (~pwwidth ? pwheight : plot.view.shigh) - 140)),
             ImGuiCond_Once);
-    ImGui::SetNextWindowSize(ImVec2(333, 130), ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(385, 130), ImGuiCond_Once);
     ImGui::Begin("Sliders", NULL);
     if (~pwwidth) {
         // Outer window was resized
@@ -357,12 +359,21 @@ void main_loop_step() {
         ImGui::PopItemWidth();
 
         ImGui::SameLine();
+        if (ImGui::Button(("ani##anivsl-" + slid).c_str())) {
+            if (plot.sliders[sidx].animation_dir) {
+                plot.end_slider_animation(sidx);
+            } else {
+                plot.begin_slider_animation(sidx);
+            }
+        }
+
+        ImGui::SameLine();
         if (ImGui::Button(("x##delvsl-" + slid).c_str())) {
             plot.delete_slider(sidx--);
             continue;
         }
 
-        ImGui::PushItemWidth(318.);
+        ImGui::PushItemWidth(360.);
         if (ImGui::SliderFloat(("##vslslider" + slid).c_str(),
                     &sl.val, sl.lo, sl.hi)) {
             plot.copy_slider_value_to_env(sidx);

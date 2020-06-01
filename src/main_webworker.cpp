@@ -1,4 +1,4 @@
-#include "plotter/common.hpp"
+#include "plotter/plotter.hpp"
 #include <emscripten/emscripten.h>
 #include <sstream>
 #include <iostream>

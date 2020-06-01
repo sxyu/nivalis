@@ -31,6 +31,16 @@ var cppNotifyMarker = function(x, y) {
     }
 };
 
+var cppNotifyAnimSlider = function() {
+    // Slider animation step occurred, need to update GUI
+    for (var i = 0; i < Module.num_sliders(); i++) {
+        if (Module.slider_animation_dir(i) != 0) {
+            $('#slider-sli-' +
+                Sliders.slider_ids[i]).val(Module.get_slider_val(i));
+        }
+    }
+};
+
 var cppNotifyFuncErrorChanged = function() {
     // Function error 'may' have changed
     $('#function-error').text(Module.get_func_error());

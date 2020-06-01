@@ -18,6 +18,7 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <chrono>
 #ifndef NIVALIS_EMSCRIPTEN
 #include <thread>
 #include <mutex>
@@ -28,7 +29,6 @@
 #include "color.hpp"
 #include "util.hpp"
 
-#include <chrono>
 namespace nivalis {
 namespace util {
 // * Plotter-related utils
@@ -143,6 +143,10 @@ struct SliderData {
     std::string var_name;
     // Should be set by implementation when value, bounds change
     float val, lo = -10.0, hi = 10.0;
+    // Animation direction, if available
+    // 0 = not animating, 1 = animating, moving right, -1 = .. left
+    int animation_dir = 0;
+
     // Internal
     uint32_t var_addr;
     std::string var_name_pre;
@@ -523,6 +527,7 @@ public:
     // and add passive markers for all polylines
     void populate_grid();
 
+    // FUNCTIONS
     // Re-parse expression from expr_str into expr, etc. for function 'idx'
     // and update expression, derivatives, etc.
     // Also detects function type.
@@ -539,6 +544,7 @@ public:
     // Delete the func at idx. If idx == -1, then deletes current function.
     void delete_func(size_t idx = -1);
 
+    // SLIDERS
     // Add a new slider to the end of sliders
     void add_slider();
 
@@ -555,6 +561,19 @@ public:
     // then copies the slider or float input value into the environment
     void copy_slider_value_to_env(size_t idx);
 
+    // SLIDER ANIMATION ENGINE
+    // Animate the given slider
+    void begin_slider_animation(size_t idx);
+
+    // Stop animating the given slider
+    void end_slider_animation(size_t idx);
+
+    // Update slider animations by 1 step;
+    // please call in each redraw loop step
+    // as long as animating_sliders.size() > 0
+    void slider_animation_step();
+
+    // WINDOW/VIEW
     // Call this when plotter window/widget is resizing:
     // Resize the plotter area to width x height
     void resize(int width, int height);
@@ -618,6 +637,7 @@ public:
     // If set, GUI implementation should:
     // focus on the editor for the current function AND
     // set focus_on_editor = false
+    // o.w. implementation should not set this
     bool focus_on_editor = true;
 
     // If set, requires GUI to update lines and functions
@@ -626,6 +646,10 @@ public:
     // - Implementation may set this to true, if e.g. xmin/xmax
     //   are changed by code
     bool require_update = false;
+
+    // List of sliders which are currently animating
+    // do not modify in implementation!
+    std::vector<size_t> animating_sliders;
 
     // Marker data
     std::string marker_text;
@@ -684,6 +708,10 @@ private:
     bool drag_view, drag_trace;
     int dragx, dragy;
     int drag_marker;
+
+    // For slider animation
+    std::chrono::time_point<std::chrono::high_resolution_clock>
+        slider_animation_prev_time;
 
     size_t next_func_name = 0;                // Next available function name
 };

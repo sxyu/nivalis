@@ -3,7 +3,8 @@ var Renderer = {
     _redraw : function() {
         Renderer.redraw_cnt -= 1;
         Module.redraw();
-        if (Renderer.redraw_cnt > 0) {
+        if (Renderer.redraw_cnt > 0 ||
+            Module.is_any_slider_animating()) {
             window.requestAnimationFrame(Renderer._redraw);
         }
     },
@@ -122,12 +123,12 @@ var FuncEdit = {
         const pickr = Pickr.create(Object.assign(
             {el: '#color-picker-' +  fname}, pickrConfig
         ));
-        pickr.on("init", instance => {
+        pickr.on("init", function(instance) {
             var this_name = instance.options.el.id.substr(13);
             var idx = FuncEdit.func_indices[this_name];
             pickr.setColor("#" + Module.get_func_color(idx));
         });
-        pickr.on("change", (color, instance) => {
+        pickr.on("change", function(color, instance) {
             var hex = color.toHEXA().toString().substr(1);
             var this_name = instance.options.el.id.substr(13);
             var idx = FuncEdit.func_indices[this_name];
@@ -220,6 +221,21 @@ var Sliders = {
                 }
                 Module.delete_slider(idx);
                 Module.redraw();
+            });
+        }
+        {
+            var slider_ani = $('#slider-ani-' + sid);
+            slider_ani.click(function() {
+                var this_sid = this.id.substr(11);
+                var idx = Sliders.slider_indices[this_sid];
+                if (Module.slider_animation_dir(idx) != 0) {
+                    Module.end_slider_animation(idx);
+                    $(this).html('<ion-icon name="play" class="toggle-caret"></ion-icon>')
+                } else {
+                    Module.begin_slider_animation(idx);
+                    $(this).html('<ion-icon name="stop" class="toggle-caret"></ion-icon>')
+                }
+                Renderer.redraw();
             });
         }
         Module.redraw();
@@ -398,7 +414,7 @@ var resync = function() {
         $('#function-name-' + fn).removeClass('inactive');
         $('#function-del-' + fn).removeClass('inactive');
     }
-    for (let i = 0; i < Module.num_sliders(); i++ ){
+    for (let i = 0; i < Module.num_sliders(); i++){
         Sliders.new_slider(false);
     }
     $('#function-expr-' +

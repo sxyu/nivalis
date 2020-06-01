@@ -177,7 +177,7 @@ a:hover { text-decoration: none }
     padding: 1em 0.8em;
     width: 100%;
 }
-#sidebar .slider-del {
+#sidebar .slider ion-icon {
     color: #988;
 }
 #sidebar .slider {

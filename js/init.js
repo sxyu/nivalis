@@ -5,7 +5,7 @@ let setupHandlers = function() {
     let canvas = document.getElementById("canvas");
     FuncEdit.new_func(false);
     $('#function-expr-' + FuncEdit.func_names[0]).focus();
-    document.addEventListener('keydown', e=>{
+    document.addEventListener('keydown', function(e){
         // Must either have ctrl down OR nothing selected to activate
         if (event.ctrlKey===false &&
             $('*:focus').length > 0) return;
@@ -26,7 +26,7 @@ let setupHandlers = function() {
         }
         Renderer.redraw();
     });
-    canvas.addEventListener("mousedown", e=>{
+    canvas.addEventListener("mousedown", function(e){
         if (e.button == 0) {
             let oleft = $(canvas).offset().left;
             let otop = $(canvas).offset().top;
@@ -37,7 +37,7 @@ let setupHandlers = function() {
     var pinch_zoom_dist = -1.;
     var touch_cen_x = -1.;
     var touch_cen_y = -1.;
-    canvas.addEventListener("touchstart", e=>{
+    canvas.addEventListener("touchstart", function(e){
         if (e.touches.length > 0) {
             touch_cen_x = 0.; touch_cen_y = 0.;
             for (let i = 0; i < e.touches.length; i++) {
@@ -73,7 +73,7 @@ let setupHandlers = function() {
             Renderer.redraw();
         }
     });
-    canvas.addEventListener("touchmove", e=>{
+    canvas.addEventListener("touchmove", function(e){
         if (e.touches.length > 0) {
             if (e.touches.length == 2) {
                 let touch1 = e.touches[0],
@@ -84,7 +84,7 @@ let setupHandlers = function() {
                 if (pinch_zoom_dist > 0.001) {
                     let delta_y = pinch_zoom_dist - dist;
                     Module.on_mousewheel(delta_y < 0,
-                        Math.max(Math.abs(delta_y) * 2., 1.0001),
+                        Math.max(Math.abs(delta_y) * 10., 1.0001),
                         touch_cen_x, touch_cen_y);
                 }
                 pinch_zoom_dist = dist;
@@ -98,7 +98,7 @@ let setupHandlers = function() {
             e.preventDefault();
         }
     });
-    canvas.addEventListener("mouseup", e=>{
+    canvas.addEventListener("mouseup", function(e){
         if (e.button == 0) {
             let oleft = $(canvas).offset().left;
             let otop = $(canvas).offset().top;
@@ -106,27 +106,26 @@ let setupHandlers = function() {
             Renderer.redraw();
         }
     });
-    canvas.addEventListener("touchend", ()=>{
+    canvas.addEventListener("touchend", function(){
         Module.on_mouseup(0, 0);
         Renderer.redraw();
         pinch_zoom_dist = -1.;
     });
-    canvas.addEventListener("wheel", e=>{
+    canvas.addEventListener("wheel", function(e){
         if(e.ctrlKey)
             event.preventDefault();//prevent zoom
         Module.on_mousewheel(e.deltaY < 0,
-            10., e.offsetX, e.offsetY);
+            15., e.offsetX, e.offsetY);
         Renderer.redraw();
         ViewConfig.updateViewBounds();
     });
 };
 let onInit = function() {
     setupHandlers()
-
     glfwPatch();
 
     // Hide marker if mouse somehow enters it
-    $('#marker').mouseenter(() => {
+    $('#marker').mouseenter(function() {
         $('#marker').css('opacity', '0');
         setTimeout(
             function() {$('#marker').css('display', 'none');}, 200)
@@ -235,7 +234,7 @@ let onInit = function() {
     };
     $(document).on('mousemove', sidebar_resize);
     $('#sidebar-dragger').on('touchmove', sidebar_resize);
-    $('#sidebar-dragger').on('mousedown touchstart', e => {
+    $('#sidebar-dragger').on('mousedown touchstart', function(e) {
         let touch = e.type == 'touchstart';
         if (touch && e.touches.length == 0) return;
         sbar_drag_x = touch ? e.touches[0].screenX : e.pageX;
@@ -249,7 +248,7 @@ let onInit = function() {
             sbar_drag = true;
         }
     });
-    $('#sidebar-dragger').dblclick(() => {
+    $('#sidebar-dragger').dblclick(function() {
         if (!$('#sidebar').hasClass('collapse')) {
             let drag = $('#sidebar-dragger');
             if (drag.width() < drag.height()) {
@@ -264,7 +263,7 @@ let onInit = function() {
             onResizeCanvas();
         }, 400);
     });
-    $(document).on('mouseup touchend', () => {
+    $(document).on('mouseup touchend', function(){
         sbar_drag = false;
         pinch_zoom_dist = -1.;
     });

@@ -639,6 +639,12 @@ void Plotter::add_slider() {
 }
 
 void Plotter::delete_slider(size_t idx) {
+    // Remove from slider animation list and correct indices
+    end_slider_animation(idx);
+    for (size_t& i : animating_sliders) {
+        if (i > idx) i--;
+    }
+    // Erase the slider
     sliders_vars.erase(sliders[idx].var_name);
     sliders.erase(sliders.begin() + idx);
     slider_error.clear();
@@ -652,6 +658,59 @@ void Plotter::copy_slider_value_to_env(size_t idx) {
         env.vars[sl.var_addr] = sl.val;
         require_update = true;
     }
+}
+
+// Animate the given slider
+void Plotter::begin_slider_animation(size_t idx) {
+    if (sliders[idx].animation_dir == 0) {
+        if (animating_sliders.empty()) {
+            slider_animation_prev_time =
+                std::chrono::high_resolution_clock::now();
+        }
+        sliders[idx].animation_dir = 1;
+        animating_sliders.push_back(idx);
+        require_update = true;
+    }
+}
+
+// Stop animating the given slider
+void Plotter::end_slider_animation(size_t idx) {
+    if (sliders[idx].animation_dir) {
+        sliders[idx].animation_dir = 0;
+        auto it = std::find(animating_sliders.begin(),
+                    animating_sliders.end(), idx);
+        if (it != animating_sliders.end()) {
+            animating_sliders.erase(it);
+        }
+    }
+}
+
+void Plotter::slider_animation_step() {
+    if (animating_sliders.empty()) return;
+    std::chrono::time_point<std::chrono::high_resolution_clock>
+        slider_animation_time = std::chrono::high_resolution_clock::now();
+    long delta_t = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            slider_animation_time - slider_animation_prev_time).count();
+    // Number of seconds since last update
+    double delta_t_secs = (double)delta_t * 1e-9;
+
+    // Speed of animation
+    static const double ANIMATE_SPEED = 0.2;
+    const double delta_val = delta_t_secs * ANIMATE_SPEED;
+    for (size_t idx : animating_sliders) {
+        sliders[idx].val +=
+            (double)sliders[idx].animation_dir *
+            (sliders[idx].hi - sliders[idx].lo) * delta_val;
+        if (sliders[idx].val > sliders[idx].hi) {
+            sliders[idx].animation_dir = -1;
+            sliders[idx].val = sliders[idx].hi;
+        } else if (sliders[idx].val < sliders[idx].lo) {
+            sliders[idx].animation_dir = 1;
+            sliders[idx].val = sliders[idx].lo;
+        }
+        copy_slider_value_to_env(idx);
+    }
+    slider_animation_prev_time = slider_animation_time;
 }
 
 void Plotter::resize(int width, int height) {

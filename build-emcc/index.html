@@ -7,8 +7,7 @@
         <script type="module" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.esm.js"></script>
         <script nomodule="" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.js"></script>
         <title>Nivalis Plotter | Open-source Graphing Calculator</title>
-        <meta name="description" content="An advanced free and open-source graphing calculator">
-        <link rel="stylesheet" href="css/3rdparty.css" />
+        <meta name="description" content="An advanced open-source graphing calculator">
         <link rel="stylesheet" href="css/main.css">
     </head>
     <body>
@@ -241,6 +240,11 @@
         </div>
         <div class='input-group slider input-group-sm'
             id='slider-{name}'>
+            <div class='input-group-prepend'>
+                <button class='btn btn-sm btn-light btn-outline-secondary slider-ani' id='slider-ani-{name}'>
+                    <ion-icon name='play'></ion-icon>
+                </button>
+            </div>
             <input type="range" class="form-control custom-range slider-sli" min="0"
                 max="1" step="any" id="slider-sli-{name}">
             <div class='input-group-append'>

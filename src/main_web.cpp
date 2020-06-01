@@ -32,6 +32,7 @@ EM_JS(int, canvas_get_width, (), { return Module.canvas.width; });
 EM_JS(int, canvas_get_height, (), { return Module.canvas.height; });
 EM_JS(void, notify_js_focus_editor, (int x), { cppNotifyFocusEditor(x); });
 EM_JS(void, notify_js_marker, (int x, int y), { cppNotifyMarker(x, y); });
+EM_JS(void, notify_js_anim_sliders, (), { cppNotifyAnimSlider(); });
 EM_JS(void, notify_js_func_error_changed, (), { cppNotifyFuncErrorChanged(); });
 EM_JS(void, notify_js_slider_error_changed, (), { cppNotifySliderErrorChanged(); });
 worker_handle draw_worker_handle;
@@ -83,6 +84,13 @@ bool redraw_canvas(bool worker_req_update) {
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     float ratio = width / (float) height;
+
+    // Update slider animations
+    plot.slider_animation_step();
+    if (plot.animating_sliders.size()) {
+        // Tell JS code to update the range inputs
+        notify_js_anim_sliders();
+    }
 
     // feed inputs to dear imgui, start new frame
     ImGui_ImplOpenGL3_NewFrame();
@@ -191,7 +199,8 @@ void on_mouseup(int x, int y) {
     notify_js_marker(plot.marker_posx, plot.marker_posy);
 }
 void on_mousewheel(bool upwards, int distance, int x, int y) {
-    plot.handle_mouse_wheel(upwards, distance, x, y); }
+    plot.handle_mouse_wheel(upwards, distance, x, y);
+}
 
 int emscripten_keypress(int k, int delv) {
     if (delv == 0) {
@@ -337,6 +346,10 @@ void delete_slider(int idx) {
     notify_js_slider_error_changed();
     notify_js_func_error_changed();
 }
+void begin_slider_animation(int idx) { plot.begin_slider_animation((size_t) idx); }
+void end_slider_animation(int idx) { plot.end_slider_animation((size_t) idx); }
+int slider_animation_dir(int idx) { return plot.sliders[idx].animation_dir; }
+bool is_any_slider_animating() { return plot.animating_sliders.size() > 0; }
 int num_sliders() { return (int) plot.sliders.size(); }
 
 // Markers
@@ -403,6 +416,10 @@ EMSCRIPTEN_BINDINGS(nivplot) {
     function("set_slider_val", &set_slider_val);
     function("set_slider_lo_hi", &set_slider_lo_hi);
     function("delete_slider", &delete_slider);
+    function("begin_slider_animation", &begin_slider_animation);
+    function("end_slider_animation", &end_slider_animation);
+    function("slider_animation_dir", &slider_animation_dir);
+    function("is_any_slider_animating", &is_any_slider_animating);
     function("num_sliders", &num_sliders);
 
     // Marker
