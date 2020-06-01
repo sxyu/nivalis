@@ -20,6 +20,9 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_stdlib.h"
 
+// Font
+#include "resources/roboto.h"
+
 #include <thread>
 #include <condition_variable>
 #include <mutex>
@@ -46,6 +49,9 @@ volatile bool worker_quit_flag;
 std::condition_variable worker_cv;
 std::mutex worker_mtx;
 std::stringstream state_encoding;
+
+// Fonts
+ImFont* font_sm, * font_md;
 
 // If true, then the redraw_canvas request is from WebWorker.
 // to prevent infinite update loop, do not call WebWorker in that case
@@ -101,18 +107,6 @@ void maybe_run_worker(nivalis::Plotter& plot) {
 
 // MAIN LOOP: Run single step of main loop
 void main_loop_step() {
-    // Add scaled default font (Dear ImGui)
-    static auto AddDefaultFont = [](float pixel_size) -> ImFont* {
-        ImGuiIO &io = ImGui::GetIO();
-        ImFontConfig config;
-        config.SizePixels = pixel_size;
-        config.OversampleH = config.OversampleV = 1;
-        config.PixelSnapH = true;
-        ImFont *font = io.Fonts->AddFontDefault(&config);
-        return font;
-    };
-    static ImFont *font_sm = AddDefaultFont(12);
-    static ImFont *font_md = AddDefaultFont(14);
     // * State
     // Do not wait for input event for active_counter frames
     // (decreases 1 each frame)
@@ -372,7 +366,7 @@ void main_loop_step() {
             continue;
         }
 
-        ImGui::PushItemWidth(360.);
+        ImGui::PushItemWidth(355.);
         if (ImGui::SliderFloat(("##vslslider" + slid).c_str(),
                     &sl.val, sl.lo, sl.hi)) {
             plot.copy_slider_value_to_env(sidx);
@@ -390,9 +384,9 @@ void main_loop_step() {
 
     ImGui::SetNextWindowPos(ImVec2(
                 static_cast<float>(
-                    (~pwwidth ? pwwidth : plot.view.swid) - 182), 10),
+                    (~pwwidth ? pwwidth : plot.view.swid) - 208), 10),
             ImGuiCond_Once);
-    ImGui::SetNextWindowSize(ImVec2(175, 135), ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(200, 145), ImGuiCond_Once);
     ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
     if (~pwwidth) {
         // Outer window was resized
@@ -401,7 +395,7 @@ void main_loop_step() {
                     wwidth - ((float) pwwidth - pos.x),
                     pos.y));
     }
-    ImGui::PushItemWidth(60.);
+    ImGui::PushItemWidth(65.);
     if (ImGui::InputDouble(" <x<", &plot.view.xmin)) plot.require_update = true;
     ImGui::SameLine();
     if(ImGui::InputDouble("##xm", &plot.view.xmax)) plot.require_update = true;
@@ -417,7 +411,7 @@ void main_loop_step() {
     if (plot.marker_text.size()) {
         ImGui::SetNextWindowPos(ImVec2(static_cast<float>(plot.marker_posx),
                     static_cast<float>(plot.marker_posy)));
-        ImGui::SetNextWindowSize(ImVec2(250, 50));
+        ImGui::SetNextWindowSize(ImVec2(250, 60));
         ImGui::Begin("Marker", NULL, ImGuiWindowFlags_NoTitleBar |
                 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
                 ImGuiWindowFlags_NoFocusOnAppearing);
@@ -595,7 +589,7 @@ void main_loop_step() {
     if (ImGui::BeginPopupModal("Shell", &open_shell,
                 ImGuiWindowFlags_NoResize)) {
         // Shell popup
-        ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 60));
+        ImGui::BeginChild("Scrolling", ImVec2(0, ImGui::GetWindowHeight() - 70));
         // * Virtual shell state
         // Shell output stream (replaces cout)
         static std::stringstream shell_ss;
@@ -622,7 +616,7 @@ void main_loop_step() {
             ImGui::SetKeyboardFocusHere(0);
         auto exec_shell = [&]{
             if (shell_curr_cmd.empty()) return;
-            shell_ss << ">>> " << shell_curr_cmd << "\n";
+            shell_ss << ">> " << shell_curr_cmd << "\n";
             // Push history
             if (shell_hist.empty() ||
                     shell_hist.back() != shell_curr_cmd){
@@ -634,7 +628,7 @@ void main_loop_step() {
             shell_curr_cmd.clear();
             shell_scroll = true;
         };
-        ImGui::PushItemWidth(ImGui::GetWindowWidth() - 80.);
+        ImGui::PushItemWidth(ImGui::GetWindowWidth() - 85.);
         if (ImGui::InputText("##ShellCommand",
                     &shell_curr_cmd,
                     ImGuiInputTextFlags_EnterReturnsTrue |
@@ -794,6 +788,11 @@ int main(int argc, char ** argv) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    font_sm = io.Fonts->AddFontFromMemoryCompressedTTF(ROBOTO_compressed_data,
+            ROBOTO_compressed_size, 16.0f, NULL, GetGlyphRangesGreek());
+    font_md = io.Fonts->AddFontFromMemoryCompressedTTF(ROBOTO_compressed_data,
+            ROBOTO_compressed_size, 18.0f, NULL);
+
     // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     char* glsl_version = NULL;

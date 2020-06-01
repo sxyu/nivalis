@@ -216,6 +216,13 @@ public:
         float sy0 = static_cast<float>(view.shigh * y0);
         double x0 = - view.xmin / (view.xmax - view.xmin);
         float sx0 = static_cast<float>(view.swid * x0);
+
+        float y_ax_label_align_x = 0.f,
+              y_ax_label_align_y = 0.5f;
+        float x_ax_label_align_x = 0.5f,
+              x_ax_label_align_y = 0.f;
+
+
         // Draw axes
         if (view.ymin <= 0 && view.ymax >= 0) {
             sy_min = sy0;
@@ -223,15 +230,17 @@ public:
             ++cnt_visible_axis;
         }
         else if (view.ymin > 0) {
-            sy_min = view.shigh - 26;
+            sy_min = view.shigh - 10;
+            x_ax_label_align_y = 1.f;
         }
         if (view.xmin <= 0 && view.xmax >= 0) {
             sx_min = sx0;
+            y_ax_label_align_x = 1.f;
             graph.line(sx_min, 0.f, sx_min, view.shigh, color::DARK_GRAY, 3.);
             ++cnt_visible_axis;
-        }
-        else if (view.xmax < 0) {
-            sx_min = view.swid - 50;
+        } else if (view.xmax < 0) {
+            sx_min = view.swid - 10;
+            y_ax_label_align_x = 1.f;
         }
 
         // round
@@ -312,14 +321,20 @@ public:
                 // Draw labels on axes
                 if (rmlo > 0.) {
                     auto num_label = prec4(rmlo);
-                    graph.string(sx0 + sxr-7,
-                            sy0+5, num_label, color::BLACK);
-                    graph.string(sx0 - sxr-7,
-                            sy0+5, num_label, color::BLACK);
-                    graph.string(sx0+5, sy0 + syr -6,
-                            num_label, color::BLACK);
-                    graph.string(sx0+5, sy0 - syr -6,
-                            num_label, color::BLACK);
+                    // X-axis
+                    graph.string(sx0 + sxr,
+                            sy0+5, num_label, color::BLACK,
+                            x_ax_label_align_x);
+                    graph.string(sx0 - sxr,
+                            sy0+5, num_label, color::BLACK,
+                            x_ax_label_align_x);
+                    // Y-axis
+                    graph.string(sx0-5, sy0 + syr - 2,
+                            num_label, color::BLACK, 1.f,
+                            y_ax_label_align_y);
+                    graph.string(sx0-5, sy0 - syr - 2,
+                            num_label, color::BLACK, 1.f,
+                            y_ax_label_align_y);
                 }
                 rmlo = rmstep * idx + rmloi;
                 ++idx;
@@ -341,14 +356,14 @@ public:
 
             // Angle label text
 // #define _PI_STR "pi"
-#define _PI_STR "\u03C0"
+#define _PI_STR u8"\u03C0"
             static const char* angle_labels[] = {
-                "0", _PI_STR "/6", _PI_STR "/3",
-                _PI_STR "/2", "2" _PI_STR "/3", "5" _PI_STR "/6",
-                _PI_STR "", "7" _PI_STR "/6", "4" _PI_STR "/3",
-                "3" _PI_STR "/2", "5" _PI_STR "/3", "11" _PI_STR "/6"
+                u8"0", _PI_STR u8"/6", _PI_STR u8"/3",
+                _PI_STR u8"/2", u8"2" _PI_STR u8"/3", u8"5" _PI_STR u8"/6",
+                _PI_STR "", u8"7" _PI_STR u8"/6", u8"4" _PI_STR u8"/3",
+                u8"3" _PI_STR u8"/2", u8"5" _PI_STR u8"/3", u8"11" _PI_STR u8"/6"
             };
-            double angle_text_disp_r = rmloi + rmstep * 1.8;
+            double angle_text_disp_r = rmloi + rmstep * 1.9;
             // 0, pi/6, ...
             for (int i = 0; i < sizeof(angle_labels) / sizeof(angle_labels[0]);
                     ++i) {
@@ -356,14 +371,15 @@ public:
                 double ux = cos(angle), uy = -sin(angle);
                 double uxs = ux * x_plot_to_screen;
                 double uys = uy * y_plot_to_screen;
-                double posx = sx0 + uxs * angle_text_disp_r - ux * 5. - 12.;
-                double posy = sy0 + uys * angle_text_disp_r - uy * 5. - 12.;
+                double posx = sx0 + uxs * angle_text_disp_r - ux * 1.;
+                double posy = sy0 + uys * angle_text_disp_r - uy * 1.;
                 if (i == 0 || i == 6) posy -= 10; // Clear x-axis
                 if (i == 3 || i == 9) posx += 20; // Clear y-axis
-                if (i == 0) posx += 10; // Adjust spacing
                 graph.string(posx, posy,
                         angle_labels[i],
-                        color::GRAY);
+                        color::GRAY,
+                        ((float)ux + 1.f) / 2.f,
+                        ((float)uy + 1.f) / 2.f);
                 ++idx;
             }
         } else {
@@ -414,7 +430,8 @@ public:
 
                     // Draw text
                     if (xml != 0) {
-                        graph.string(sxi-7, sy_min+5, prec4(xml), color::BLACK);
+                        graph.string(sxi, sy_min+5, prec4(xml), color::BLACK,
+                                     x_ax_label_align_x, x_ax_label_align_y);
                     }
                     ++idx;
                     xml = xmstep * idx + xmli;
@@ -430,7 +447,8 @@ public:
 
                     // Draw text
                     if (ymb != 0) {
-                        graph.string(sx_min+5, syi-6, prec4(ymb), color::BLACK);
+                        graph.string(sx_min-5, syi - 2, prec4(ymb), color::BLACK,
+                                y_ax_label_align_x, y_ax_label_align_y);
                     }
                     ++idx;
                     ymb = ymstep * idx + ymbi;
@@ -440,7 +458,8 @@ public:
 
         // Draw 0
         if (cnt_visible_axis == 2) {
-            graph.string(sx_min - 12, sy_min + 5, "0", color::BLACK);
+            graph.string(sx_min - 5, sy_min + 5, "0", color::BLACK,
+                         1.0f, 0.0f);
         }
     }
     template<class GraphicsAdaptor>

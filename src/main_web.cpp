@@ -19,6 +19,9 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_stdlib.h"
 
+// Font
+#include "resources/roboto.h"
+
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
 #include <emscripten/html5.h>
@@ -49,6 +52,9 @@ Shell shell(env, shell_strm); // Hidden shell
 
 std::stringstream state_encoding_strm;
 std::string state_encoding;
+
+// Fonts
+ImFont* font_md;
 
 worker_handle worker; // WebWorker
 
@@ -105,6 +111,7 @@ bool redraw_canvas(bool worker_req_update) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        ImGui::PushFont(font_md);
 
         static Plotter::View plot_view_pre = plot.view;
 
@@ -136,6 +143,7 @@ bool redraw_canvas(bool worker_req_update) {
         // in a single frame, we don't get border artifacts due to user movement
         plot_view_pre = plot.view;
 
+        ImGui::PopFont();
         // Render dear imgui into screen
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -464,6 +472,9 @@ int main(int argc, char ** argv) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    font_md = io.Fonts->AddFontFromMemoryCompressedTTF(
+            ROBOTO_compressed_data, ROBOTO_compressed_size, 16.0f, NULL,
+            GetGlyphRangesGreek());
     // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     char* glsl_version = NULL;

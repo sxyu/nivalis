@@ -75,9 +75,26 @@ void ImGuiDrawListGraphicsAdaptor::ellipse(float x, float y, float rx, float ry,
                 ImColor(c.r, c.g, c.b, c.a), std::min(.5f * (rx + ry), 250.f));
     }
 }
-void ImGuiDrawListGraphicsAdaptor::string(float x, float y, const std::string& s, const color::color& c) {
+void ImGuiDrawListGraphicsAdaptor::string(float x, float y, const std::string& s, const color::color& c,
+        float align_x, float align_y) {
     // String using ImGui API
-    draw_list->AddText(ImVec2(x, y),
-            ImColor(c.r, c.g, c.b, c.a), s.c_str());
+    if (align_x > 0. || align_y > 0.) {
+        ImVec2 sz = ImGui::CalcTextSize(s.c_str());
+        draw_list->AddText(ImVec2(x - align_x * sz.x, y - align_y * sz.y),
+                ImColor(c.r, c.g, c.b, c.a), s.c_str());
+    } else {
+        draw_list->AddText(ImVec2(x, y),
+                ImColor(c.r, c.g, c.b, c.a), s.c_str());
+    }
+}
+
+const ImWchar* GetGlyphRangesGreek() {
+    static const ImWchar ranges[] =
+    {
+        0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0x0370, 0x03FF, // Greek/Coptic
+        0,
+    };
+    return &ranges[0];
 }
 }  // namespace nivalis

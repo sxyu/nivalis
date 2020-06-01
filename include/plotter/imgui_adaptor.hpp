@@ -22,9 +22,16 @@ struct ImGuiDrawListGraphicsAdaptor {
     // Axis-aligned ellipse
     void ellipse(float x, float y, float rx, float ry,
                  bool fill, const color::color& c);
-    void string(float x, float y, const std::string& s, const color::color& c);
+    void string(float x, float y,
+                const std::string& s, const color::color& c,
+                float align_x = 0.0, float align_y = 0.0);
     ImDrawList* draw_list = nullptr;
 };
+
+// Font range with Greek characters
+// we need Greek character support for math
+// Retrieve list of range (2 int per range, values are inclusive)
+const ImWchar* GetGlyphRangesGreek();
 
 }  // namespace nivalis
 #endif // ifndef _IMGUI_ADAPTOR_H_0EB7F921_D939_4011_AA3A_9C87F33527DD
