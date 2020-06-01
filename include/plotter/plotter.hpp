@@ -531,7 +531,8 @@ public:
                 if (~ptm.drag_var_y) {
                     vn_str.append(env.varname[ptm.drag_var_y]);
                 }
-                graph.string(sx-r -7, sy+5, vn_str, color::GRAY);
+                // Draggable marker label
+                graph.string(sx, sy+5, vn_str, color::GRAY, 0.5f);
             }
             graph.rectangle(sx-r, sy-r, 2*r+1, 2*r+1, true, fill_col);
             graph.rectangle(sx-r, sy-r, 2*r+1, 2*r+1, false, border_col);

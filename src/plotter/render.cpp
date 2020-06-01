@@ -85,11 +85,11 @@ void Plotter::render(const View& view) {
     // * Constants
     // Number of different t values to evaluate for a parametric
     // equation
-    static const double PARAMETRIC_STEPS = 2500.0;
+    static const double PARAMETRIC_STEPS = 1e4;
     // If parametric function moves more than this amount (square of l2),
     // disconnects the function line
-    const double PARAMETRIC_DISCONN_THRESH = 1e-3 * 150.;
-        // util::sqr_dist(view.xmax, view.ymax, view.xmin, view.ymin);
+    const double PARAMETRIC_DISCONN_THRESH = 1e-2 *
+        std::sqrt(util::sqr_dist(view.xmin, view.ymin, view.xmax, view.ymax));
 
     bool prev_loss_detail = loss_detail;
     loss_detail = false; // Will set to show 'some detail may be lost'
@@ -162,7 +162,7 @@ void Plotter::render(const View& view) {
                     if (tmin > tmax) std::swap(tmin, tmax);
                     double tstep = std::max((tmax - tmin) / PARAMETRIC_STEPS, 1e-12);
                     double px, py;
-                    for (double t = tmin; t < tmax; t += tstep) {
+                    for (double t = tmin; t <= tmax; t += tstep) {
                         env.vars[t_var] = t;
                         double x, y;
                         if (func.type == Function::FUNC_TYPE_PARAMETRIC) {
