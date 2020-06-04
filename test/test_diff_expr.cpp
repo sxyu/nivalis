@@ -55,9 +55,9 @@ int main() {
     ASSERT(test_derivative_random("sin(x)", "cos(x)", 0));
     ASSERT(test_derivative_random("cos(x)", "-sin(x)", 0));
     ASSERT(test_derivative_random("tan(x)", "1/cos(x)^2", 0));
-    ASSERT(test_derivative_random("asin(x)", "1/sqrt(1-x^2)", 0));
-    ASSERT(test_derivative_random("acos(x)", "-1/sqrt(1-x^2)", 0));
-    ASSERT(test_derivative_random("atan(x)", "1/(1+x^2)", 0));
+    ASSERT(test_derivative_random("arcsin(x)", "1/sqrt(1-x^2)", 0));
+    ASSERT(test_derivative_random("arccos(x)", "-1/sqrt(1-x^2)", 0));
+    ASSERT(test_derivative_random("arctan(x)", "1/(1+x^2)", 0));
     ASSERT(test_derivative_random("sinh(x)", "cosh(x)", 0));
     ASSERT(test_derivative_random("cosh(x)", "sinh(x)", 0));
     ASSERT(test_derivative_random("tanh(x)", "1-tanh(x)^2", 0));

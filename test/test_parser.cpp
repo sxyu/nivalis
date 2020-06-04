@@ -33,7 +33,7 @@ int main() {
     err.clear();
     // Undefined variable
     ASSERT_EQ(parse("2*x", dummy_env, true, true, 0, &err).ast, AST(1));
-    ASSERT_EQ(err.substr(0,9), "Undefined");
+    ASSERT_EQ(err.substr(0,21), "\"x\" is not a variable");
     err.clear();
     {
         Environment env_tmp;
@@ -65,11 +65,17 @@ int main() {
         Environment env; env.addr_of("x", false);
         AST ast = { mul, mul, 2., sinb, Ref(env.addr_of("x")),
                     cosb, Ref(env.addr_of("x")) };
-        ASSERT_EQ(parse("2*sin(x)*cos(x)", env).ast, ast);
+        ASSERT_EQ(parse("2*sin  (x)*cos (x)", env).ast, ast);
     }
     {
         Environment env; env.addr_of("yy", false);
         ASSERT_EQ(parse("fact(yy)^(-2)", env).ast,
+                AST({ power, tgammab, add, 1., Ref(0), unaryminus, 2. }));
+        ASSERT(err.empty());
+    }
+    {
+        Environment env; env.addr_of("yy", false);
+        ASSERT_EQ(parse("yy!^(-2)", env).ast,
                 AST({ power, tgammab, add, 1., Ref(0), unaryminus, 2. }));
         ASSERT(err.empty());
     }
@@ -100,11 +106,24 @@ int main() {
         Environment env; env.addr_of("a", false);
         env.addr_of("x", false);
 
-        AST ast = { SumOver(1), unaryminus, 10.f, Ref(0) };
+        AST ast = { SumOver(1), unaryminus, 10., Ref(0) };
         ThunkManager thunk(ast); thunk.begin();
         ast.insert(ast.end(), { mul, Ref(0), log2b, Ref(1)});
         thunk.end();
-        ASSERT_EQ(parse("sum(x:-10.,a)[a*log2(x)]", env).ast, ast);
+        ASSERT_EQ(parse("sum(x=-10.,a)[a*log2(x)]", env).ast, ast);
+        ASSERT(err.empty());
+    }
+
+    {
+        Environment env; env.addr_of("a", false);
+        env.addr_of("x", false);
+
+        AST ast = { sub, add, 3., SumOver(1), 5.5, Ref(0) };
+        ThunkManager thunk(ast); thunk.begin();
+        ast.insert(ast.end(), { mul, mul, Ref(1), 3., power, Ref(1), 2.});
+        thunk.end();
+        ast.insert(ast.end(), {9.});
+        ASSERT_EQ(parse("3+sum(x=5.5,a)x*3*x^2-9", env).ast, ast);
         ASSERT(err.empty());
     }
 
@@ -117,7 +136,7 @@ int main() {
         ast.insert(ast.end(),  {mul, Ref(0), sqrtb,
             Ref(1)});
         thunk.end();
-        ASSERT_EQ(parse("prod(x:19.+-+5.5,a)[a*sqrt(x)]", env).ast, ast);
+        ASSERT_EQ(parse("prod(x=19.+-+5.5,a)[a*sqrt(x)]", env).ast, ast);
         ASSERT(err.empty());
     }
 
@@ -134,6 +153,35 @@ int main() {
     {
         Environment env; env.addr_of("a", false);
         env.addr_of("x", false);
+
+        AST ast = { add, add, unaryminus, 1., mul, 2., mul, 2., Ref(1), 1. };
+
+        ASSERT_EQ(parse("-1+2*diff(x)x^2+1", env).ast, ast);
+        ASSERT(err.empty());
+    }
+
+    {
+        Environment env; env.addr_of("a", false);
+        env.addr_of("x", false);
+
+        AST ast = { add, sub, 0.9, sinb, mul, Ref(1), Ref(1), 23.4 };
+
+        ASSERT_EQ(parse(".9-sin x*x+23.4", env).ast, ast);
+        ASSERT(err.empty());
+    }
+    {
+        Environment env; env.addr_of("a", false);
+        env.addr_of("x", false);
+
+        AST ast = { mul, 2., tanb, power, Ref(1), power, Ref(0), 2. };
+
+        ASSERT_EQ(parse("2*tan x^a^2", env).ast, ast);
+        ASSERT(err.empty());
+    }
+
+    {
+        Environment env; env.addr_of("a", false);
+        env.addr_of("x", false);
         AST ast = { unaryminus, power, 3., unaryminus, 2. };
         ASSERT_EQ(parse("-3^-2", env).ast, ast);
         ASSERT(err.empty());
@@ -144,6 +192,18 @@ int main() {
         env.addr_of("x", false);
         AST ast = { lor, land, unaryminus, 1., 0., eq, 1., 1. };
         ASSERT_EQ(parse("-1&0|1==1", env).ast, ast);
+        ASSERT(err.empty());
+    }
+
+    {
+        AST ast = { ne, gcd, 1., 2., lcm, 3., 4. };
+        ASSERT_EQ(parse("gcd(1,2)!= lcm(3,4)", dummy_env).ast, ast);
+        ASSERT(err.empty());
+    }
+
+    {
+        AST ast = { lxor, choose, 9., 2., floorb, 9.5 };
+        ASSERT_EQ(parse("xor(choose(9.,2.), floor(9.5))", dummy_env).ast, ast);
         ASSERT(err.empty());
     }
 

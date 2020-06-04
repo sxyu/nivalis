@@ -2,21 +2,25 @@
 #ifndef _UTIL_H_4EB09B11_F909_45C4_AD5D_8AA7A6644106
 #define _UTIL_H_4EB09B11_F909_45C4_AD5D_8AA7A6644106
 #include <string>
+#include <string_view>
 #include <vector>
 #include <ostream>
 #include <istream>
 namespace nivalis {
 namespace util {
 
+constexpr bool is_numeric(char c) {
+    return (c >= '0' && c <= '9') || c == '.';
+}
+
 // true if is literal char (a-zA-Z0-9_$'#&$)
-constexpr bool is_literal(char c) {
+constexpr bool is_identifier(char c) {
     return
         (c >= 'a' && c <= 'z') ||
         (c >= 'A' && c <= 'Z') ||
-        (c >= '0' && c <= '9') ||
         c == '_' || c == '$' ||
-        c == '\'' || c == '.' || c == '`' ||
-        c == '@';
+        c == '\'' || c == '`' ||
+        c == '@' || is_numeric(c);
 }
 
 // true if can be first char of a variable name
@@ -48,6 +52,11 @@ constexpr bool is_operator(char c) {
         is_arith_operator(c);
 }
 
+// true if is control character
+constexpr bool is_control(char c) {
+    return c == '\\' || c == ':' || c == ',' || c == '@';
+}
+
 // true if is open bracket
 constexpr bool is_open_bracket(char c) {
     return c == '(' || c == '[' || c == '{';
@@ -63,23 +72,23 @@ constexpr bool is_bracket(char c) {
 }
 
 // checks if string is valid variable name
-bool is_varname(const std::string& expr);
+bool is_varname(std::string_view expr);
 // checks if string is a nonnegative integer (only 0-9)
-bool is_whole_number(const std::string& expr);
+bool is_whole_number(std::string_view expr);
 // returns position of = (or </> if allow_ineq) in string, or -1 else
 // where = must:
 // 1. not be at index 0 or expr.size()-1
 // 2. at top bracket level wrt ([{
 // 3. (if enforce_no_adj_comparison)
 //     not be followed/preceded by any comparison operator or !
-size_t find_equality(const std::string& expr,
+size_t find_equality(std::string_view expr,
                      bool allow_ineq = false,
                      bool enforce_no_adj_comparison = true);
 
 // string trimming/strip
-void ltrim(std::string &s);
-void rtrim(std::string &s);
-void trim(std::string &s);
+void ltrim(std::string& s);
+void rtrim(std::string& s);
+void trim(std::string& s);
 
 // Put double in uint32_t vector
 void push_dbl(std::vector<uint32_t>& v, double value);
@@ -111,6 +120,9 @@ inline void resize_from_read_bin(std::istream& is, Resizable& v) {
     size_t sz; read_bin(is, sz);
     v.resize(sz);
 }
+
+// String replace (copy intentional)
+std::string str_replace(std::string_view src, std::string from, std::string_view to);
 
 }  // namespace util
 }  // namespace nivalis

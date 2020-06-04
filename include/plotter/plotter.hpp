@@ -227,7 +227,7 @@ public:
 
     // Construct a Plotter.
     // init_expr: initial expression for first function (which is automatically added)
-    Plotter();
+    explicit Plotter(bool use_latex = false);
     Plotter(const Plotter& other) =delete;
     Plotter& operator=(const Plotter& other) =delete;
 
@@ -740,6 +740,9 @@ public:
        PASSIVE_MARKER_CLICK_DRAG_TRACE,
        PASSIVE_MARKER_CLICK_DRAG_VIEW
     } passive_marker_click_behavior = PASSIVE_MARKER_CLICK_DRAG_TRACE;
+
+    // If true, parses expressions as Latex instead of 'Nivalis expression'
+    const bool use_latex;
 
     // The environment object, contains defined functions and variables
     // (owned)

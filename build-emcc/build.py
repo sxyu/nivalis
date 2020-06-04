@@ -2,6 +2,7 @@ from jinja2 import Template, Environment, FileSystemLoader
 from shutil import copyfile
 from css_html_js_minify import html_minify, js_minify, css_minify
 import os, random
+import distutils.dir_util
 
 copy_files = ["worker.js", "worker.wasm"]
 html_fname = "index.html"
@@ -52,3 +53,5 @@ with open(os.path.join(dir_path, main_css), 'r') as f:
     main_css_data = f.read()
 with open(os.path.join(dir_path, 'out', main_css), 'w') as f:
     f.write(css_minify(third_party_css_data + '\n' + main_css_data))
+    
+distutils.dir_util.copy_tree('css/fonts', 'out/css/fonts')

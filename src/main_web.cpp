@@ -29,6 +29,7 @@
 #include <GLFW/glfw3.h>
 
 #include "shell.hpp"
+#include "parser.hpp"
 #include "util.hpp"
 EM_JS(double, get_ver, (), { return nivalis_ver_num; });
 EM_JS(int, canvas_get_width, (), { return Module.canvas.width; });
@@ -44,7 +45,7 @@ bool ret_from_worker;
 
 namespace nivalis {
 namespace {
-Plotter plot; // Main plotter
+Plotter plot(true); // Main plotter, use latex
 Environment& env = plot.env; // Main environment
 GLFWwindow* window; // GLFW window
 std::ostringstream shell_strm; // Shell stream (replaces cout);
@@ -73,8 +74,7 @@ void webworker_cback(char* data, int size, void* arg) {
 // Emscripten access methods, ret true if success
 bool redraw_canvas(bool worker_req_update) {
     bool success = true;
-    static int missed_messages = 0;
-    // * State
+    static int missed_messages = 0; // * State
     // Main graphics adaptor for plot.draw
     static ImGuiDrawListGraphicsAdaptor adaptor;
 
@@ -364,6 +364,10 @@ bool shell_exec(const std::string& line) {
 }
 std::string get_shell_output() { return shell_strm.str(); }
 
+std::string nivalis_to_latex_env(const std::string& s) {
+    return nivalis_to_latex(s, plot.env);
+}
+
 EMSCRIPTEN_BINDINGS(nivplot) {
     using namespace emscripten;
     function("on_keypress", &emscripten_keypress);
@@ -437,6 +441,9 @@ EMSCRIPTEN_BINDINGS(nivplot) {
     function("on_mouseup", &on_mouseup);
     function("on_mousewheel", &on_mousewheel);
 
+    // Utils
+    function("nivalis_to_latex", &nivalis_to_latex_env);
+    function("latex_to_nivalis", &latex_to_nivalis);
 }
 
 // Helper for Initializing OpenGL
@@ -473,7 +480,7 @@ int main(int argc, char ** argv) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     font_md = io.Fonts->AddFontFromMemoryCompressedTTF(
-            ROBOTO_compressed_data, ROBOTO_compressed_size, 16.0f, NULL,
+            ROBOTO_compressed_data, ROBOTO_compressed_size, 18.0f, NULL,
             GetGlyphRangesGreek());
     // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);

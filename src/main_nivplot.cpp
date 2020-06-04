@@ -472,12 +472,12 @@ void main_loop_step() {
             ImGui::BulletText("%s", "'Polylines' (points and lines)");
             ImGui::Indent();
                 ImGui::BulletText("%s", "To draw a single point, write (<x-coord>,<y-coord>)\ne.g. (1, 2). Coords can have slider variables.");
-                ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>)(<x2>,<y2>)... e.g. (1,1)(2,2)(3,2)");
+                ImGui::BulletText("%s", "To draw a series of points connected in order, write\n(<x1>,<y1>),(<x2>,<y2>)... e.g. (1,1),(2,2),(3,2)");
             ImGui::Unindent();
             ImGui::BulletText("%s", "2D Geometry Primitives");
             ImGui::Indent();
-                ImGui::BulletText("%s", "Line/polygon: %poly [polyline expression], e.g. %poly (0,0)(1,1)(2,0)\nSimilar to polyline but closes the path automatically");
-                ImGui::BulletText("%s", "Rectangle: %rect (ax, ay) (bx, by) e.g. %rect (0,0)(1,1)");
+                ImGui::BulletText("%s", "Line/polygon: %poly [polyline expression], e.g. %poly (0,0),(1,1),(2,0)\nSimilar to polyline but closes the path automatically");
+                ImGui::BulletText("%s", "Rectangle: %rect (ax, ay), (bx, by) e.g. %rect (0,0),(1,1)");
                 ImGui::BulletText("%s", "Circle: %circ radius @ (cenx, ceny)");
                 ImGui::BulletText("%s", "Ellipse: %ellipse (rx, ry) @ (cenx, ceny)");
                 ImGui::BulletText("%s", "*Filling*: replace %<command> with %f<command> to fill the\nprimitive, for example %fpoly or %frect");
@@ -550,11 +550,11 @@ void main_loop_step() {
                 " <expr>[, ... [, <else-expr>]]]}\n"
                 "ex. {x<0: x, x>=0 : x^2}  ex. {x<2: exp(x)}");
         ImGui::BulletText("%s", "Sum special form:\n"
-                "sum(<var>: <begin>, <end>)[<expr>]\n"
-                "ex. sum(x: 0, 100)[x]");
+                "sum(<var> = <begin>, <end>)[<expr>]\n"
+                "ex. sum(x=0, 100)[x]");
         ImGui::BulletText("%s", "Prod special form:\n"
-                "prod(<var>: <begin>, <end>)[<expr>]\n"
-                "ex. prod(x: 0, 100)[1/x]");
+                "prod(<var> = <begin>, <end>)[<expr>]\n"
+                "ex. prod(x=0, 100)[1/x]");
         ImGui::BulletText("%s", "Diff (derivative) special form (evaluated at parse-time):\n"
                 "diff(<var>)[<expr>]\n"
                 "ex. diff(x)[1/x]");

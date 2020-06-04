@@ -40,10 +40,8 @@ bool Shell::eval_line(std::string line) {
     std::string str_to_parse, var;
     std::vector<std::string> def_fn_args;
     bool def_fn;
-    for (char c : line) {
-        if (!std::isspace(c)) str_to_parse.push_back(c);
-    }
     util::trim(line);
+    str_to_parse = line;
     if (line == "exit") {
         // Exit shell, if applicable
         closed = true;
@@ -73,7 +71,8 @@ bool Shell::eval_line(std::string line) {
             return false;
         }
     } else {
-        bool do_optim = cmd == "%";
+        bool do_optim = cmd == "%" || cmd == "%tex" || cmd == "%niv";
+        bool will_use_latex = (use_latex || cmd == "%tex") && cmd != "%niv";
         bool do_diff = cmd == "%diff";
         if (do_optim) str_to_parse = line;
         uint64_t diff_var_addr;
@@ -143,7 +142,8 @@ bool Shell::eval_line(std::string line) {
             env.addr_of(def_fn_args[i], false);
         }
         std::string parse_err;
-        auto expr = parse(str_to_parse, env, !(do_diff || do_optim), // expicit
+        Expr expr = parse(will_use_latex ?  latex_to_nivalis(str_to_parse)
+                : str_to_parse, env, !(do_diff || do_optim), // expicit
                 true, // quiet
                 def_fn_args.size(), // max args
                 &parse_err);

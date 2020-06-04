@@ -86,7 +86,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
                 --stkh;
             } else if (stkh == 1) {
                 if (c == ',') has_comma = true;
-            } else if (stkh == 0) {
+            } else if (stkh == 0 && !std::isspace(c) && c != ',') {
                 // Invalid since symbol between )(
                 break;
             }
@@ -245,7 +245,7 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
             default:
                 // Can't have things between ), (
                 // shouldn't happen since should not detect as polyline
-                if (!std::isspace(c) && stkh == 0) return false;
+                if (!std::isspace(c) && c != ',' && stkh == 0) return false;
         }
     }
     if (parse_err.empty()) {
@@ -273,6 +273,10 @@ bool parse_polyline_expr(const std::string& expr_str, Function& func,
         }
     }
     return want_reparse;
+}
+
+std::string gen_func_name(bool use_latex, size_t next_func_name) {
+    return "f" + std::to_string(next_func_name);
 }
 }  // namespace
 
@@ -396,13 +400,14 @@ bool Plotter::View::operator!=(const View& other) const {
     return !(other == *this);
 }
 
-Plotter::Plotter() : view{SCREEN_WIDTH, SCREEN_HEIGHT, 0., 0., 0., 0.}
+Plotter::Plotter(bool use_latex)
+    : view{SCREEN_WIDTH, SCREEN_HEIGHT, 0., 0., 0., 0.}, use_latex(use_latex)
 {
     reset_view();
     curr_func = 0;
     {
         Function f;
-        f.name = "f" + std::to_string(next_func_name++);
+        f.name = gen_func_name(use_latex, next_func_name++);
         f.expr_str = "";
         f.line_color = color::from_int(last_expr_color++);
         f.type = Function::FUNC_TYPE_EXPLICIT;
@@ -429,7 +434,7 @@ void Plotter::reparse_expr(size_t idx) {
     func_error.clear();
     func.exprs.clear();
     std::string lhs, rhs;
-    func.type = detect_func_type(func.expr_str, lhs, rhs);
+    func.type = detect_func_type(use_latex ? latex_to_nivalis(func.expr_str) : func.expr_str, lhs, rhs);
 
     int ftype_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
     bool want_reparse_all = false;
@@ -644,7 +649,7 @@ void Plotter::set_curr_func(size_t func_id) {
             f.line_color = reuse_colors.front();
             reuse_colors.pop_front();
         }
-        f.name = "f" + std::to_string(next_func_name++);
+        f.name = gen_func_name(use_latex, next_func_name++);
         funcs.push_back(std::move(f));
     }
     focus_on_editor = true;
@@ -1078,6 +1083,7 @@ std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
     if (jshell.size()) j["shell"] = jshell;
     if (jsliders.size()) j["sliders"] = jsliders;
     if (jfuncs.size()) j["funcs"] = jfuncs;
+    if (use_latex) j["latex"] = true;
     return os << j;
 }
 std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
@@ -1239,6 +1245,26 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
                         reuse_colors.push_back(color::from_hex(
                                     jcol.get<std::string>()));
                     }
+                }
+            }
+        }
+        bool imp_use_latex = false;
+        if (j.count("latex")) {
+            imp_use_latex = j["latex"].get<bool>() == true;
+        }
+        // If one save uses Nivalis notation and the other uses LaTeX, try to convert
+        if (imp_use_latex != use_latex) {
+            if (use_latex) {
+                for (size_t i = 0; i < funcs.size(); ++i) {
+                    std::cout << funcs[i].expr_str << " --> ";
+                    funcs[i].expr_str = nivalis_to_latex_safe(funcs[i].expr_str);
+                    std::cout << funcs[i].expr_str << "\n";
+                    reparse_expr(i);
+                }
+            } else {
+                for (size_t i = 0; i < funcs.size(); ++i) {
+                    funcs[i].expr_str = latex_to_nivalis(funcs[i].expr_str);
+                    reparse_expr(i);
                 }
             }
         }

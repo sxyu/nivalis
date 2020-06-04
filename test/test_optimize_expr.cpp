@@ -1,6 +1,7 @@
 #include "expr.hpp"
 #include "parser.hpp"
 #include "test_common.hpp"
+#include "util.hpp"
 // This test file assumes parser, expr works
 // it is quite high-level; the goal is to assure
 // the optimizer does not make the expression incorrect
@@ -15,7 +16,13 @@ namespace {
             uint32_t var_id,
             double xmin = -100, double xmax = 100) {
         env.set("a", 10.);
-        Expr expr = parse(str, env);
+        std::string err;
+        Expr expr = parse(str, env, false, true, 0, &err);
+        util::trim(err);
+        if (err.size()) {
+            std::cout << "Provided expression failed to parse: " << err << "\n";
+            return false;
+        }
         Expr orig = expr;
         expr.optimize();
         int cnt = 0;
@@ -91,20 +98,23 @@ int main() {
     ASSERT(test_optim_equiv_random("{x<0: {x<=3: 5}, 4}", 0));
     ASSERT(test_optim_equiv_random("{x<0: abs(x)}", 0));
     ASSERT(test_optim_equiv_random("max(x,min(x^2,x))", 0));
-    ASSERT(test_optim_equiv_random("sum(x:0,a)[a*x^2]", 0));
-    ASSERT(test_optim_equiv_random("prod(x:1,3)[a*x^2]", 0));
-    ASSERT(test_optim_equiv_random("prod(x:1,3)[{x<2:a*x^2,3}]", 0));
+    ASSERT(test_optim_equiv_random("sum(x=0,a)[a*x^2]", 0));
+    ASSERT(test_optim_equiv_random("prod(x=1,3)[a*x^2]", 0));
+    ASSERT(test_optim_equiv_random("prod(x=1,3)[{x<2:a*x^2,3}]", 0));
 
     ASSERT(test_optim_equiv_random("10*(sin(x)^2 + cos(x)^2)", 0));
     ASSERT(test_optim_equiv_random("1/(2/x)", 0));
     ASSERT(test_optim_equiv_random("3+1/(1/x)", 0));
     ASSERT(test_optim_equiv_random("exp(log(x))", 0, 1e-10, 10));
-    ASSERT(test_optim_equiv_random("2*pi^(ln(x, pi))", 0, 1e-10, 10));
+    ASSERT(test_optim_equiv_random("2*pi^(ln(x))", 0, 1e-10, 10));
     ASSERT(test_optim_equiv_random("log2(exp2(x))", 0, -10, 10));
     ASSERT(test_optim_equiv_random("log2(x^a)", 0, -10, 10));
     ASSERT(test_optim_equiv_random("exp(ln(abs(x)))", 0, -10, 10));
     ASSERT(test_optim_equiv_random("3^(log(x,3))", 0, -10., 10));
     ASSERT(test_optim_equiv_random("exp(log(2^x))", 0, -10., 10));
+    ASSERT(test_optim_equiv_random("2*2^(1+x)", 0, -10., 10));
+    ASSERT(test_optim_equiv_random("2*exp2(1+2*x)", 0, -10., 10));
+    ASSERT(test_optim_equiv_random("2^(diff(x)x^2)", 0, -10., 10));
 
     using namespace OpCode;
     AST ast_zero = {0.}, ast_one = {1.};

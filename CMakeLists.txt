@@ -74,6 +74,7 @@ list(TRANSFORM HEADERS PREPEND ${INCLUDE_DIR}/)
 set(
     SOURCES
     parser.cpp
+    latex_nivalis_conv.cpp
     env.cpp
     expr.cpp
     util.cpp
@@ -118,7 +119,8 @@ if (EMSCRIPTEN)
     set( JS_SRC_DIR "${PROJECT_SOURCE_DIR}/js" )
     set(
         SOURCES_JS
-        jquery-3.5.1.slim.min.js
+        jquery-3.5.1.min.js
+        mathquill.js
         popper.min.js
         bootstrap.min.js
         pickr.min.js
@@ -127,6 +129,7 @@ if (EMSCRIPTEN)
         glfwPatch.js
         pickrconfig.js
         guiComponents.js
+        keyboard.js
         init.js
         emModule.js
     )
@@ -170,10 +173,10 @@ if (EMSCRIPTEN)
         COMMENT "Concatenating JS sources to out/js/main.js"
         VERBATIM )
     add_custom_target(main_js ALL DEPENDS "${PROJECT_BINARY_DIR}/out/js/main.js")
-    find_package(PythonInterp REQUIRED)
+    find_package(Python REQUIRED COMPONENTS Interpreter)
     add_custom_command(
         TARGET main_js POST_BUILD
-        COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_BINARY_DIR}/build.py)
+        COMMAND ${Python_EXECUTABLE} ${PROJECT_BINARY_DIR}/build.py)
 else(EMSCRIPTEN)
     set(_EMSCRIPTEN_ "//")
 

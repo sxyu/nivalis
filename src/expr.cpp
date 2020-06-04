@@ -72,6 +72,11 @@ std::ostream& Expr::repr(std::ostream& os, const Environment& env) const {
     return os;
 }
 
+std::ostream& Expr::latex_repr(std::ostream& os, const Environment& env) const {
+    detail::print_ast_latex(os, ast, &env);
+    return os;
+}
+
 std::ostream& Expr::to_bin(std::ostream& os) const {
     util::write_bin(os, ast.size());
     for (size_t i = 0; i < ast.size(); ++i) {
@@ -168,8 +173,8 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
         for (char c : reprs) {
             switch(c) {
                 case '@': n_idx = print_ast(os, ast, env, n_idx); break; // subexpr
-                case '#': os << ast[idx].val; break; // value
-                case '&':
+                case '\v': os << ast[idx].val; break; // value
+                case '\r':
                           if (env != nullptr) {
                               if (ast[idx].ref >= env->vars.size()) {
                                   os << "&NULL";
@@ -183,6 +188,53 @@ size_t print_ast(std::ostream& os, const Expr::AST& ast,
                           break;
                 case '$':
                           os << "$" << ast[idx].ref;
+                          break;
+                default: os << c;
+            }
+        }
+    }
+    return n_idx;
+}
+
+size_t print_ast_latex(std::ostream& os, const Expr::AST& ast,
+               const Environment* env, size_t idx) {
+    std::string_view reprs = OpCode::latex_repr(ast[idx].opcode);
+    size_t n_idx = idx + 1;
+    if (ast[idx].opcode == OpCode::call) {
+        // Special handling for user function
+        if (env != nullptr) {
+            os << env->funcs[ast[idx].call_info[0]].name;
+        } else {
+            os << "<function id=" << ast[idx].call_info[0] << ", " << ast[idx].call_info[1] << " args>";
+        }
+        size_t n_args = ast[idx].call_info[1];
+        if (n_args) {
+            os << "\\left(";
+            for (size_t i = 0; i < n_args; ++i) {
+                if (i) os << ",";
+                n_idx = print_ast_latex(os, ast, env, n_idx);
+            }
+            os << "\\right)";
+        }
+    } else {
+        for (char c : reprs) {
+            switch(c) {
+                case '@': n_idx = print_ast_latex(os, ast, env, n_idx); break; // subexpr
+                case '\v': os << ast[idx].val; break; // value
+                case '\r':
+                          if (env != nullptr) {
+                              if (ast[idx].ref >= env->vars.size()) {
+                                  os << "\\&NULL";
+                                  break;
+                              } os << env->varname.at(ast[idx].ref);
+                          }
+                          else os << "\\@" << ast[idx].ref;
+                          break; // ref
+                case '\t':
+                          // Not used
+                          break;
+                case '$':
+                          os << "\\$" << ast[idx].ref;
                           break;
                 default: os << c;
             }

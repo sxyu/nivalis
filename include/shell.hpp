@@ -12,6 +12,8 @@ public:
     explicit Shell(Environment& env, std::ostream& os);
     // Evaluate a line; returns true iff no error
     bool eval_line(std::string line); // string copy intentional
+    // If true, parses LaTeX rather than 'Nivalis expression'
+    bool use_latex = false;
     // Whether shell is 'closed' (must be handled by frontend)
     bool closed = false;
 private:

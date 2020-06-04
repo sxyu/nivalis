@@ -18,8 +18,10 @@ let setupHandlers = function() {
         }
         Module.on_key(e.which, e.ctrlKey, e.shiftKey, e.altKey);
         if (e.which === 69) {
-            $('function-expr-' + FuncEdit.func_names[
-                Module.get_curr_func()]).focus();
+            let tb = $('#function-expr-' + FuncEdit.func_names[
+                Module.get_curr_func()]);
+            tb.mousedown();
+            tb.mouseup();
         } else {
             ViewConfig.updateViewPolar();
             ViewConfig.updateViewBounds();
@@ -275,6 +277,44 @@ let onInit = function() {
         Module.set_passive_marker_click_drag_view(false);
     }
 
+    var MQ = MathQuill.getInterface(2);
+
+    MQ.config({
+        // spaceBehavesLikeTab: true,
+        leftRightIntoCmdGoes: 'up',
+        restrictMismatchedBrackets: true,
+        sumStartsWithNEquals: true,
+        supSubsRequireOperand: true,
+        charsThatBreakOutOfSupSub: '=<>',
+        autoSubscriptNumerals: true,
+        autoCommands: 'pi Pi theta vartheta Theta alpha beta gamma Gamma delta Delta zeta psi Psi phi Phi mu nu epsilon varepsilon eta kappa Kappa chi omega Omega tau Tau rho varrho iota xi Xi sqrt nthroot sum prod int choose binom and or',
+        autoOperatorNames: 'sin cos tan arcsin arccos arctan sinh cosh tanh sgn exp log ln mod gcd lcm floor ceil round poly fpoly Fpoly rect frect Frect circ fcirc Fcirc ellipse fellipse Fellipse text lgamma fact ifact rifact fafact at',
+        maxDepth: 1,
+        // substituteTextarea: function() {
+        //     return document.createElement('textarea');
+        // },
+    });
+    let first_view_example = true;
+    $('#example-dropdown-toggle').click(function() {
+        if (!first_view_example) return;
+        first_view_example = false;
+        setTimeout(function() {
+            // Initialize examples the first time
+            // dropdown is opened
+            // Must be after open, since o.w.
+            // paren heights will be wrong
+            $('.example').each(function() {
+                if (!$(this).hasClass('nomath')) {
+                    let m = MQ.StaticMath(this);
+                    if (this.hasAttribute('expr')) {
+                        m.latex($(this).attr('expr'));
+                    }
+                }
+            });
+        }, 1);
+    });
+    // Fix weird disappearing parentheses
+    // $('.mq-paren').css('transform','scale(1.2, 1.2)')
     $('.example').click(function(){
         let $this = $(this);
         let fidx = FuncEdit.func_names.length-1;
@@ -282,8 +322,6 @@ let onInit = function() {
             Module.get_func_expr(0).trim() === '') {
             fidx = 0;
         }
-        let fn = FuncEdit.func_names[fidx];
-        let expr_ele = $('#function-expr-' + fn);
         if (this.hasAttribute('load')) {
             Util.getFile($this.attr("load"), function(err, data) {
                 if (err === null) {
@@ -295,7 +333,16 @@ let onInit = function() {
                 }
             });
         } else {
-            expr_ele.val($this.text().trim());
+            let fn = FuncEdit.func_names[fidx];
+            let mf = FuncEdit.func_mfields[fidx];
+            let expr;
+            if (this.hasAttribute('expr')) {
+                expr = $(this).attr('expr');
+            } else {
+                expr = $this.children('.mq-selectable').text();
+            }
+            expr = expr.substr(1, expr.length - 2);
+            mf.latex(expr.trim());
             if (this.hasAttribute('tmax')) {
                 $('#function-tmax-' + fn).val($this.attr('tmax'));
                 Module.set_func_tmax(fidx, Number.parseFloat($this.attr('tmax')));
@@ -304,8 +351,10 @@ let onInit = function() {
                 $('#function-tmin-' + fn).val($this.attr('tmin'));
                 Module.set_func_tmin(fidx, Number.parseFloat($this.attr('tmin')));
             }
+            let expr_ele = $('#function-expr-' + fn);
+            expr_ele.mousedown();
+            expr_ele.mouseup();
             FuncEdit.reparse(fn);
-            $('#function-expr-' + fn).focus();
             Module.redraw();
         }
     });

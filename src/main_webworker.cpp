@@ -5,7 +5,7 @@
 
 namespace {
 using namespace nivalis;
-Plotter plot;
+Plotter plot(true); // Main worker plotter, use latex
 bool updating = false;
 std::string result;
 size_t queue_sz;

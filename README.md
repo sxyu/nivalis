@@ -88,13 +88,13 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
                   inputs will appear to allow adjusting bounds on `t`
                   (you can directly set the value or drag *t min*, *t max* to change)
                 - Polar inequalities are not currently supported due to limitations in current graphics engine
-           - *Polylines*: draws a series of points and lines e.g. `(5,1)`, or `(1,1) (2,2) (a,b)`
+           - *Polylines*: draws a series of points and lines e.g. `(5,1)`, or `(1,1), (2,2), (a,b)`
                 - If size 1, e.g. `(1,2)`, it draws a single point
-                - If size >1, e.g. `(1,2)(2,3)`, draws all points and connects them in order
+                - If size >1, e.g. `(1,2),(2,3)`, draws all points and connects them in order
                 - If any point coordinate contains only a single variable, e.g. `(p,q)`, then the point can be dragged with your mouse to adjust `p,q` (note: this functionality is implemented in a super hacky way)
             - 2D Geometry Primitives
-                - Line/polygon: `%poly [polyline expression]`, e.g. `%poly (0,0)(1,1)(2,0)`. Similar to polyline but closes the path automatically.
-                - Rectangle: `%rect (ax, ay) (bx, by)` e.g. `%rect (0,0)(1,1)`
+                - Line/polygon: `%poly [polyline expression]`, e.g. `%poly (0,0),(1,1),(2,0)`. Similar to polyline but closes the path automatically.
+                - Rectangle: `%rect (ax, ay) (bx, by)` e.g. `%rect (0,0),(1,1)`
                 - Circle: `%circ radius @ (cenx, ceny)`
                 - Ellipse: `%ellipse (rx, ry) @ (cenx, ceny)`
                 - *Filling*: replace `%<command>` with `%f<command>` to fill the primitive, for example `%fpoly` or `%frect`
@@ -148,7 +148,7 @@ define `sec(x) = 1/cos(x)`, or even a function with multiple arguments
         - Some integer functions: `gcd lcm choose rifact fafact ifact` (rifact/fafact are rising/falling factorial)
         - Some utility functions: `max(_, _)`, `min(_, _)`,
     - Piecewise functions aka. conditionals: `{<if-pred>:<if-expr>,<elif-pred>:<elif-expr>,...,<else-expr>}` e.g. `{x<0 : x, x>=0 : x^2}` or `{x<0 : x, x^2}` (last case is else by default)
-    - Sum/prod special forms: `sum(x:1:10)[<expr>]` and `prod(x:1:10)[<expr>]` (inclusive indexing, upper index can be < lower)
+    - Sum/prod special forms: `sum(x=1,10)[<expr>]` and `prod(x=1,10)[<expr>]` (inclusive indexing, upper index can be < lower)
     - Derivative special form: `diff(<var>)[<expr>]` takes the derivative of `<expr>` wrt `<var>` and evaluates it at current value of `<var>`. E.g. `diff(x)[sin(x)]`
     - Higher-order derivative special forms: `diff<ord>(<var>)[<expr>]`, where ord should be a number in 0...5
 - Define variable: for example, `a = 3+4`, then you can use `a` anywhere. Variables may contain: `0-9a-zA-Z_'` but cannot start with a number, e.g. `x3'` is valid.

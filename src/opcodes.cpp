@@ -7,8 +7,7 @@ namespace OpCode {
 
 // Add the operator here if it is binary
 size_t n_args(uint32_t opcode) {
-    using namespace nivalis::OpCode;
-    switch(opcode) {
+    using namespace nivalis::OpCode; switch(opcode) {
         case OpCode::null: case val: case ref:
         case thunk_jmp: case arg:
             return 0;
@@ -32,12 +31,12 @@ const char* repr(uint32_t opcode) {
     using namespace OpCode;
     switch (opcode) {
         case OpCode::null:  return "nan";
-        case val:   return "#";
-        case ref:   return "&";
-        case sums:     return "sum(&, @, @)[@]";
-        case prods:    return "prod(&, @, @)[@]";
+        case val:   return "\v";
+        case ref:   return "\r";
+        case sums:     return "sum(\r, @, @)[@]";
+        case prods:    return "prod(\r, @, @)[@]";
         case bnz:   return "{@: @, @}";
-        case bsel:  return "bsel(@, @)";
+        case bsel:  return "{0: @, @}";
         case add:   return "(@ + @)";
         case sub:   return "(@ - @)";
         case mul:   return "(@ * @)";
@@ -81,9 +80,9 @@ const char* repr(uint32_t opcode) {
         case sinb:      return "sin(@)";
         case cosb:      return "cos(@)";
         case tanb:      return "tan(@)";
-        case asinb:     return "asin(@)";
-        case acosb:     return "acos(@)";
-        case atanb:     return "atan(@)";
+        case asinb:     return "arcsin(@)";
+        case acosb:     return "arccos(@)";
+        case atanb:     return "arctan(@)";
         case sinhb:     return "sinh(@)";
         case coshb:     return "cosh(@)";
         case tanhb:     return "tanh(@)";
@@ -93,8 +92,81 @@ const char* repr(uint32_t opcode) {
         case trigammab: return "trigamma(@)";
         case erfb:      return "erf(@)";
         case zetab:     return "zeta(@)";
-        case thunk_jmp: return "]";
-        case thunk_ret: return "[@@";
+        case thunk_jmp: return "";
+        case thunk_ret: return "@@";
+        case arg: return "$";
+        case call: return "\t(@)";
+        default: return "";
+    };
+}
+
+const char* latex_repr(uint32_t opcode) {
+    using namespace OpCode;
+    switch (opcode) {
+        case OpCode::null:  return "nan";
+        case val:   return "\v";
+        case ref:   return "\r";
+        case sums:     return "\\sum_{\r=@}^{@}\\left(@\\right)";
+        case prods:    return "\\prod_{\r=@}^{@}\\left(@\\right)";
+        case bnz:   return "\\left\\{@:@,@\\right\\}";
+        case bsel:  return "\\left\\{0:@,@\\right\\}";
+        case add:   return "\\left(@+@\\right)";
+        case sub:   return "\\left(@-@\\right)";
+        case mul:   return "\\left(@\\cdot @\\right)";
+        case divi:   return "\\frac{@}{@}";
+        case mod:   return "\\operatorname{mod}\\left(@, @\\right)";
+        case power: return "@^{@}";
+        case logbase:  return "\\log\\left(@, @\\right)";
+        case max:   return "\\max\\left(@, @\\right)";
+        case min:   return "\\min\\left(@, @\\right)";
+        case land:  return "\\left(@\\wedge @\\right)";
+        case lor:   return "\\left(@\\vee @\\right)";
+        case lxor:  return "xor\\left(@, @\\right)";
+        case lt:    return "\\left(@ < @\\right)";
+        case le:    return "\\left(@ \\le @\\right)";
+        case eq:    return "\\left(@ = @\\right)";
+        case ne:    return "\\left(@ \\ne @\\right)";
+        case ge:    return "\\left(@ \\ge @\\right)";
+        case gt:    return "\\left(@ > @\\right)";
+        case gcd:   return "\\gcd\\left(@,@\\right)";
+        case lcm:   return "\\lcm\\left(@,@\\right)";
+        case choose:    return "\\choose\\left(@,@\\right)";
+        case fafact:    return "\\fafact\\left(@,@\\right)";
+        case rifact:    return "\\rifact\\left(@,@\\right)";
+        case betab:      return "B\\left(@,@\\right)";
+        case polygammab: return "\\polygamma\\left(@,@\\right)";
+        case unaryminus:   return "(-@)";
+        case lnot:     return "\\not\\left(@\\right)";
+        case absb:      return "\\left|@\\right|";
+        case sqrtb:     return "\\sqrt\\left{@\\right}";
+        case sqrb:      return "@^{2}";
+        case sgn:      return "\\sgn\\left(@\\right)";
+        case floorb:    return "\\floor\\left(@\\right)";
+        case ceilb:     return "\\ceil\\left(@\\right)";
+        case roundb:    return "\\round\\left(@\\right)";
+        case expb:      return "\\exp\\left(@\\right)";
+        case exp2b:     return "2^{@}";
+        case logb:      return "\\ln\\left(@\\right)";
+        case log10b:    return "\\log_{10}\\left(@\\right)";
+        case log2b:     return "\\log_{2}\\left(@\\right)";
+        case factb:     return "\\fact\\left(@\\right)";
+        case sinb:      return "\\sin\\left(@\\right)";
+        case cosb:      return "\\cos\\left(@\\right)";
+        case tanb:      return "\\tan\\left(@\\right)";
+        case asinb:     return "\\arcsin\\left(@\\right)";
+        case acosb:     return "\\arccos\\left(@\\right)";
+        case atanb:     return "\\arctan\\left(@\\right)";
+        case sinhb:     return "\\sinh\\left(@\\right)";
+        case coshb:     return "\\cosh\\left(@\\right)";
+        case tanhb:     return "\\tanh\\left(@\\right)";
+        case tgammab:    return "\\Gamma\\left(@\\right)";
+        case lgammab:   return "\\operatorname{lgamma}\\left(@\\right)";
+        case digammab:  return "\\psi_{0}\\left(@\\right)";
+        case trigammab: return "\\psi_{1}\\left(@\\right)";
+        case erfb:      return "\\erf\\left(@\\right)";
+        case zetab:     return "\\zeta\\left(@\\right)";
+        case thunk_jmp: return "";
+        case thunk_ret: return "@@";
         case arg: return "$";
         case call: return "\t(@)";
         default: return "";
@@ -138,59 +210,65 @@ char to_char(uint32_t opcode) {
 }
 
 // Link parser functions to OpCodes here
-const std::map<std::string, uint32_t>& funcname_to_opcode_map() {
-    static std::map<std::string, uint32_t> func_opcodes;
-    if (func_opcodes.empty()) {
-        func_opcodes["pow"] = OpCode::power;
-        func_opcodes["log"] = OpCode::logbase;
-        func_opcodes["max"] = OpCode::max;
-        func_opcodes["min"] = OpCode::min;
-        func_opcodes["xor"] = OpCode::lxor;
-        func_opcodes["not"] = OpCode::lnot;
+const std::map<std::string, uint32_t, std::less<> >& funcname_to_opcode_map() {
+    static std::map<std::string, uint32_t, std::less<> > func_opcodes = {
+        {"mod", OpCode::mod},
+        {"pow", OpCode::power},
+        {"log", OpCode::logbase},
+        {"max", OpCode::max},
+        {"min", OpCode::min},
+        {"xor", OpCode::lxor},
+        {"not", OpCode::lnot},
+        {"and", OpCode::land},
+        {"or", OpCode::lor},
 
-        func_opcodes["abs"] = OpCode::absb;
-        func_opcodes["sqrt"] = OpCode::sqrtb;
-        func_opcodes["sgn"] = OpCode::sgn;
-        func_opcodes["floor"] = OpCode::floorb;
-        func_opcodes["ceil"] = OpCode::ceilb;
-        func_opcodes["round"] = OpCode::roundb;
+        {"abs", OpCode::absb},
+        {"sqrt", OpCode::sqrtb},
+        {"sgn", OpCode::sgn},
+        {"floor", OpCode::floorb},
+        {"ceil", OpCode::ceilb},
+        {"round", OpCode::roundb},
 
-        func_opcodes["exp"] = OpCode::expb;
-        func_opcodes["exp2"] = OpCode::exp2b;
-        func_opcodes["ln"] = OpCode::logb;
-        func_opcodes["log10"] = OpCode::log10b;
-        func_opcodes["log2"] = OpCode::log2b;
+        {"exp", OpCode::expb},
+        {"exp2", OpCode::exp2b},
+        {"ln", OpCode::logb},
+        {"log10", OpCode::log10b},
+        {"log2", OpCode::log2b},
 
-        func_opcodes["sin"] = OpCode::sinb;
-        func_opcodes["cos"] = OpCode::cosb;
-        func_opcodes["tan"] = OpCode::tanb;
-        func_opcodes["asin"] = OpCode::asinb;
-        func_opcodes["acos"] = OpCode::acosb;
-        func_opcodes["atan"] = OpCode::atanb;
+        {"sin", OpCode::sinb},
+        {"cos", OpCode::cosb},
+        {"tan", OpCode::tanb},
+        {"arcsin", OpCode::asinb},
+        {"arccos", OpCode::acosb},
+        {"arctan", OpCode::atanb},
 
-        func_opcodes["sinh"] = OpCode::sinhb;
-        func_opcodes["cosh"] = OpCode::coshb;
-        func_opcodes["tanh"] = OpCode::tanhb;
+        {"sinh", OpCode::sinhb},
+        {"cosh", OpCode::coshb},
+        {"tanh", OpCode::tanhb},
 
-        func_opcodes["gamma"] = OpCode::tgammab;
-        func_opcodes["ifact"] = OpCode::factb;
-        func_opcodes["lgamma"] = OpCode::lgammab;
-        func_opcodes["digamma"] = OpCode::digammab;
-        func_opcodes["trigamma"] = OpCode::trigammab;
-        func_opcodes["polygamma"] = OpCode::polygammab;
-        func_opcodes["erf"] = OpCode::erfb;
-        func_opcodes["zeta"] = OpCode::zetab;
-        func_opcodes["beta"] = OpCode::betab;
-        func_opcodes["gcd"] = OpCode::gcd;
-        func_opcodes["lcm"] = OpCode::lcm;
-        func_opcodes["choose"] = OpCode::choose;
-        func_opcodes["fafact"] = OpCode::fafact;
-        func_opcodes["rifact"] = OpCode::rifact;
+        {"gamma", OpCode::tgammab},
+        {"Gamma", OpCode::tgammab},
+        {"ifact", OpCode::factb},
+        {"lgamma", OpCode::lgammab},
+        {"digamma", OpCode::digammab},
+        {"psi_0", OpCode::digammab},
+        {"trigamma", OpCode::trigammab},
+        {"psi_1", OpCode::trigammab},
+        {"polygamma", OpCode::polygammab},
+        {"erf", OpCode::erfb},
+        {"zeta", OpCode::zetab},
+        {"beta", OpCode::betab},
+        {"B", OpCode::betab},
+        {"gcd", OpCode::gcd},
+        {"lcm", OpCode::lcm},
+        {"choose", OpCode::choose},
+        {"fafact", OpCode::fafact},
+        {"rifact", OpCode::rifact},
 
-        // "pseudo-instructions"
-        func_opcodes["fact"] = -1;
-        func_opcodes["N"] = -1; // standard normal
-    }
+        // -1 means fake command handled in parser
+        {"fact", -1},
+        {"N", -1}, // standard normal
+    };
     return func_opcodes;
 }
 

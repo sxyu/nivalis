@@ -7,22 +7,22 @@
 namespace nivalis {
 namespace util {
 
-bool is_varname(const std::string& expr) {
+bool is_varname(std::string_view expr) {
     if(!util::is_varname_first(expr[0])) return false;
     for (size_t k = 1; k < expr.size(); ++k) {
-        if (!util::is_literal(expr[k])) return false;
+        if (!util::is_identifier(expr[k])) return false;
     }
     return true;
 }
 
-bool is_whole_number(const std::string& expr) {
+bool is_whole_number(std::string_view expr) {
     for (size_t k = 0; k < expr.size(); ++k) {
         if (expr[k] < '0' || expr[k] > '9') return false;
     }
     return true;
 }
 
-size_t find_equality(const std::string& expr,
+size_t find_equality(std::string_view expr,
         bool allow_ineq,
         bool enforce_no_adj_comparison) {
     if (expr.empty()) return -1;
@@ -47,19 +47,19 @@ size_t find_equality(const std::string& expr,
     return -1;
 }
 
-void ltrim(std::string &s) {
+void ltrim(std::string& s) {
     s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
-        return !std::isspace(ch);
+        return !::std::isspace(ch);
     }));
 }
 
-void rtrim(std::string &s) {
+void rtrim(std::string& s) {
     s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
-        return !std::isspace(ch);
+        return !::std::isspace(ch);
     }).base(), s.end());
 }
 
-void trim(std::string &s) {
+void trim(std::string& s) {
     ltrim(s);
     rtrim(s);
 }
@@ -71,6 +71,33 @@ void push_dbl(std::vector<uint32_t>& v, double value) {
 
 double as_double(const uint32_t* ast) {
     return *reinterpret_cast<const double*>(ast);
+}
+
+std::string str_replace(std::string_view src, std::string from, std::string_view to) {
+    size_t sz = from.size();
+    from.push_back('\v'); from.append(src);
+
+    std::vector<size_t> za(from.size());
+    za[0] = from.size();
+    size_t left = 0, right = 0;
+    for (size_t i = 1; i < from.size(); ++i) {
+        if (right >= i && size_t(za[i - left]) < right - i + 1) za[i] = za[i - left];
+        else {
+            left = i; right = std::max(i, right);
+            while (right < from.size() && from[right] == from[right - left]) ++right;
+            za[i] = right - left; --right;
+        }
+    }
+    std::string out; out.reserve(src.size());
+    for (size_t i = sz + 1; i < from.size(); ++i) {
+        if (za[i] >= sz) {
+            out.append(to);
+            i += sz - 1;
+        } else {
+            out.push_back(from[i]);
+        }
+    }
+    return out;
 }
 }  // namespace util
 }  // namespace nivalis

@@ -74,9 +74,12 @@ constexpr bool has_ref(uint32_t opcode) {
 
 // Representations of expressions for printing purposes
 // @: replace with subexpression
-// &: replace with ref in next 4 bytes
-// #: replace with value in next 8 bytes (double)
+// \r: replace with ref in next 4 bytes
+// \v: replace with value in next 8 bytes (double)
 const char* repr(uint32_t opcode);
+
+// Same as repr(), but prints in LaTeX format
+const char* latex_repr(uint32_t opcode);
 
 // Get opcode of binary operator from char e.g. '+' -> 32
 // If not a valid binary operator, returns bsel
@@ -87,7 +90,7 @@ uint32_t from_char(char opchar);
 char to_char(uint32_t opcode);
 
 // Get map from function name to opcode
-const std::map<std::string, uint32_t>& funcname_to_opcode_map();
+const std::map<std::string, uint32_t, std::less<> >& funcname_to_opcode_map();
 
 // Get map from constant name to constant value
 const std::map<std::string, double>& constant_value_map();

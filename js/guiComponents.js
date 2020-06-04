@@ -20,10 +20,11 @@ var Renderer = {
 
 var FuncEdit = {
     func_names: [],
+    func_mfields: [],
     func_indices: {},
     reparse : function(name) {
             var idx = FuncEdit.func_indices[name];
-            Module.set_func_expr(idx, $('#function-expr-'+name).val());
+            Module.set_func_expr(idx, FuncEdit.func_mfields[idx].latex());
             var uses_t = Module.get_func_uses_t(idx);
             if (uses_t) {
                 $('#function-tbounds-' + name).css('display', 'flex');
@@ -43,39 +44,64 @@ var FuncEdit = {
                 new RegExp('{name}', 'g'), fname));
         FuncEdit.func_names.push(fname);
         FuncEdit.func_indices[fname] = fidx;
-
+        var MQ = MathQuill.getInterface(2);
+        var sm = MQ.StaticMath($('#function-name-' + fname)[0]);
+        sm.latex("f_{" + fname.substr(1) + "}");
         var editor_tb = $('#function-expr-' + fname);
-        editor_tb.val(Module.get_func_expr(fidx));
-        editor_tb.on('input', function() {
-            // Change editor
-            var this_name = this.id.substr(14);
-            FuncEdit.reparse(this_name);
-        });
-        editor_tb.on('keyup', function(e) {
-            // Up/down
-            var $this = $(this);
-            var this_name = this.id.substr(14);
-            var idx = FuncEdit.func_indices[this_name];
-            if (e.which === 38 && idx > 0) {
-                e.preventDefault();
-                var next_tb = $('#function-expr-' + FuncEdit.func_names[idx - 1]);
-                next_tb.focus();
-                // next_tb[0].selectionStart = next_tb[0].selectionEnd = next_tb[0].value.length;
-            } else if (e.which === 40) {
-                e.preventDefault();
-                if (idx + 1 === Module.num_funcs()) {
-                    FuncEdit.new_func(true);
+        const mf = MQ.MathField(editor_tb[0],
+            {
+                handlers: {
+                    edit: function(mathField) {
+                        var this_name = mathField.el().id.substr(14);
+                        FuncEdit.reparse(this_name);
+                        let tex = mathField.latex();
+                        if (tex == "#") {
+                            mathField.write("\ \\text{comment}");
+                        } else {
+                            const opn_str = "\\operatorname{";
+                            if (tex.startsWith(opn_str) && tex[tex.length - 1] == '}') {
+                                let tex_opn = tex.substr(opn_str.length, tex.length - opn_str.length - 1);
+                                if (tex_opn.length <= 1) return;
+                                if (tex_opn[0] == 'f' || tex_opn[0] == 'F')
+                                    tex_opn = tex_opn.substr(1);
+                                if (tex_opn == "text") {
+                                    mathField.write("\\ \\text{edit me}\\ \\operatorname{at}\ \\ \\left(0, 0\\right)");
+                                } else if (tex_opn == "poly") {
+                                    mathField.write("\\ ");
+                                    mathField.typedText("(");
+                                } else if (tex_opn == "rect") {
+                                    mathField.write("\\ \\left(0,0\\right),\\ \\left(1,1\\right)");
+                                } else if (tex_opn == "circ") {
+                                    mathField.write("\\ 1\\ \\operatorname{at}\ \\ \\left(0, 0\\right)");
+                                } else if (tex_opn == "ellipse") {
+                                    mathField.write("\\ (1,1)\\\ \\operatorname{at}\ \\ \\left(0, 0\\right)");
+                                }
+                            }
+                        }
+                    },
+                    upOutOf: function(mathField) {
+                        var this_name = mathField.el().id.substr(14);
+                        var idx = FuncEdit.func_indices[this_name];
+                        if (idx > 0) {
+                            var next_tb = $('#function-expr-' + FuncEdit.func_names[idx - 1]);
+                            next_tb.mousedown(); next_tb.mouseup();
+                        }
+                    },
+                    downOutOf: function(mathField) {
+                        var this_name = mathField.el().id.substr(14);
+                        var idx = FuncEdit.func_indices[this_name];
+                        if (idx + 1 === Module.num_funcs()) {
+                            FuncEdit.new_func(true);
+                        }
+                        var next_tb = $('#function-expr-' + FuncEdit.func_names[idx + 1]);
+                        next_tb.mousedown(); next_tb.mouseup();
+                    },
                 }
-                var next_tb = $('#function-expr-' + FuncEdit.func_names[idx + 1]);
-                next_tb.focus();
-                // next_tb[0].selectionStart = next_tb[0].selectionEnd = next_tb[0].value.length;
-            } else if (e.which === 27) {
-                // Esc
-                $this.blur();
-            }
-            Module.redraw();
-        });
-        editor_tb.focus(function() {
+            });
+        FuncEdit.func_mfields.push(mf);
+        mf.latex(Module.get_func_expr(fidx));
+
+        editor_tb.mousedown(function() {
             // Focus (change curr func)
             var this_name = this.id.substr(14);
             var idx = FuncEdit.func_indices[this_name];
@@ -88,10 +114,9 @@ var FuncEdit = {
             Module.set_curr_func(idx);
             Module.redraw();
         });
-        editor_tb.blur(function() {
-            // blur: redraw
-            // hack to fix canvas size when closing mobile keyboard
-            setTimeout(onResizeCanvas, 100);
+        editor_tb.keyup(function() {
+            var this_name = this.id.substr(14);
+            FuncEdit.reparse(this_name);
         });
         $('#function-tmin-' + fname).val(Math.floor(Module.get_func_tmin(fidx) * 1e6)/1e6);
         $('#function-tmax-' + fname).val(Math.ceil(Module.get_func_tmax(fidx) * 1e6)/1e6);
@@ -110,10 +135,10 @@ var FuncEdit = {
             if (FuncEdit.func_names.length > idx + 1) {
                 Module.delete_func(idx);
                 Module.redraw();
-                $('#function-form-' + this_name).remove();
-                $('#function-tbounds-' + this_name).remove();
+                $('#function-widget-' + this_name).remove();
                 FuncEdit.func_names.splice(idx, 1);
                 delete FuncEdit.func_indices[this_name];
+                FuncEdit.func_mfields.splice(idx, 1);
                 for (var t = idx; t < FuncEdit.func_names.length; t++) {
                     FuncEdit.func_indices[FuncEdit.func_names[t]] -= 1;
                 }
@@ -403,6 +428,7 @@ var resync = function() {
     $('#sliders').html('');
     FuncEdit.func_names = [];
     FuncEdit.func_indices = {};
+    FuncEdit.func_mfields = [];
     Sliders.slider_ids = [];
     Sliders.slider_indices = [];
     for (let i = 0; i < Module.num_funcs(); i++ ){

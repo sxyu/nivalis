@@ -79,8 +79,12 @@ struct Expr {
     // Const expr
     static Expr constant(double val);
 
-    // String representation of expression (can be evaluated again)
+    // Nivalis-expression representation of expression (can be evaluated again)
+    // may not be very concise
     std::ostream& repr(std::ostream& os, const Environment& env) const;
+    // Latex representation of expression
+    // may not be very concise
+    std::ostream& latex_repr(std::ostream& os, const Environment& env) const;
 
     // Binary serialization
     std::ostream& to_bin(std::ostream& os) const;
@@ -102,7 +106,7 @@ struct Expr {
 
     // Next section implemented optimize_expr.cpp
     // Optimize expression in-place
-    void optimize();
+    void optimize(int num_passes = 5);
 
     // Next section implemented diff_expr.cpp
     // Take the derivative wrt var with address 'var_addr' in the given environment
@@ -133,6 +137,11 @@ double eval_ast(Environment& env, const Expr::AST& ast,
 
 // Print AST
 size_t print_ast(std::ostream& os, const Expr::AST& ast,
+               const Environment* env = nullptr,
+               size_t idx = 0);
+
+// Print AST in LaTeX
+size_t print_ast_latex(std::ostream& os, const Expr::AST& ast,
                const Environment* env = nullptr,
                size_t idx = 0);
 

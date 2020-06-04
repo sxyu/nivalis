@@ -293,10 +293,19 @@ label {
     top: 1px;
 }
 #header a.active .toggle-caret { color: #007bff; }
-.example {
+.example.nomath {
     font-family: monospace
 }
 #btn-reset-view-small { margin-left: auto }
+.function-expr {
+    border: 1px solid #ddd;
+    padding: 5px;
+    width:100%;
+    margin: 10px 0 10px 0;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
 @media (max-width: 768px) {
     #sidebar .slider-bounds .spacer{
         display:none;
