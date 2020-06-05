@@ -386,7 +386,7 @@ void main_loop_step() {
                 static_cast<float>(
                     (~pwwidth ? pwwidth : plot.view.swid) - 208), 10),
             ImGuiCond_Once);
-    ImGui::SetNextWindowSize(ImVec2(200, 145), ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(200, 175), ImGuiCond_Once);
     ImGui::Begin("View", NULL, ImGuiWindowFlags_NoResize);
     if (~pwwidth) {
         // Outer window was resized
@@ -403,6 +403,9 @@ void main_loop_step() {
     ImGui::SameLine();
     if(ImGui::InputDouble("##ym", &plot.view.ymax)) plot.require_update = true;
     if (ImGui::Button("Reset view")) plot.reset_view();
+    if (ImGui::Checkbox("Axes", &plot.enable_axes)) plot.require_update = true;
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Grid", &plot.enable_grid)) plot.require_update = true;
     if (ImGui::Checkbox("Polar grid", &plot.polar_grid)) plot.require_update = true;
     ImGui::PopItemWidth();
     ImGui::End(); // View

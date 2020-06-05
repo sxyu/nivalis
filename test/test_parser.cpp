@@ -25,11 +25,11 @@ int main() {
     ASSERT(err.empty());
     // Syntax error
     ASSERT_EQ(parse("()()", dummy_env, true, true, 0, &err).ast, AST(1));
-    ASSERT_EQ(err.substr(0,6), "Syntax");
+    ASSERT(err.size() > 0 && !std::isspace(err[0]));
     err.clear();
     // Numeric parsing error
     ASSERT_EQ(parse("2x+(3)", dummy_env, true, true, 0, &err).ast, AST(1));
-    ASSERT_EQ(err.substr(0,7), "Numeric");
+    ASSERT(err.size() > 0 && !std::isspace(err[0]));
     err.clear();
     // Undefined variable
     ASSERT_EQ(parse("2*x", dummy_env, true, true, 0, &err).ast, AST(1));

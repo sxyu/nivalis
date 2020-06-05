@@ -9,7 +9,7 @@ var pickrConfig = {
         '#800080', '#000000',
         'rgba(255, 116, 0, 1)',
     ],
-    useAsButton: true,
+    // useAsButton: true,
     components: {
 
         // Main components

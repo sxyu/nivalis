@@ -8,7 +8,7 @@ var cppNotifyFocusEditor = function(k) {
 
 var cppNotifyMarker = function(x, y) {
     // Marker 'may' have changed
-    var marker_text = Module.get_marker_text();
+    var marker_text = Nivalis.get_marker_text();
     var canvas_off = $('#canvas').offset();
     if(marker_text.length === 0) {
         if ($('#marker').css('display') === 'block') {
@@ -33,22 +33,22 @@ var cppNotifyMarker = function(x, y) {
 
 var cppNotifyAnimSlider = function() {
     // Slider animation step occurred, need to update GUI
-    for (var i = 0; i < Module.num_sliders(); i++) {
-        if (Module.slider_animation_dir(i) != 0) {
+    for (var i = 0; i < Nivalis.num_sliders(); i++) {
+        if (Nivalis.slider_animation_dir(i) != 0) {
             $('#slider-sli-' +
-                Sliders.slider_ids[i]).val(Module.get_slider_val(i));
+                Sliders.slider_ids[i]).val(Nivalis.get_slider_val(i));
         }
     }
 };
 
 var cppNotifyFuncErrorChanged = function() {
     // Function error 'may' have changed
-    $('#function-error').text(Module.get_func_error());
+    $('#function-error').text(Nivalis.get_func_error());
 };
 
 var cppNotifySliderErrorChanged = function() {
     // Slider error 'may' have changed
-    $('#slider-error').text(Module.get_slider_error());
+    $('#slider-error').text(Nivalis.get_slider_error());
 };
 
 var customWidth = -1;
@@ -87,10 +87,10 @@ var onResizeCanvas = function() {
     if (canvas.height != new_hi) {
         canvas.height = new_hi;
     }
-    Module.redraw();
+    Nivalis.redraw_force();
 };
 
-var Module = {
+var Nivalis = {
     preRun: [],
     postRun: [],
     print: (function() {})(),

@@ -1,6 +1,5 @@
 from jinja2 import Template, Environment, FileSystemLoader
 from shutil import copyfile
-from css_html_js_minify import html_minify, js_minify, css_minify
 import os, random
 import distutils.dir_util
 
@@ -22,7 +21,7 @@ with open(os.path.join(dir_path, html_fname), 'r') as f:
     template = Environment(loader=FileSystemLoader(dir_path)).from_string(f.read())
 render_html = template.render(ver = ver_num)
 with open(os.path.join(dir_path, 'out', html_fname), 'w') as f:
-    f.write(html_minify(render_html))
+    f.write(render_html)
 
 for fname in copy_files:
     copyfile(os.path.join(dir_path, fname), os.path.join(dir_path, "out", fname))
@@ -52,6 +51,6 @@ with open(os.path.join(dir_path, third_party_css), 'r') as f:
 with open(os.path.join(dir_path, main_css), 'r') as f:
     main_css_data = f.read()
 with open(os.path.join(dir_path, 'out', main_css), 'w') as f:
-    f.write(css_minify(third_party_css_data + '\n' + main_css_data))
+    f.write(third_party_css_data + '\n' + main_css_data)
     
 distutils.dir_util.copy_tree('css/fonts', 'out/css/fonts')

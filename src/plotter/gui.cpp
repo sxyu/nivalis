@@ -38,7 +38,7 @@ constexpr char result_var_name_for_type(int func_type) {
     }
 }
 int detect_func_type(const std::string& expr_str, std::string& lhs, std::string& rhs) {
-    if (expr_str.empty()) return Function::FUNC_TYPE_COMMENT;
+    if (expr_str.empty()) return Function::FUNC_TYPE_EXPLICIT;
     std::string expr_str_trimmed = expr_str;
     util::trim(expr_str_trimmed);
     if (expr_str_trimmed[0] == '#') {
@@ -429,7 +429,6 @@ void Plotter::reparse_expr(size_t idx) {
     y_var = env.addr_of("y", false);
     t_var = env.addr_of("t", false);
 
-    if (idx == -1 ) idx = curr_func;
     auto& func = funcs[idx];
     func_error.clear();
     func.exprs.clear();
@@ -579,14 +578,6 @@ void Plotter::reparse_expr(size_t idx) {
             }
             break;
     }
-    if (want_reparse_all) {
-        for (size_t i = 0; i < funcs.size(); ++i) {
-            if (i != idx) {
-                reparse_expr(i);
-            }
-        }
-        require_update = true;
-    }
 
     if (!func.expr.is_null()) {
         // Optimize the main expression
@@ -616,13 +607,29 @@ void Plotter::reparse_expr(size_t idx) {
 
     if (ftype_nomod == Function::FUNC_TYPE_EXPLICIT
         || ftype_nomod == Function::FUNC_TYPE_EXPLICIT_Y) {
+        if (env.addr_of_func(func.name) == -1) {
+            want_reparse_all = true;
+        }
         // Register a function in env
         env.def_func(func.name, func.expr, { ftype_nomod == Function::FUNC_TYPE_EXPLICIT_Y ? y_var : x_var });
         if (env.error_msg.size()) {
             func_error = env.error_msg;
         }
     } else if (ftype_nomod != Function::FUNC_TYPE_FUNC_DEFINITION) {
-        env.del_func(func.name);
+        if (env.addr_of_func(func.name) != -1) {
+            env.del_func(func.name);
+            want_reparse_all = true;
+        }
+    }
+
+    if (want_reparse_all) {
+        // Possibly re-parse other expressions
+        for (size_t i = 0; i < funcs.size(); ++i) {
+            if (i != idx) {
+                reparse_expr(i);
+            }
+        }
+        require_update = true;
     }
     loss_detail = false;
     require_update = true;
@@ -661,7 +668,6 @@ void Plotter::add_func() {
 }
 
 void Plotter::delete_func(size_t idx) {
-    if (idx == -1) idx = curr_func;
     if (idx >= funcs.size()) return;
     env.del_func(funcs[idx].name);
     if (funcs.size() > 1) {
@@ -675,9 +681,24 @@ void Plotter::delete_func(size_t idx) {
     }
     if (idx == curr_func) {
         set_curr_func(curr_func); // Update text without changing index
-        reparse_expr();
+        reparse_expr(curr_func);
     }
     focus_on_editor = true;
+    require_update = true;
+}
+
+void Plotter::move_func(size_t idx, size_t idx_dest) {
+    if (idx == idx_dest) return;
+    int64_t step = idx > idx_dest ? -1 : 1;
+    if (curr_func == idx) curr_func = idx_dest;
+    else if (idx < curr_func && curr_func <= idx_dest ||
+            idx > curr_func && curr_func >= idx_dest) {
+        curr_func -= step;
+    }
+    for (size_t i = idx; i != idx_dest; i += step) {
+        size_t j = i + step;
+        std::swap(funcs[i], funcs[j]);
+    }
     require_update = true;
 }
 
@@ -1065,7 +1086,6 @@ std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
             jreuse_colors.push_back(col.to_hex());
         }
         jinternal["color_queue"] = jreuse_colors;
-
     }
     json j {
         {"view", // Export view data
@@ -1077,6 +1097,8 @@ std::ostream& Plotter::export_json(std::ostream& os, bool pretty) const {
                 {"width", view.swid},
                 {"height", view.shigh},
                 {"polar", polar_grid},
+                {"axes", enable_axes},
+                {"grid", enable_grid},
             }
         }
     };
@@ -1122,7 +1144,9 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
         }
 
         // Load view
+        // Defaults
         polar_grid = false;
+        enable_axes = enable_grid = true;
         if (j.count("view")) {
             json& jview = j["view"];
             if (jview.is_object()) {
@@ -1136,6 +1160,8 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
                 // Will resize bounds to fit screen
                 // else will become too distorted
                 resize(old_swid, old_shigh);
+                if (jview.count("axes")) enable_axes = jview["axes"].get<bool>();
+                if (jview.count("grid")) enable_grid = jview["grid"].get<bool>();
                 if (jview.count("polar")) polar_grid = jview["polar"].get<bool>();
             }
         }
@@ -1207,12 +1233,7 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
                     f.line_color = color::from_int(idx);
                     last_expr_color = idx+1;
                 }
-                reparse_expr(idx);
                 ++idx;
-            }
-            for (size_t i = 0; i < funcs.size(); ++i) {
-                // Reparse again in case of reference to other functions
-                reparse_expr(i);
             }
         } else {
             // Ensure there is at lease 1 function left
@@ -1252,21 +1273,24 @@ std::istream& Plotter::import_json(std::istream& is, std::string* error_msg) {
         if (j.count("latex")) {
             imp_use_latex = j["latex"].get<bool>() == true;
         }
-        // If one save uses Nivalis notation and the other uses LaTeX, try to convert
+        // If one save uses Nivalis expression format and the other uses LaTeX, try to convert
         if (imp_use_latex != use_latex) {
             if (use_latex) {
                 for (size_t i = 0; i < funcs.size(); ++i) {
-                    std::cout << funcs[i].expr_str << " --> ";
                     funcs[i].expr_str = nivalis_to_latex_safe(funcs[i].expr_str);
-                    std::cout << funcs[i].expr_str << "\n";
-                    reparse_expr(i);
                 }
             } else {
                 for (size_t i = 0; i < funcs.size(); ++i) {
                     funcs[i].expr_str = latex_to_nivalis(funcs[i].expr_str);
-                    reparse_expr(i);
                 }
             }
+        }
+        for (size_t i = 0; i < funcs.size(); ++i) {
+            reparse_expr(i);
+        }
+        for (size_t i = 0; i < funcs.size(); ++i) {
+            // Reparse again in case of reference to other functions
+            reparse_expr(i);
         }
     } catch (const json::parse_error& e) {
         if (error_msg != nullptr) {

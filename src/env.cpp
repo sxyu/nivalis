@@ -169,7 +169,8 @@ bool Environment::del_func(const std::string& func_name) {
         // Won't actually delete, but try to save some memory
         funcs[it->second].name.clear();
         funcs[it->second].name.shrink_to_fit();
-        funcs[it->second].expr.ast.clear();
+        funcs[it->second].expr.ast.resize(1);
+        funcs[it->second].expr.ast[0] = OpCode::null;
         funcs[it->second].expr.ast.shrink_to_fit();
         funcs[it->second].deps.clear();
         funcs[it->second].deps.shrink_to_fit();

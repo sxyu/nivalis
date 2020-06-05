@@ -245,6 +245,7 @@ public:
      * cleared. */
     template<class GraphicsAdaptor>
     void draw_grid(GraphicsAdaptor& graph, const View& view) {
+        if (!enable_axes && !enable_grid) return;
         int sx_min = 0, sy_min = 0;
         int cnt_visible_axis = 0;
         double y0 = view.ymax / (view.ymax - view.ymin);
@@ -259,32 +260,36 @@ public:
 
 
         // Draw axes
-        if (view.ymin <= 0 && view.ymax >= 0) {
-            sy_min = sy0;
-            graph.line(0.f, sy_min, view.swid, sy_min, color::DARK_GRAY, 2.);
-            ++cnt_visible_axis;
-        }
-        else if (view.ymin > 0) {
-            sy_min = view.shigh - 10;
-            x_ax_label_align_y = 1.f;
-        }
-        if (view.xmin <= 0 && view.xmax >= 0) {
-            sx_min = sx0;
-            y_ax_label_align_x = 1.f;
-            graph.line(sx_min, 0.f, sx_min, view.shigh, color::DARK_GRAY, 3.);
-            ++cnt_visible_axis;
-        } else if (view.xmax < 0) {
-            sx_min = view.swid - 5;
-            y_ax_label_align_x = 1.f;
+        if (enable_axes) {
+            if (view.ymin <= 0 && view.ymax >= 0) {
+                sy_min = sy0;
+                graph.line(0.f, sy_min, view.swid, sy_min, color::DARK_GRAY, 2.);
+                ++cnt_visible_axis;
+            } else if (view.ymin > 0) {
+                sy_min = view.shigh - 10;
+                x_ax_label_align_y = 1.f;
+            }
+            if (view.xmin <= 0 && view.xmax >= 0) {
+                sx_min = sx0;
+                y_ax_label_align_x = 1.f;
+                graph.line(sx_min, 0.f, sx_min, view.shigh, color::DARK_GRAY, 3.);
+                ++cnt_visible_axis;
+            } else if (view.xmax < 0) {
+                sx_min = view.swid - 5;
+                y_ax_label_align_x = 1.f;
+            }
         }
 
-        // round
+        // Helper to round to precision 4
         thread_local auto prec4 = [](double v) -> std::string {
            thread_local std::ostringstream sstm;
             sstm.str("");
             sstm << std::setprecision(4) << v;
             return sstm.str();
         };
+
+        // Note if either axes or grid is enabled, we need to process all lines
+        // (for axes labels/drawing lines resp)
 
         // Draw lines (step = minor line, mstep = major line)
         if (polar_grid) {
@@ -306,116 +311,125 @@ public:
                 }
             } else {
                 rmin = std::sqrt(std::min(
-                    std::min(xmins + ymins, xmins + ymaxs),
-                    std::min(xmaxs + ymins, xmaxs + ymaxs)));
+                            std::min(xmins + ymins, xmins + ymaxs),
+                            std::min(xmaxs + ymins, xmaxs + ymaxs)));
             }
             // Determine maximum distance from origin
             double rmax = std::sqrt(std::max(
-                    std::max(xmins + ymins, xmins + ymaxs),
-                    std::max(xmaxs + ymins, xmaxs + ymaxs)));
+                        std::max(xmins + ymins, xmins + ymaxs),
+                        std::max(xmaxs + ymins, xmaxs + ymaxs)));
             // Compute minor/major step sizes
             static const double INITIAL_SCREEN_DIAM =
                 sqrt(SCREEN_WIDTH * SCREEN_WIDTH +
                         SCREEN_HEIGHT * SCREEN_HEIGHT);
             double view_diam =
                 sqrt((view.xmax - view.xmin) * (view.xmax - view.xmin) +
-                     (view.ymax - view.ymin) * (view.ymax - view.ymin));
+                        (view.ymax - view.ymin) * (view.ymax - view.ymin));
             double screen_diam =
                 sqrt(view.swid * view.swid + view.shigh * view.shigh);
             std::tie(rstep, rmstep) =
                 util::round125(view_diam / screen_diam *
-                    INITIAL_SCREEN_DIAM / 20.);
+                        INITIAL_SCREEN_DIAM / 20.);
             // End compute minor/major step sizes
             // Draw minor (elliptical) gridlines
-            double rloi = std::ceil(rmin / rstep) * rstep;
-            double rhi = std::floor(rmax / rstep) * rstep;
-            double rmloi = std::ceil(rmin / rmstep) * rmstep;
-            double rmhi = std::floor(rmax / rmstep) * rmstep;
-
-            int idx = 0;
-            double rlo = rloi;
-            while (rlo <= rhi) {
-                graph.ellipse(sx0, sy0,
-                        rlo / (view.xmax - view.xmin) * view.swid,
-                        rlo / (view.ymax - view.ymin) * view.shigh,
-                        false, color::LIGHT_GRAY);
-                rlo = rstep * idx + rloi;
-                ++idx;
-            }
-            idx = 0;
             double x_plot_to_screen = view.swid * 1. / (view.xmax - view.xmin);
             double y_plot_to_screen = view.shigh * 1. / (view.ymax - view.ymin);
-            // Major (elliptical) gridlines with text
-            double rmlo = rmloi;
-            while (rmlo <= rmhi) {
-                double sxr = rmlo * x_plot_to_screen;
-                double syr = rmlo * y_plot_to_screen;
-                graph.ellipse(sx0, sy0,
-                        sxr, syr,
-                        false, color::GRAY);
-                // Draw labels on axes
-                if (rmlo > 0.) {
-                    auto num_label = prec4(rmlo);
-                    // X-axis
-                    graph.string(sx0 + sxr,
-                            sy0+5, num_label, color::BLACK,
-                            x_ax_label_align_x);
-                    graph.string(sx0 - sxr,
-                            sy0+5, num_label, color::BLACK,
-                            x_ax_label_align_x);
-                    // Y-axis
-                    graph.string(sx0-5, sy0 + syr - 2,
-                            num_label, color::BLACK, 1.f,
-                            y_ax_label_align_y);
-                    graph.string(sx0-5, sy0 - syr - 2,
-                            num_label, color::BLACK, 1.f,
-                            y_ax_label_align_y);
-                }
-                rmlo = rmstep * idx + rmloi;
-                ++idx;
-            }
-            // Angle (straight) gridlines
-            // 0, pi/12, pi/6 ...
-            for (int i = 0; i < 24; ++i) {
-                double angle = i * M_PI / 12;
-                double uxs = cos(angle) * x_plot_to_screen;
-                double uys = -sin(angle) * y_plot_to_screen;
-                graph.line(sx0 + uxs * rmin,
-                        sy0 + uys * rmin,
-                        sx0 + uxs * rmax,
-                        sy0 + uys * rmax,
-                        color::LIGHT_GRAY);
-                // Draw labels
-                ++idx;
-            }
 
-            // Angle label text
-// #define _PI_STR "pi"
+            if (enable_grid) {
+                double rloi = std::ceil(rmin / rstep) * rstep;
+                double rhi = std::floor(rmax / rstep) * rstep;
+                int idx = 0;
+                double rlo = rloi;
+                while (rlo <= rhi) {
+                    graph.ellipse(sx0, sy0,
+                            rlo / (view.xmax - view.xmin) * view.swid,
+                            rlo / (view.ymax - view.ymin) * view.shigh,
+                            false, color::LIGHT_GRAY);
+                    rlo = rstep * idx + rloi;
+                    ++idx;
+                }
+            }
+            double rmloi = std::ceil(rmin / rmstep) * rmstep;
+            double rmhi = std::floor(rmax / rmstep) * rmstep;
+            {
+                // Major (elliptical) gridlines with text
+                double rmlo = rmloi;
+                int idx = 0;
+                while (rmlo <= rmhi) {
+                    double sxr = rmlo * x_plot_to_screen;
+                    double syr = rmlo * y_plot_to_screen;
+                    if (enable_grid) {
+                        graph.ellipse(sx0, sy0,
+                                sxr, syr,
+                                false, color::GRAY);
+                    }
+                    // Draw labels on axes
+                    if (enable_axes && rmlo > 0.) {
+                        auto num_label = prec4(rmlo);
+                        // X-axis
+                        graph.string(sx0 + sxr,
+                                sy0+5, num_label, color::BLACK,
+                                x_ax_label_align_x);
+                        graph.string(sx0 - sxr,
+                                sy0+5, num_label, color::BLACK,
+                                x_ax_label_align_x);
+                        // Y-axis
+                        graph.string(sx0-5, sy0 + syr - 2,
+                                num_label, color::BLACK, 1.f,
+                                y_ax_label_align_y);
+                        graph.string(sx0-5, sy0 - syr - 2,
+                                num_label, color::BLACK, 1.f,
+                                y_ax_label_align_y);
+                    }
+                    rmlo = rmstep * idx + rmloi;
+                    ++idx;
+                }
+            }
+            if (enable_grid) {
+                int idx = 0;
+                // Angle (straight) gridlines
+                // 0, pi/12, pi/6 ...
+                for (int i = 0; i < 24; ++i) {
+                    double angle = i * M_PI / 12;
+                    double uxs = cos(angle) * x_plot_to_screen;
+                    double uys = -sin(angle) * y_plot_to_screen;
+                    graph.line(sx0 + uxs * rmin,
+                            sy0 + uys * rmin,
+                            sx0 + uxs * rmax,
+                            sy0 + uys * rmax,
+                            color::LIGHT_GRAY);
+                    // Draw labels
+                    ++idx;
+                }
+
+                // Angle label text
+                // #define _PI_STR "pi"
 #define _PI_STR u8"\u03C0"
-            static const char* angle_labels[] = {
-                u8"0", _PI_STR u8"/6", _PI_STR u8"/3",
-                _PI_STR u8"/2", u8"2" _PI_STR u8"/3", u8"5" _PI_STR u8"/6",
-                _PI_STR "", u8"7" _PI_STR u8"/6", u8"4" _PI_STR u8"/3",
-                u8"3" _PI_STR u8"/2", u8"5" _PI_STR u8"/3", u8"11" _PI_STR u8"/6"
-            };
-            double angle_text_disp_r = rmloi + rmstep * 1.9;
-            // 0, pi/6, ...
-            for (int i = 0; i < sizeof(angle_labels) / sizeof(angle_labels[0]);
-                    ++i) {
-                double angle = i * M_PI / 6;
-                double ux = cos(angle), uy = -sin(angle);
-                double uxs = ux * x_plot_to_screen;
-                double uys = uy * y_plot_to_screen;
-                double posx = sx0 + uxs * angle_text_disp_r - ux * 1.;
-                double posy = sy0 + uys * angle_text_disp_r - uy * 1.;
-                if (i == 0 || i == 6) posy -= 10; // Clear x-axis
-                if (i == 3 || i == 9) posx += 20; // Clear y-axis
-                graph.string(posx, posy,
-                        angle_labels[i],
-                        color::GRAY,
-                        ((float)ux + 1.f) / 2.f,
-                        ((float)uy + 1.f) / 2.f);
-                ++idx;
+                static const char* angle_labels[] = {
+                    u8"0", _PI_STR u8"/6", _PI_STR u8"/3",
+                    _PI_STR u8"/2", u8"2" _PI_STR u8"/3", u8"5" _PI_STR u8"/6",
+                    _PI_STR "", u8"7" _PI_STR u8"/6", u8"4" _PI_STR u8"/3",
+                    u8"3" _PI_STR u8"/2", u8"5" _PI_STR u8"/3", u8"11" _PI_STR u8"/6"
+                };
+                double angle_text_disp_r = rmloi + rmstep * 1.9;
+                // 0, pi/6, ...
+                for (int i = 0; i < sizeof(angle_labels) / sizeof(angle_labels[0]);
+                        ++i) {
+                    double angle = i * M_PI / 6;
+                    double ux = cos(angle), uy = -sin(angle);
+                    double uxs = ux * x_plot_to_screen;
+                    double uys = uy * y_plot_to_screen;
+                    double posx = sx0 + uxs * angle_text_disp_r - ux * 1.;
+                    double posy = sy0 + uys * angle_text_disp_r - uy * 1.;
+                    if (i == 0 || i == 6) posy -= 10; // Clear x-axis
+                    if (i == 3 || i == 9) posx += 20; // Clear y-axis
+                    graph.string(posx, posy,
+                            angle_labels[i],
+                            color::GRAY,
+                            ((float)ux + 1.f) / 2.f,
+                            ((float)uy + 1.f) / 2.f);
+                    ++idx;
+                }
             }
         } else {
             double ystep, xstep, ymstep, xmstep;
@@ -425,28 +439,35 @@ public:
             std::tie(xstep, xmstep) =
                 util::round125((view.xmax - view.xmin) /
                         view.swid *1. * SCREEN_WIDTH / 18.);
-            {
+            if (enable_grid) {
                 // Minor gridlines
-                double xli = std::ceil(view.xmin / xstep) * xstep;
-                double xr = std::floor(view.xmax / xstep) * xstep;
-                double ybi = std::ceil(view.ymin / ystep) * ystep;
-                double yt = std::floor(view.ymax / ystep) * ystep;
-                double yb = ybi, xl = xli;
-                int idx = 0;
-                while (xl <= xr) {
-                    float sxi = static_cast<float>(view.swid *
-                            (xl - view.xmin) / (view.xmax - view.xmin));
-                    graph.line(sxi,0, sxi, view.shigh, color::LIGHT_GRAY);
-                    xl = xstep * idx + xli;
-                    ++idx;
+                {
+                    double xli = std::ceil(view.xmin / xstep) * xstep;
+                    double xr = std::floor(view.xmax / xstep) * xstep;
+                    double xl = xli;
+                    // On X axis
+                    int idx = 0;
+                    while (xl <= xr) {
+                        float sxi = static_cast<float>(view.swid *
+                                (xl - view.xmin) / (view.xmax - view.xmin));
+                        graph.line(sxi,0, sxi, view.shigh, color::LIGHT_GRAY);
+                        xl = xstep * idx + xli;
+                        ++idx;
+                    }
                 }
-                idx = 0;
-                while (yb <= yt) {
-                    float syi = static_cast<float>(view.shigh *
-                            (view.ymax - yb) / (view.ymax - view.ymin));
-                    graph.line(0.f, syi, view.swid, syi, color::LIGHT_GRAY);
-                    yb = ystep * idx + ybi;
-                    ++idx;
+                {
+                    double ybi = std::ceil(view.ymin / ystep) * ystep;
+                    double yt = std::floor(view.ymax / ystep) * ystep;
+                    double yb = ybi;
+                    // On Y axis
+                    int idx = 0;
+                    while (yb <= yt) {
+                        float syi = static_cast<float>(view.shigh *
+                                (view.ymax - yb) / (view.ymax - view.ymin));
+                        graph.line(0.f, syi, view.swid, syi, color::LIGHT_GRAY);
+                        yb = ystep * idx + ybi;
+                        ++idx;
+                    }
                 }
             }
             {
@@ -461,12 +482,14 @@ public:
                 while (xml <= xmr) {
                     float sxi = static_cast<float>(view.swid *
                             (xml - view.xmin) / (view.xmax - view.xmin));
-                    graph.line(sxi, 0.f, sxi, view.shigh, color::GRAY);
+                    if (enable_grid) {
+                        graph.line(sxi, 0.f, sxi, view.shigh, color::GRAY);
+                    }
 
                     // Draw text
-                    if (xml != 0) {
+                    if (enable_axes && xml != 0) {
                         graph.string(sxi, sy_min+5, prec4(xml), color::BLACK,
-                                     x_ax_label_align_x, x_ax_label_align_y);
+                                x_ax_label_align_x, x_ax_label_align_y);
                     }
                     ++idx;
                     xml = xmstep * idx + xmli;
@@ -476,12 +499,12 @@ public:
                 while (ymb <= ymt) {
                     float syi = static_cast<float>(view.shigh *
                             (view.ymax - ymb) / (view.ymax - view.ymin));
-                    if (!polar_grid) {
+                    if (enable_grid) {
                         graph.line(0, syi, view.swid, syi, color::GRAY);
                     }
 
                     // Draw text
-                    if (ymb != 0) {
+                    if (enable_axes && ymb != 0) {
                         graph.string(sx_min + 10. - y_ax_label_align_x * 15., syi - 2, prec4(ymb), color::BLACK,
                                 y_ax_label_align_x, y_ax_label_align_y);
                     }
@@ -492,7 +515,7 @@ public:
         }
 
         // Draw 0
-        if (cnt_visible_axis == 2) {
+        if (enable_axes && cnt_visible_axis == 2) {
             graph.string(sx_min - 5, sy_min + 5, "0", color::BLACK,
                          1.0f, 0.0f);
         }
@@ -601,7 +624,7 @@ public:
     // Re-parse expression from expr_str into expr, etc. for function 'idx'
     // and update expression, derivatives, etc.
     // Also detects function type.
-    void reparse_expr(size_t idx = -1);
+    void reparse_expr(size_t idx);
 
     // Set the current function (drawn thicker than other functions) to func_id.
     // If func_id is just beyond last current function (i.e., = funcs.size()),
@@ -611,8 +634,11 @@ public:
     // Add a new function to the end of funcs.
     void add_func();
 
-    // Delete the func at idx. If idx == -1, then deletes current function.
-    void delete_func(size_t idx = -1);
+    // Delete the func at idx
+    void delete_func(size_t idx);
+
+    // Move the func at idx to idx_dest, sliding functions in between
+    void move_func(size_t idx, size_t idx_dest);
 
     // SLIDERS
     // Add a new slider to the end of sliders
@@ -691,10 +717,20 @@ private:
     void plot_implicit(size_t funcid);
     void plot_explicit(size_t funcid, bool reverse_xy);
 public:
+    // If true, parses expressions as Latex instead of 'Nivalis expression'
+    // this is fixed for each plotter instance. The I/O json format
+    // depends on use_latex. On mismatch, we will attempt to convert
+    // the format with latex_to_nivalis / nivalis_to_latex_safe, but
+    // it may not be reliable
+    const bool use_latex;
+
     // Public plotter state data
     View view;                              // Curr view data
     size_t curr_func = 0;                   // Currently selected function
-    bool polar_grid = false;                // If true, draws polar grid
+    bool enable_axes = true;                // If true, draws the axes
+    bool enable_grid = true;                // If true, draws the grid
+    bool polar_grid = false;                // If true, draws polar grid and polar (i.e. unsigned) axes labels
+                                            // note this has an effect even when enable_grid = false
 
     std::vector<Function> funcs;            // Functions
     std::string func_error;                 // Function parsing error str
@@ -741,8 +777,6 @@ public:
        PASSIVE_MARKER_CLICK_DRAG_VIEW
     } passive_marker_click_behavior = PASSIVE_MARKER_CLICK_DRAG_TRACE;
 
-    // If true, parses expressions as Latex instead of 'Nivalis expression'
-    const bool use_latex;
 
     // The environment object, contains defined functions and variables
     // (owned)

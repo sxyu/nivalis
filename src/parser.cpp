@@ -302,13 +302,13 @@ private:
                     }
                     const char c = expr[left], cr = expr[right-1];
                     if (left >= right) {
-                        PARSE_ERR("Syntax error\n");
+                        PARSE_ERR("Incomplete expression, please make sure you filled in all arguments\n");
                     }
                     if ((c == '(' && cr == ')') ||
                             (c == '[' && cr == ']')) {
                         // Parentheses
                         if (tok_link[left] != right - 1) {
-                            PARSE_ERR("Syntax error '" <<
+                            PARSE_ERR("We couldn't parse '" <<
                                     expr.substr(left, right - left) <<
                                     "'\n");;
                         }
@@ -452,7 +452,7 @@ private:
                             }
                             return true;
                         } else {
-                            PARSE_ERR("Unknown function '" << func_name << "'\n");
+                            PARSE_ERR("'" << func_name << "' is not a function\n");
                         }
                     } else if (util::is_numeric(c)) {
                         // Number
@@ -461,8 +461,7 @@ private:
                         result.ast.push_back( // val
                                 std::strtod(tmp.c_str(), &endptr));
                         if (endptr != tmp.c_str() + (right-left)) {
-                            PARSE_ERR("Numeric parsing failed on '"
-                                      << tmp << "'\n");
+                            PARSE_ERR("'" << tmp << "' is not a valid number\n");
                         }
                         return true;
                     } else if ((util::is_varname_first(c) ||
@@ -502,7 +501,7 @@ private:
                                         PARSE_ERR("\"" << varname + "\" is not a variable; you may need to place parentheses around its argument\n");
                                     } else {
                                         PARSE_ERR("\"" << varname + "\" is not a variable or "
-                                                "argumentless function; try " + varname + " = <value>?\n");
+                                                "argumentless function; use * to multiply variables\n");
                                     }
                                 }
                             } else {

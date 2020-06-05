@@ -135,8 +135,16 @@ std::string latex_to_nivalis(const std::string& expr_in) {
         l2n_choose { "\\binom", {'{', '{'},
             {"choose(", 0, ", ", 1, ")"} };
 
-    if (expr_in.empty()) return "";
-    std::string expr = util::str_replace(expr_in, "\\left|", "abs(");
+    std::string expr = expr_in;
+    util::trim(expr);
+    if (expr.empty()) return "";
+    if (expr.size() >= 6 && expr.substr(0, 6) == "\\text{" &&
+           expr.back() == '}') {
+        // Comment
+        return "#" + expr.substr(6, expr.size() - 7);
+    }
+
+    expr = util::str_replace(expr, "\\left|", "abs(");
     expr = util::str_replace(expr, "\\right|", ")");
     expr = util::str_replace(expr, "\\lfloor", "floor(");
     expr = util::str_replace(expr, "\\rfloor", ")");
@@ -298,7 +306,7 @@ std::string nivalis_to_latex(const std::string& expr_in, Environment& env) {
     std::string copy = expr_in;
     util::trim(copy);
     if (copy.empty()) return "";
-    if (copy[0] == '#') return "#\\text{" + copy.substr(1) + "}";
+    if (copy[0] == '#') return "\\text{" + copy.substr(1) + "}";
     Expr expr = parse(expr_in, env, false, true);
 
     std::ostringstream strm;
@@ -316,7 +324,7 @@ std::string nivalis_to_latex_safe(const std::string& expr_in) {
     std::string expr = expr_in;
     util::trim(expr);
     if (expr.empty()) return "";
-    if (expr[0] == '#') return "#\\text{" + expr.substr(1) + "}";
+    if (expr[0] == '#') return "\\text{" + expr.substr(1) + "}";
     expr = util::str_replace(expr, "*", "\\cdot ");
     expr = util::str_replace(expr, "<=", "\\le ");
     expr = util::str_replace(expr, ">=", "\\ge ");

@@ -32,8 +32,8 @@
 #include "parser.hpp"
 #include "util.hpp"
 EM_JS(double, get_ver, (), { return nivalis_ver_num; });
-EM_JS(int, canvas_get_width, (), { return Module.canvas.width; });
-EM_JS(int, canvas_get_height, (), { return Module.canvas.height; });
+EM_JS(int, canvas_get_width, (), { return Nivalis.canvas.width; });
+EM_JS(int, canvas_get_height, (), { return Nivalis.canvas.height; });
 EM_JS(void, notify_js_focus_editor, (int x), { cppNotifyFocusEditor(x); });
 EM_JS(void, notify_js_marker, (int x, int y), { cppNotifyMarker(x, y); });
 EM_JS(void, notify_js_anim_sliders, (), { cppNotifyAnimSlider(); });
@@ -172,6 +172,11 @@ void redraw_canvas_not_worker() {
     // Expose 0-argument version to JS
     redraw_canvas(false);
 }
+// Force redraw
+void redraw_canvas_force() {
+    plot.require_update = true;
+    redraw_canvas(false);
+}
 
 void on_key(int key, bool ctrl, bool shift, bool alt) {
     plot.handle_key(key, ctrl, shift, alt);
@@ -199,22 +204,9 @@ void on_mousewheel(bool upwards, int distance, int x, int y) {
     plot.handle_mouse_wheel(upwards, distance, x, y);
 }
 
-int emscripten_keypress(int k, int delv) {
-    if (delv == 0) {
-        ImGui::GetIO().AddInputCharacter(k);
-    } else if (delv == 1) {
-        ImGui::GetIO().KeysDown[
-            ImGui::GetIO().KeyMap[ImGuiKey_Backspace]] = k;
-
-    } else if (delv == 2) {
-        ImGui::GetIO().KeysDown[
-            ImGui::GetIO().KeyMap[ImGuiKey_Delete]] = k;
-    }
-    return 0;
-}
-std::string export_json() {
+std::string export_json(bool pretty) {
     std::ostringstream ss;
-    plot.export_json(ss);
+    plot.export_json(ss, pretty);
     return ss.str();
 }
 void set_marker_clickable_radius(int radius) {
@@ -246,6 +238,9 @@ std::string get_func_expr(int idx) {
 }
 std::string get_func_name(int idx) {
     return plot.funcs[idx].name;
+}
+int get_func_type(int idx) {
+    return plot.funcs[idx].type;
 }
 // Function t bounds
 bool get_func_uses_t(int idx) {
@@ -289,6 +284,9 @@ void delete_func(int idx) {
     plot.delete_func((size_t)idx);
     notify_js_func_error_changed();
 }
+void move_func(int idx, int idx_dest) {
+    plot.move_func((size_t)idx, (size_t) idx_dest);
+}
 int num_funcs() { return (int)plot.funcs.size(); }
 
 
@@ -311,6 +309,16 @@ void reset_view() {
 bool get_is_polar_grid() { return plot.polar_grid; }
 void set_is_polar_grid(bool val) {
     plot.polar_grid = val;
+    plot.require_update = true;
+}
+bool get_axes_enabled() { return plot.enable_axes; }
+void set_axes_enabled(bool val) {
+    plot.enable_axes = val;
+    plot.require_update = true;
+}
+bool get_grid_enabled() { return plot.enable_grid; }
+void set_grid_enabled(bool val) {
+    plot.enable_grid = val;
     plot.require_update = true;
 }
 
@@ -368,21 +376,50 @@ std::string nivalis_to_latex_env(const std::string& s) {
     return nivalis_to_latex(s, plot.env);
 }
 
-EMSCRIPTEN_BINDINGS(nivplot) {
+EMSCRIPTEN_BINDINGS(Nivalis) {
     using namespace emscripten;
-    function("on_keypress", &emscripten_keypress);
+    // Export function types
+    constant("FUNC_TYPE_EXPLICIT", (int)Function::FUNC_TYPE_EXPLICIT);
+    constant("FUNC_TYPE_EXPLICIT_Y", (int)Function::FUNC_TYPE_EXPLICIT_Y);
+    constant("FUNC_TYPE_IMPLICIT", (int)Function::FUNC_TYPE_IMPLICIT);
+    constant("FUNC_TYPE_POLAR", (int)Function::FUNC_TYPE_POLAR);
+
+    constant("FUNC_TYPE_PARAMETRIC", (int)Function::FUNC_TYPE_PARAMETRIC);
+    constant("FUNC_TYPE_FUNC_DEFINITION", (int)Function::FUNC_TYPE_FUNC_DEFINITION);
+
+    constant("FUNC_TYPE_GEOM_POLYLINE", (int)Function::FUNC_TYPE_GEOM_POLYLINE);
+    constant("FUNC_TYPE_GEOM_RECT", (int)Function::FUNC_TYPE_GEOM_RECT);
+    constant("FUNC_TYPE_GEOM_CIRCLE", (int)Function::FUNC_TYPE_GEOM_CIRCLE);
+    constant("FUNC_TYPE_GEOM_ELLIPSE", (int)Function::FUNC_TYPE_GEOM_ELLIPSE);
+    constant("FUNC_TYPE_GEOM_TEXT", (int)Function::FUNC_TYPE_GEOM_TEXT);
+
+    constant("FUNC_TYPE_COMMENT", (int)Function::FUNC_TYPE_COMMENT);
+
+    // Export function type modifiers
+    constant("FUNC_TYPE_MOD", (int)Function::FUNC_TYPE_COMMENT);
+    constant("FUNC_TYPE_MOD_INEQ", (int)Function::FUNC_TYPE_MOD_INEQ);
+    constant("FUNC_TYPE_MOD_CLOSED", (int)Function::FUNC_TYPE_MOD_CLOSED);
+    constant("FUNC_TYPE_MOD_INEQ_STRICT", (int)Function::FUNC_TYPE_MOD_INEQ_STRICT);
+    constant("FUNC_TYPE_MOD_FILLED", (int)Function::FUNC_TYPE_MOD_FILLED);
+    constant("FUNC_TYPE_MOD_NOLINE", (int)Function::FUNC_TYPE_MOD_NOLINE);
+    constant("FUNC_TYPE_MOD_INEQ_LESS", (int)Function::FUNC_TYPE_MOD_INEQ_LESS);
+    constant("FUNC_TYPE_MOD_ALL", (int)Function::FUNC_TYPE_MOD_ALL);
+
+    // Redraw the canvas
+    function("redraw", &redraw_canvas_not_worker);
+    function("redraw_force", &redraw_canvas_force);
+
+    // I/O
     function("export_json", &export_json);
     function("import_json", &import_json);
-    function("redraw", &redraw_canvas_not_worker);
-
-    function("set_marker_clickable_radius", &set_marker_clickable_radius);
-    function("set_passive_marker_click_drag_view", &set_passive_marker_click_drag_view);
 
     // Function Editor API
     function("add_func", &add_function);
     function("delete_func", &delete_func);
+    function("move_func", &move_func);
     function("get_curr_func", &get_curr_function);
     function("get_func_name", &get_func_name);
+    function("get_func_type", &get_func_type);
     function("get_func_color", &get_func_color); // Returns hex
     function("get_func_expr", &get_func_expr);
     function("set_curr_func", &set_curr_function);
@@ -406,6 +443,10 @@ EMSCRIPTEN_BINDINGS(nivplot) {
     function("get_ymax", &get_ymax);
     function("get_is_polar_grid", &get_is_polar_grid);
     function("set_is_polar_grid", &set_is_polar_grid);
+    function("get_axes_enabled", &get_axes_enabled);
+    function("set_axes_enabled", &set_axes_enabled);
+    function("get_grid_enabled", &get_grid_enabled);
+    function("set_grid_enabled", &set_grid_enabled);
 
     // Sliders API
     function("add_slider", &add_slider);
@@ -425,6 +466,8 @@ EMSCRIPTEN_BINDINGS(nivplot) {
 
     // Marker
     function("get_marker_text", &get_marker_text);
+    function("set_marker_clickable_radius", &set_marker_clickable_radius);
+    function("set_passive_marker_click_drag_view", &set_passive_marker_click_drag_view);
 
     // Error API
     function("get_func_error", &get_func_error);

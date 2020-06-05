@@ -4,7 +4,9 @@ let setupHandlers = function() {
 
     let canvas = document.getElementById("canvas");
     FuncEdit.new_func(false);
-    $('#function-expr-' + FuncEdit.func_names[0]).focus();
+    let mf1 = $('#function-expr-' + FuncEdit.func_names[0]);
+    mf1.mousedown();
+    mf1.mouseup();
     document.addEventListener('keydown', function(e){
         // Must either have ctrl down OR nothing selected to activate
         if (event.ctrlKey===false &&
@@ -16,14 +18,15 @@ let setupHandlers = function() {
                 event.which === 79 || event.which === 80)) {
             event.preventDefault();
         }
-        Module.on_key(e.which, e.ctrlKey, e.shiftKey, e.altKey);
+        Nivalis.on_key(e.which, e.ctrlKey, e.shiftKey, e.altKey);
         if (e.which === 69) {
             let tb = $('#function-expr-' + FuncEdit.func_names[
-                Module.get_curr_func()]);
+                Nivalis.get_curr_func()]);
             tb.mousedown();
             tb.mouseup();
+            e.preventDefault();
         } else {
-            ViewConfig.updateViewPolar();
+            ViewConfig.updateViewOptions();
             ViewConfig.updateViewBounds();
         }
         Renderer.redraw();
@@ -32,7 +35,7 @@ let setupHandlers = function() {
         if (e.button == 0) {
             let oleft = $(canvas).offset().left;
             let otop = $(canvas).offset().top;
-            Module.on_mousedown(e.clientX - oleft, e.clientY - otop);
+            Nivalis.on_mousedown(e.clientX - oleft, e.clientY - otop);
             Renderer.redraw();
         }
     });
@@ -60,7 +63,7 @@ let setupHandlers = function() {
                     touch1.pageY - touch2.pageY);
                 pinch_zoom_dist = dist;
             }
-            Module.on_mousedown(e.touches[0].pageX - oleft,
+            Nivalis.on_mousedown(e.touches[0].pageX - oleft,
                 e.touches[0].pageY - otop);
             Renderer.redraw();
             e.preventDefault();
@@ -70,7 +73,7 @@ let setupHandlers = function() {
         if (e.button == 0) {
             let oleft = $(canvas).offset().left;
             let otop = $(canvas).offset().top;
-            Module.on_mousemove(e.clientX - oleft, e.clientY - otop);
+            Nivalis.on_mousemove(e.clientX - oleft, e.clientY - otop);
             ViewConfig.updateViewBounds();
             Renderer.redraw();
         }
@@ -85,7 +88,7 @@ let setupHandlers = function() {
                     touch1.pageY - touch2.pageY);
                 if (pinch_zoom_dist > 0.001) {
                     let delta_y = pinch_zoom_dist - dist;
-                    Module.on_mousewheel(delta_y < 0,
+                    Nivalis.on_mousewheel(delta_y < 0,
                         Math.max(Math.abs(delta_y) * 10., 1.0001),
                         touch_cen_x, touch_cen_y);
                 }
@@ -93,7 +96,7 @@ let setupHandlers = function() {
             }
             let oleft = $(canvas).offset().left;
             let otop = $(canvas).offset().top;
-            Module.on_mousemove(e.touches[0].pageX - oleft,
+            Nivalis.on_mousemove(e.touches[0].pageX - oleft,
                 e.touches[0].pageY - otop);
             ViewConfig.updateViewBounds();
             Renderer.redraw();
@@ -104,19 +107,19 @@ let setupHandlers = function() {
         if (e.button == 0) {
             let oleft = $(canvas).offset().left;
             let otop = $(canvas).offset().top;
-            Module.on_mouseup(e.clientX - oleft, e.clientY - otop);
+            Nivalis.on_mouseup(e.clientX - oleft, e.clientY - otop);
             Renderer.redraw();
         }
     });
     canvas.addEventListener("touchend", function(){
-        Module.on_mouseup(0, 0);
+        Nivalis.on_mouseup(0, 0);
         Renderer.redraw();
         pinch_zoom_dist = -1.;
     });
     canvas.addEventListener("wheel", function(e){
         if(e.ctrlKey)
             event.preventDefault();//prevent zoom
-        Module.on_mousewheel(e.deltaY < 0,
+        Nivalis.on_mousewheel(e.deltaY < 0,
             15., e.offsetX, e.offsetY);
         Renderer.redraw();
         ViewConfig.updateViewBounds();
@@ -139,13 +142,13 @@ let onInit = function() {
     $('#view-toggle').click(function() {
         if ($('#view-config').css('display') ===  'block') {
             $('#view-config').css('opacity', '0');
-            $('#view-toggle').html("View <ion-icon name='caret-down'  class='toggle-caret'></ion-icon>");
+            $('#view-toggle').children('.custom-caret').html(Util.icon_caret_down);
             $('#view-toggle').removeClass('active');
             setTimeout(
                 function() {$('#view-config').css('display', 'none');}, 500)
         } else {
             $('#view-config').css('display', 'block');
-            $('#view-toggle').html("View <ion-icon name='caret-up'  class='toggle-caret'></ion-icon>");
+            $('#view-toggle').children('.custom-caret').html(Util.icon_caret_up);
             $('#view-toggle').addClass('active');
             setTimeout(
                 function() {$('#view-config').css('opacity', '1');}, 50)
@@ -158,7 +161,7 @@ let onInit = function() {
     // IO
     $('#export-btn').click(function() {
         var now_str = new Date().toLocaleString().replace(/ /g, '_').replace(',', '');
-        Util.download('nivalis_' +now_str + '.json', Module.export_json());
+        Util.download('nivalis_' +now_str + '.json', Nivalis.export_json(true));
     });
     $('#import-btn').click(function() {
         var err_txt = $('#import-error');
@@ -183,12 +186,12 @@ let onInit = function() {
             }
             $('#import-file').siblings(".custom-file-label")
                 .html('Import json success');
-            Module.import_json(content);
+            Nivalis.import_json(content);
             if (Shell.initialized) {
                 Shell.con.info("Import JSON success");
             }
             resync();
-            Module.redraw();
+            Nivalis.redraw();
         };
         reader.readAsText(files[0]);
     });
@@ -270,11 +273,11 @@ let onInit = function() {
         pinch_zoom_dist = -1.;
     });
     if (Util.is_mobile) {
-        Module.set_marker_clickable_radius(16);
-        Module.set_passive_marker_click_drag_view(true);
+        Nivalis.set_marker_clickable_radius(16);
+        Nivalis.set_passive_marker_click_drag_view(true);
     } else {
-        Module.set_marker_clickable_radius(10);
-        Module.set_passive_marker_click_drag_view(false);
+        Nivalis.set_marker_clickable_radius(10);
+        Nivalis.set_passive_marker_click_drag_view(false);
     }
 
     var MQ = MathQuill.getInterface(2);
@@ -319,15 +322,15 @@ let onInit = function() {
         let $this = $(this);
         let fidx = FuncEdit.func_names.length-1;
         if (FuncEdit.func_names.length == 2 &&
-            Module.get_func_expr(0).trim() === '') {
+            Nivalis.get_func_expr(0).trim() === '') {
             fidx = 0;
         }
         if (this.hasAttribute('load')) {
             Util.getFile($this.attr("load"), function(err, data) {
                 if (err === null) {
-                    Module.import_json(data);
+                    Nivalis.import_json(data);
                     resync();
-                    Module.redraw();
+                    Nivalis.redraw();
                 } else {
                     console.log("Failed to retrieve sample JSON file");
                 }
@@ -345,17 +348,17 @@ let onInit = function() {
             mf.latex(expr.trim());
             if (this.hasAttribute('tmax')) {
                 $('#function-tmax-' + fn).val($this.attr('tmax'));
-                Module.set_func_tmax(fidx, Number.parseFloat($this.attr('tmax')));
+                Nivalis.set_func_tmax(fidx, Number.parseFloat($this.attr('tmax')));
             }
             if (this.hasAttribute('tmin')) {
                 $('#function-tmin-' + fn).val($this.attr('tmin'));
-                Module.set_func_tmin(fidx, Number.parseFloat($this.attr('tmin')));
+                Nivalis.set_func_tmin(fidx, Number.parseFloat($this.attr('tmin')));
             }
             let expr_ele = $('#function-expr-' + fn);
             expr_ele.mousedown();
             expr_ele.mouseup();
             FuncEdit.reparse(fn);
-            Module.redraw();
+            Nivalis.redraw();
         }
     });
 
@@ -364,11 +367,52 @@ let onInit = function() {
 
     // Close loading screen
     document.getElementById("loading").style.opacity = '0.0';
-        document.getElementById("loading").style.display =
-            'none';
     window.setTimeout(function() {
         document.getElementById("loading").style.display =
             'none';
     }, 300);
+    let xs = $('#main-wrapper').css('flex-direction') !== 'row';
+    if (xs) {
+        new_hi = window.innerHeight * 0.4;
+        $('#sidebar').css('min-height', new_hi);
+        $('#sidebar').css('max-height', new_hi);
+    }
     onResizeCanvas();
+
+    // Init sortable
+    let funcs = document.getElementById('functions');
+    // const sortable =
+    new Sortable(funcs, {
+        handle: '.draggable',
+        filter: '.inactive',
+        animation: 150,
+        onMove: function (e) {
+            if ($(e.related).hasClass('inactive')) return false;
+            let from_name = e.dragged.id.substr(16);
+            let to_name = e.related.id.substr(16);
+            let from_idx = FuncEdit.func_indices[from_name];
+            let to_idx = FuncEdit.func_indices[to_name];
+            if (from_idx === to_idx) return true;
+
+            let step = from_idx > to_idx ? -1 : 1;
+            let tmp_mf = FuncEdit.func_mfields[from_idx];
+            for (let i = from_idx; i != to_idx; i += step) {
+                let j = i + step;
+                FuncEdit.func_names[i] = FuncEdit.func_names[j];
+                FuncEdit.func_mfields[i] = FuncEdit.func_mfields[j];
+                FuncEdit.func_indices[FuncEdit.func_names[i]] = i;
+            }
+            FuncEdit.func_names[to_idx] = from_name;
+            FuncEdit.func_mfields[to_idx] = tmp_mf;
+            FuncEdit.func_indices[from_name] = to_idx;
+
+            // Move call
+            Nivalis.move_func(from_idx, to_idx);
+            Nivalis.redraw();
+            return true;
+        }
+    });
+
+    // Set initial carets
+    $('.custom-caret').each(function() {$(this).html(Util.icon_caret_down); });
 };

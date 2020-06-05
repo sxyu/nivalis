@@ -4,8 +4,6 @@
         <meta charset="utf-8">
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
-        <script type="module" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.esm.js"></script>
-        <script nomodule="" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.js"></script>
         <title>Nivalis Plotter | Open-source Graphing Calculator</title>
         <meta name="description" content="An advanced open-source graphing calculator">
         <link rel="stylesheet" href="css/main.css">
@@ -17,14 +15,18 @@
         <!--     <button>x</button> -->
         <!-- </div> -->
         <div id="shell">
-            <a id="shell-close" href="#"><ion-icon name='close'></ion-icon></a>
+            <a id="shell-close" href="#"><svg class="icon" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" /></svg>
+            </a>
         </div>
         <nav class="navbar navbar-expand-md navbar-light bg-light" id="header">
             <span class="navbar-brand">
                 Nivalis
                 <a href="https://github.com/sxyu/nivalis"
                    target="_blank" title='See Nivalis code on Github'>
-                    <ion-icon name="logo-github" titie="Nivalis on Github"></ion-icon>
+                    <svg class="icon" viewBox="0 0 24 24" titie="Nivalis on Github">
+                            <path fill="currentColor" d="M12,2A10,10 0 0,0 2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10 0 0,0 12,2Z" />
+                    </svg>
                 </a>
             </span>
             <div class="collapse navbar-collapse" id="navbar-collapse">
@@ -69,9 +71,9 @@
                             Examples
                         </a>
                         <div class="dropdown-menu" aria-labelledby="example-dropdown-toggle" id="example-dropdown">
-                          <a class="dropdown-item example nomath" href="#" load="samples/3d.tex.json">
+                          <a class="dropdown-item example nomath" href="#" load="samples/3d.tex.json?{{ver}}">
                               3D Explicit Surface</a>
-                          <a class="dropdown-item example nomath" href="#" load="samples/goldengate.tex.json">
+                          <a class="dropdown-item example nomath" href="#" load="samples/goldengate.tex.json?{{ver}}">
                               Golden Gate</a>
                           <a class="dropdown-item example" href="#">
                               \exp(\sin(x))</a>
@@ -80,9 +82,9 @@
                           <a class="dropdown-item example" href="#">
                               sin(x) \le cos(y)^3</a>
                           <a class="dropdown-item example" href="#">
-                              (4sin(4t), 3cos(3t))</a>
+                              (4sin(4t),\ 3cos(3t))</a>
                           <a class="dropdown-item example" href="#">
-                             (1.5cos(t)-cos(30t),1.5sin(t)-sin(30t)) </a>
+                             (1.5cos(t)-cos(30t),\ 1.5sin(t)-sin(30t)) </a>
                           <a class="dropdown-item example" href="#"
                               tmax='31.4159265359'>
                               r=cos(2.4t)^{2}+sin(2t)^{4}</a>
@@ -120,19 +122,17 @@
                     <li class="nav-item">
                         <a href="#" id="open-shell"
                             class="nav-link"  title="Toggle virtual shell">
-                            Shell
-                            <ion-icon name='caret-down'
-                                class='toggle-caret'></ion-icon>
+                            Shell <i class="custom-caret"></i>
                         </a>
                     </li> <!-- nav-item  -->
                 </ul> <!-- navbar-nav -->
             </div> <!-- navbar-collapse -->
             <a id="btn-reset-view-small" class="nav-link reset-view" href='#'
                                          title="Reset view. Hotkey: Ctrl+H">
-                <ion-icon name="home"></ion-icon>
+                <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" /></svg>
             </a>
             <a id="view-toggle" class="nav-link" href='#' title="Toggle view panel">
-                View <ion-icon name='caret-down' class='toggle-caret'></ion-icon>
+                View <i class="custom-caret"></i>
             </a>
             <button id="navbar-collapse-toggler" class="navbar-toggler" type="button" data-toggle="collapse"
                 data-target="#navbar-collapse"
@@ -156,16 +156,29 @@
                 <input class='form-control' id='view-ymax' type='number' step='any'>
             </div>
 
+            <div class="input-group mb-2 input-group-sm">
+            <button type="button" id="btn-reset-view" class="btn btn-primary btn-sm reset-view" title="Hotkey: Ctrl+H">
+                <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" /> </svg>
+                Reset view
+            </button>
+            </div>
             <div class="form-group row">
-                <div class='col-sm-6'>
-                    <button type="button" id="btn-reset-view" class="btn btn-primary btn-sm reset-view" title="Hotkey: Ctrl+H">
-                        <ion-icon name="home"></ion-icon> Reset view
-                    </button>
+                <div class='col-sm-4'>
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="view-axes">
+                        <label class="custom-control-label" for="view-axes">Axes</label>
+                    </div>
                 </div>
-                <div class='col-sm-6'>
+                <div class='col-sm-4'>
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="view-grid">
+                        <label class="custom-control-label" for="view-grid">Grid</label>
+                    </div>
+                </div>
+                <div class='col-sm-4'>
                     <div class="custom-control custom-checkbox">
                         <input type="checkbox" class="custom-control-input" id="view-polar">
-                        <label class="custom-control-label" for="view-polar" title="Tip: O/P to switch cartesian/polar">Polar grid</label>
+                        <label class="custom-control-label" for="view-polar" title="Tip: O/P to switch cartesian/polar">Polar</label>
                     </div>
                 </div>
             </div>
@@ -184,7 +197,9 @@
                         <div class="container-fluid">
                             <div class="form-group row">
                                 <div class='col-sm-5'>
-                                    <button type="button" id="btn-add-slider" class="btn btn-success btn-sm"><ion-icon name="add"></ion-icon> Slider</button>
+                                    <button type="button" id="btn-add-slider" class="btn btn-success btn-sm">
+                                        <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/></svg>
+                                        Slider</button>
                                 </div>
                                 <div class='col-sm-7'>
                                     <div id="slider-error-container" class="error-text">
@@ -198,7 +213,7 @@
             </nav> <!-- sidebar -->
             <div id="sidebar-dragger">
                 <div id="sidebar-dragger-label">
-                    <ion-icon name="caret-forward"></ion-icon>
+                    <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10,17L15,12L10,7V17Z"/></svg>
                 </div>
             </div>
 
@@ -210,25 +225,28 @@
         </div>
 
         <script type="text/template" id="function-form-template">
-           <div class="function-widget" id="function-widget-{name}">
-                <div class='input-group mb-2 function-form input-group-sm' id='function-form-{name}'>
-                    <div class='input-group-prepend'>
-                        <span class='input-group-text function-name inactive' id='function-name-{name}'></span>
+            <div class="function-widget inactive" id="function-widget-{name}">
+                <div class="function-side-info draggable">
+                    <div class='function-name-wrapper'>
+                        <span class='function-name' id='function-name-{name}'>{rendered_name}</span>
+                        <button class='btn btn-sm color-picker' id='color-picker-{name}' title='Change color'></button>
                     </div>
-                    <div class='input-group-append'>
-                        <button class='btn btn-sm btn-light btn-outline-secondary color-picker' id='color-picker-{name}' title='Change color'><ion-icon name='analytics'></ion-icon></button>
-                        <button class='btn btn-sm btn-light btn-outline-secondary function-del inactive' id='function-del-{name}' title='Delete'> <ion-icon name='trash'></ion-icon></button>
+                </div>
+                <div class="function-container">
+                    <div class='function-expr-wrapper' id='function-expr-wrapper-{name}'>
+                        <div class='function-expr' id='function-expr-{name}'> </div>
                     </div>
-              </div>
-              <div class='function-expr' id='function-expr-{name}'> </div>
-              <div class='function-output' id='function-output-{name}'></div>
-              <div class='input-group function-tbounds input-group-sm' id='function-tbounds-{name}'>
-                <input class='form-control function-tmin'
-                     id='function-tmin-{name}' type='number' step='any' placeholder='min'>
-                <span class='form-control var-bounds-text'> &le; t &le;</span>
-                <input class='form-control function-tmax'
-                         id='function-tmax-{name}' type='number' step='any' placeholder='max'>
-              </div>
+                    <button class='btn btn-sm function-del' id='function-del-{name}' title='Delete'></button>
+
+                    <div class='function-output' id='function-output-{name}'></div>
+                    <div class='input-group function-tbounds input-group-sm' id='function-tbounds-{name}'>
+                      <input class='form-control function-tmin'
+                           id='function-tmin-{name}' type='number' step='any' placeholder='min'>
+                      <span class='form-control var-bounds-text'> &le; t &le;</span>
+                      <input class='form-control function-tmax'
+                             id='function-tmax-{name}' type='number' step='any' placeholder='max'>
+                    </div>
+                </div>
           </div>
         </script>
 
@@ -242,9 +260,7 @@
             <input class='form-control slider-val'
                    id='slider-val-{name}' type='number' step='any'
                    placeholder="val">
-            <span class='form-control spacer'>
-                <ion-icon name='filter'></ion-icon>
-            </span>
+            <span class='form-control spacer'></span>
             <input class='form-control slider-min'
                    id='slider-min-{name}' type='number' step='any'
                    placeholder="min">
@@ -256,16 +272,12 @@
         <div class='input-group slider input-group-sm'
             id='slider-{name}'>
             <div class='input-group-prepend'>
-                <button class='btn btn-sm btn-light btn-outline-secondary slider-ani' id='slider-ani-{name}'>
-                    <ion-icon name='play'></ion-icon>
-                </button>
+                <button class='btn btn-sm btn-light btn-outline-secondary slider-ani' id='slider-ani-{name}'></button>
             </div>
             <input type="range" class="form-control custom-range slider-sli" min="0"
                 max="1" step="any" id="slider-sli-{name}">
             <div class='input-group-append'>
-                <button class='btn btn-sm btn-light btn-outline-secondary slider-del' id='slider-del-{name}'>
-                    <ion-icon name='trash'></ion-icon>
-                </button>
+                <button class='btn btn-sm btn-light btn-outline-secondary slider-del' id='slider-del-{name}'></button>
             </div>
         </div>
         </script>

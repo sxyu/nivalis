@@ -119,23 +119,23 @@ if (EMSCRIPTEN)
     set( JS_SRC_DIR "${PROJECT_SOURCE_DIR}/js" )
     set(
         SOURCES_JS
-        jquery-3.5.1.min.js
-        mathquill.js
-        popper.min.js
-        bootstrap.min.js
-        pickr.min.js
-        simple-console.js
+        vendor/jquery-3.5.1.min.js
+        vendor/Sortable.min.js
+        vendor/mathquill.js
+        vendor/popper.min.js
+        vendor/bootstrap.min.js
+        vendor/pickr.min.js
+        vendor/simple-console.js
         util.js
         glfwPatch.js
         pickrconfig.js
         guiComponents.js
-        keyboard.js
         init.js
         emModule.js
     )
     list(TRANSFORM SOURCES_JS PREPEND ${JS_SRC_DIR}/)
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 --bind -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -std=c++17")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 --bind -s EXPORT_NAME=\"'Nivalis'\" -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -std=c++17")
     #-s EXTRA_EXPORTED_RUNTIME_METHODS='[\"cwrap\"]'
     set(_EMSCRIPTEN_ "")
     if ( USE_BOOST_MATH )
