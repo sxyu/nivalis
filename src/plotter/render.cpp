@@ -234,7 +234,6 @@ void Plotter::render(const View& view) {
                     b[1] = func.exprs[3](env);
                     if (b[0] < a[0]) std::swap(a[0], b[0]);
                     if (b[1] < a[1]) std::swap(a[1], b[1]);
-                    b[0] -= a[0]; b[1] -= a[1];
                     if (func.type & Function::FUNC_TYPE_MOD_FILLED) {
                         DrawBufferObject obj2 = obj;
                         obj2.type = DrawBufferObject::FILLED_RECT;
