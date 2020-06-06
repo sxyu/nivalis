@@ -33,7 +33,6 @@ set( SRC_DIR "${PROJECT_SOURCE_DIR}/src" )
 set( TEST_DIR "${PROJECT_SOURCE_DIR}/test" )
 
 set ( IMGUI_DIR "3rdparty/imgui" )
-set ( NANOVG_DIR "3rdparty/nanovg" )
 set ( GLEW_DIR "3rdparty/glew" )
 set ( GLFW_DIR "3rdparty/glfw3" )
 set ( INCLUDE_DIR_3RDPARTY "3rdparty/include" )
@@ -41,6 +40,27 @@ set ( INCLUDE_DIR_3RDPARTY "3rdparty/include" )
 if ( CMAKE_COMPILER_IS_GNUCXX )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -Wno-deprecated-declarations -g" )
 endif ( CMAKE_COMPILER_IS_GNUCXX )
+
+# Git submodule auto update
+# https://cliutils.gitlab.io/modern-cmake/chapters/projects/submodule.html
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    # Update submodules as needed
+    option(GIT_SUBMODULE "Check submodules during build" ON)
+    if(GIT_SUBMODULE)
+        message(STATUS "Submodule update")
+        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            RESULT_VARIABLE GIT_SUBMOD_RESULT)
+        if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+            message(FATAL_ERROR "git submodule update --init failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+        endif()
+    endif()
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${GLFW_DIR}/CMakeLists.txt")
+   message(FATAL_ERROR "A submodule as not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again.")
+endif()
 
 set(
     PROJ_EXECUTABLES
@@ -64,6 +84,7 @@ set(
     opcodes.hpp
     shell.hpp
     color.hpp
+    point.hpp
     plotter/plotter.hpp
     plotter/internal.hpp
     plotter/imgui_adaptor.hpp
@@ -84,6 +105,7 @@ set(
     diff_expr.cpp
     shell.cpp
     color.cpp
+    point.cpp
     plotter/gui.cpp
     plotter/render.cpp
     plotter/imgui_adaptor.cpp
@@ -101,7 +123,7 @@ set(
 )
 list(TRANSFORM IMGUI_SOURCES PREPEND ${IMGUI_DIR}/)
 set ( SOURCES ${SOURCES} ${IMGUI_SOURCES} )
-# set ( SOURCES ${SOURCES} "${NANOVG_DIR}/nanovg.c" )
+set( PROJ_DEPENDENCIES )
 
 include_directories(
     ${INCLUDE_DIR}
@@ -110,10 +132,7 @@ include_directories(
     ${X11_INCLUDE_DIR}
     ${Fontconfig_INCLUDE_DIRS}
     ${IMGUI_DIR}
-    ${NANOVG_DIR}
 )
-
-set( PROJ_DEPENDENCIES )
 
 if (EMSCRIPTEN)
     set( JS_SRC_DIR "${PROJECT_SOURCE_DIR}/js" )
@@ -230,6 +249,10 @@ else(EMSCRIPTEN)
 
     if ( NOT WILL_USE_SYSTEM_GLFW )
         message ( STATUS "Using included glfw3 (in 3rdparty/)" )
+        SET(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "GLFW example" FORCE)
+        SET(GLFW_BUILD_TESTS OFF CACHE BOOL "GLFW tests" FORCE)
+        SET(GLFW_BUILD_DOCS OFF CACHE BOOL "GLFW docs" FORCE)
+        SET(GLFW_INSTALL OFF CACHE BOOL "GLFW install" FORCE)
         add_subdirectory( "${GLFW_DIR}" )
         set( PROJ_DEPENDENCIES ${PROJ_DEPENDENCIES} glfw)
         include_directories( "${GLFW_DIR}/include" )

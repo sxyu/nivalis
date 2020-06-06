@@ -1,5 +1,6 @@
 #include "plotter/plotter.hpp"
 #include "plotter/internal.hpp"
+#include <iostream>
 
 namespace nivalis {
 
@@ -18,61 +19,98 @@ color::color get_ineq_color(const color::color& func_line_color) {
 }
 
 // Buffer anagement
-// Add polyline/polygon to buffer
-template<class Scalar>
+// Add polyline/polygon to buffer (points in plot coords) to buffer
+// automatically splits the line where consecutive points are near colinear
 void buf_add_polyline(
         std::vector<DrawBufferObject>& draw_buf,
         const Plotter::View& render_view,
-        const std::vector<std::array<Scalar, 2> >& points,
+        const std::vector<std::array<double, 2> >& points,
         const color::color& c, size_t rel_func, float thickness = 1.,
-        bool closed = false, bool line = true, bool filled = false,
-        bool screen_coords = true) {
-    DrawBufferObject obj;
-    if (screen_coords) {
-        obj.points.resize(points.size());
-        for (size_t i = 0; i < points.size(); ++i) {
-            obj.points[i][0] = points[i][0]*1. / render_view.swid *
-                (render_view.xmax - render_view.xmin) + render_view.xmin;
-            obj.points[i][1] = (render_view.shigh - points[i][1])*1. /
-                render_view.shigh * (render_view.ymax - render_view.ymin) + render_view.ymin;
-        }
-    } else {
-        obj.points.resize(points.size());
-        for (size_t i = 0; i < points.size(); ++i) {
-            obj.points[i][0] = (double)points[i][0];
-            obj.points[i][1] = (double)points[i][1];
-        }
-    }
-    obj.type = closed ? DrawBufferObject::POLYGON :
-                        DrawBufferObject::POLYLINE;
-    obj.rel_func = rel_func;
-    obj.c = c;
-    obj.thickness = thickness;
+        bool closed = false, bool line = true, bool filled = false) {
+    DrawBufferObject obj_fill;
+    obj_fill.rel_func = rel_func;
+    obj_fill.thickness = thickness;
     if (filled) {
-        DrawBufferObject obj2;
-        obj2 = obj;
-        obj2.type = DrawBufferObject::FILLED_POLYGON;
-        obj2.c = get_ineq_color(c);
-        draw_buf.push_back(std::move(obj2));
+        obj_fill.points = points;
+        obj_fill.type = DrawBufferObject::FILLED_POLYGON;
+        obj_fill.c = get_ineq_color(c);
+        draw_buf.push_back(std::move(obj_fill));
     }
     if (line) {
-        draw_buf.push_back(std::move(obj));
+        // Detect colinearities
+        DrawBufferObject obj;
+        obj = obj_fill;
+        obj.c = c;
+        obj.type = closed ? DrawBufferObject::POLYGON :
+            DrawBufferObject::POLYLINE;
+        obj.points.reserve(points.size());
+        // draw_buf.push_back(std::move(obj_tmp));
+        for (size_t i = 0; i < points.size(); ++i) {
+            // if (std::isnan(points[i][0])) break;
+            size_t j = obj.points.size();
+            obj.points.push_back({points[i][0], points[i][1]});
+            if (j >= 2) {
+                double ax = (obj.points[j][0] - obj.points[j-1][0]);
+                double ay = (obj.points[j][1] - obj.points[j-1][1]);
+                double bx = (obj.points[j-1][0] - obj.points[j-2][0]);
+                double by = (obj.points[j-1][1] - obj.points[j-2][1]);
+                double theta_a = std::fmod(std::atan2(ay, ax) + 2*M_PI, 2*M_PI);
+                double theta_b = std::fmod(std::atan2(by, bx) + 2*M_PI, 2*M_PI);
+                double angle_between = std::min(std::fabs(theta_a - theta_b),
+                        std::fabs(theta_a + 2*M_PI - theta_b));
+                if (std::fabs(angle_between - M_PI) < 1e-1) {
+                    // Near-colinear, currently ImGui's polyline drawing may will break
+                    // in this case. We split the obj.points here.
+                    draw_buf.push_back(obj);
+                    obj.points[0] = obj.points[j-1]; obj.points[1] = obj.points[j];
+                    obj.points.resize(2);
+                }
+            }
+        }
+        draw_buf.push_back(obj);
     }
 }
-void buf_add_rectangle(
+
+// Add polyline (points in screen coords) to buffer
+void buf_add_screen_polyline(
         std::vector<DrawBufferObject>& draw_buf,
         const Plotter::View& render_view,
-        float x, float y, float w, float h, bool fill, const color::color& c) {
+        const std::vector<std::array<float, 2> >& points_screen,
+        const color::color& c, size_t rel_func, float thickness = 1.,
+        bool closed = false, bool line = true, bool filled = false) {
+    std::vector<std::array<double, 2> > points_conv;
+    points_conv.resize(points_screen.size());
+    for (size_t i = 0; i < points_screen.size(); ++i) {
+        points_conv[i][0] = points_screen[i][0]*1. / render_view.swid *
+            (render_view.xmax - render_view.xmin) + render_view.xmin;
+        points_conv[i][1] = (render_view.shigh - points_screen[i][1])*1. /
+            render_view.shigh * (render_view.ymax - render_view.ymin) + render_view.ymin;
+    }
+    buf_add_polyline(draw_buf, render_view, points_conv, c, rel_func,
+            thickness, closed, line, filled) ;
+}
+
+// Add an rectangle in screen coordinates to the buffer
+// automatically merges adjacent filled rectangles of same color
+// added consecutively, where possible
+void buf_add_screen_rectangle(
+        std::vector<DrawBufferObject>& draw_buf,
+        const Plotter::View& render_view,
+        float x, float y, float w, float h, bool fill, const color::color& c,
+        float thickness, size_t rel_func) {
     if (w <= 0. || h <= 0.) return;
     DrawBufferObject rect;
     rect.type = fill ? DrawBufferObject::FILLED_RECT : DrawBufferObject::RECT;
     rect.points = {{(double)x, (double)y}, {(double)(x+w), (double)(y+h)}};
-    rect.rel_func = -1; // Not used
+    rect.thickness = thickness,
+    rect.rel_func = rel_func;
     auto xdiff = render_view.xmax - render_view.xmin;
     auto ydiff = render_view.ymax - render_view.ymin;
     for (size_t i = 0; i < rect.points.size(); ++i) {
-        rect.points[i][0] = rect.points[i][0]*1. / render_view.swid * xdiff + render_view.xmin;
-        rect.points[i][1] = (render_view.shigh - rect.points[i][1])*1. / render_view.shigh * ydiff + render_view.ymin;
+        rect.points[i][0] = rect.points[i][0]*1. /
+            render_view.swid * xdiff + render_view.xmin;
+        rect.points[i][1] = (render_view.shigh - rect.points[i][1])*1. /
+            render_view.shigh * ydiff + render_view.ymin;
     }
     if (fill && draw_buf.size()) {
         auto& last_rect = draw_buf.back();
@@ -106,9 +144,10 @@ void Plotter::render(const View& view) {
     t_var = env.addr_of("t", false);
 
     // * Constants
-    // Number of different t values to evaluate for a parametric
-    // equation
+    // Number of different t values to evaluate for a parametric equation
     static const double PARAMETRIC_STEPS = 1e4;
+    // Number of different t values to evaluate for a polar function
+    static const double POLAR_STEP_SIZE = M_PI * 1e-3;
     // If parametric function moves more than this amount (square of l2),
     // disconnects the function line
     const double PARAMETRIC_DISCONN_THRESH = 1e-2 *
@@ -121,6 +160,36 @@ void Plotter::render(const View& view) {
     pt_markers.clear(); pt_markers.reserve(500);
     draw_buf.clear();
 
+    for (size_t funcid = 0; funcid < funcs.size(); ++funcid) {
+        auto& func = funcs[funcid];
+        auto ftype_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
+        if (ftype_nomod == Function::FUNC_TYPE_EXPLICIT ||
+                ftype_nomod == Function::FUNC_TYPE_EXPLICIT_Y) {
+            bool has_call = false;
+            for (size_t i = 0 ; i < funcs[funcid].expr.ast.size(); ++i) {
+                if (funcs[funcid].expr.ast[i].opcode == OpCode::call) {
+                    has_call = true;
+                    break;
+                }
+            }
+            if (has_call && funcs.size() <= max_functions_find_crit_points) {
+                // Re-compute derivatives, if explicit and has
+                // at least one user-function call
+                // This is needed since the user function may have been changed
+                if (ftype_nomod == Function::FUNC_TYPE_EXPLICIT ||
+                        ftype_nomod == Function::FUNC_TYPE_EXPLICIT_Y) {
+                    uint64_t var = ftype_nomod == Function::FUNC_TYPE_EXPLICIT_Y ?  y_var : x_var;
+                    func.diff = func.expr.diff(var, env);
+                    if (!func.diff.is_null()) {
+                        func.ddiff = func.diff.diff(var, env);
+                    }
+                    else func.ddiff.ast[0] = OpCode::null;
+                    func.drecip = func.recip.diff(var, env);
+                }
+            }
+        }
+    }
+
     // * Draw functions
     // BEGIN_PROFILE;
     for (size_t funcid = 0; funcid < funcs.size(); ++funcid) {
@@ -132,8 +201,7 @@ void Plotter::render(const View& view) {
             // e.g (p, q) moved
             if (func.exprs.size() && (func.exprs.size() & 1) == 0) {
                 std::vector<std::array<double, 2> > line;
-                double mark_radius = (curr_func == funcid) ? MARKER_DISP_RADIUS :
-                    MARKER_DISP_RADIUS-1;
+                double mark_radius = MARKER_DISP_RADIUS - 1;
                 for (size_t i = 0; i < func.exprs.size(); i += 2) {
                     PointMarker ptm;
                     auto& expr_x = func.exprs[i],
@@ -164,14 +232,14 @@ void Plotter::render(const View& view) {
                     pt_markers.push_back(std::move(ptm));
                 }
                 buf_add_polyline(draw_buf, view, line, func.line_color,
-                        funcid, (curr_func == funcid) ? 3.f : 2.f,
+                        funcid, 2.f,
                         func.type & Function::FUNC_TYPE_MOD_CLOSED,
                         (func.type & Function::FUNC_TYPE_MOD_NOLINE) == 0,
-                        func.type & Function::FUNC_TYPE_MOD_FILLED,
-                        false /* use plot coords */);
+                        func.type & Function::FUNC_TYPE_MOD_FILLED);
             }
         }
     }
+    // Draw all other functions
     for (size_t funcid = 0; funcid < funcs.size(); ++funcid) {
         auto& func = funcs[funcid];
         auto ftype_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
@@ -179,10 +247,8 @@ void Plotter::render(const View& view) {
             case Function::FUNC_TYPE_IMPLICIT:
                 plot_implicit(funcid); break;
             case Function::FUNC_TYPE_PARAMETRIC:
-            case Function::FUNC_TYPE_POLAR:
                 {
-                    if (func.type == Function::FUNC_TYPE_PARAMETRIC
-                        && func.exprs.size() != 2) continue;
+                    if (func.exprs.size() != 2) continue;
                     std::vector<std::array<float, 2> > curr_line;
                     double tmin = (double)func.tmin;
                     double tmax = (double)func.tmax;
@@ -191,25 +257,84 @@ void Plotter::render(const View& view) {
                     double px, py;
                     for (double t = tmin; t <= tmax; t += tstep) {
                         env.vars[t_var] = t;
-                        double x, y;
-                        if (func.type == Function::FUNC_TYPE_PARAMETRIC) {
-                            x = func.exprs[0](env);
-                            y = func.exprs[1](env);
-                        } else {
-                            double r = func.expr(env);
-                            x = r * cos(t); y = r * sin(t);
-                        }
+                        double x = func.exprs[0](env),
+                               y = func.exprs[1](env);
                         if (t > tmin && util::sqr_dist(x, y, px, py) > PARAMETRIC_DISCONN_THRESH) {
-                            buf_add_polyline(draw_buf, view, curr_line, func.line_color, funcid,
-                                    curr_func == funcid ? 3 : 2.);
+                            buf_add_screen_polyline(draw_buf, view, curr_line, func.line_color, funcid, 2.f);
                             curr_line.clear();
                         }
                         float sx = _X_TO_SX(x), sy = _Y_TO_SY(y);
                         curr_line.push_back({sx, sy});
                         px = x; py = y;
                     }
-                    buf_add_polyline(draw_buf, view, curr_line, func.line_color, funcid,
-                            curr_func == funcid ? 3 : 2.);
+                    buf_add_screen_polyline(draw_buf, view, curr_line, func.line_color, funcid, 2.f);
+                }
+                break;
+            case Function::FUNC_TYPE_POLAR:
+                {
+                    std::vector<std::array<double, 2> > curr_line;
+                    std::vector<double> vals;
+                    double tmin = (double)func.tmin;
+                    double tmax = (double)func.tmax;
+                    if (tmin > tmax) std::swap(tmin, tmax);
+                    bool has_line = ((func.type & Function::FUNC_TYPE_MOD_INEQ_STRICT) == 0);
+                    bool is_ineq = (func.type & Function::FUNC_TYPE_MOD_INEQ) != 0;
+                    bool is_ineq_less = (func.type & Function::FUNC_TYPE_MOD_INEQ_LESS) != 0;
+                    if (is_ineq) {
+                        vals.reserve((tmax - tmin) / POLAR_STEP_SIZE + 1);
+                    }
+                    if (has_line) {
+                        curr_line.reserve((tmax - tmin) / POLAR_STEP_SIZE + 1);
+                    }
+                    for (double t = tmin; t <= tmax; t += POLAR_STEP_SIZE) {
+                        env.vars[t_var] = t;
+                        double r = func.expr(env);
+                        if (is_ineq) vals.push_back(r);
+                        if (has_line) {
+                            double x = r * cos(t), y = r * sin(t);
+                            curr_line.push_back({x, y});
+                        }
+                    }
+                    if (has_line) {
+                        buf_add_polyline(draw_buf, view, curr_line, func.line_color, funcid, 2.f,
+                                false, true, false);
+                    }
+                    if (is_ineq) {
+                        const float INTERVAL = 1.5f;
+                        double beg_mod = std::fmod(tmin, 2*M_PI);
+                        double end_mod = std::fmod(tmax, 2*M_PI);
+                        if (beg_mod < 0) beg_mod += 2 * M_PI;
+                        if (end_mod < 0) end_mod += 2 * M_PI;
+                        double t_start = tmin - beg_mod;
+                        double t_end = tmax + (end_mod == 0.0 ? 0.0 : (2*M_PI - end_mod));
+                        for (float sy = 0; sy < view.shigh; sy += INTERVAL) {
+                            double y = _SY_TO_Y(sy);
+                            for (float sx = 0; sx < view.swid; sx += INTERVAL) {
+                                double x = _SX_TO_X(sx);
+                                double theta_mod = std::atan2(y, x);
+                                double r = std::sqrt(x*x + y*y);
+                                if (theta_mod < 0) theta_mod += 2 * M_PI;
+                                double alpha = 0.;
+                                for (double t = t_start; t <= tmax + t_end; t += 2*M_PI) {
+                                    double theta = t + theta_mod;
+                                    if (theta < tmin || theta > tmax) continue;
+                                    size_t near_idx = std::min((size_t)std::max(
+                                                std::round((theta - tmin) / POLAR_STEP_SIZE), 0.),
+                                                vals.size() - 1);
+                                    double thresh_r = vals[near_idx];
+                                    if (r < thresh_r == is_ineq_less) {
+                                        alpha = 0.25 + 0.75 * alpha; // Simulate blend
+                                    }
+                                }
+                                if (alpha > 0.) {
+                                    color::color c = func.line_color;
+                                    c.a = alpha;
+                                    buf_add_screen_rectangle(draw_buf, view, sx, sy,
+                                            INTERVAL, INTERVAL, true, c, 0.0f, funcid);
+                                }
+                            }
+                        }
+                    }
                 }
                 break;
             case Function::FUNC_TYPE_EXPLICIT:
@@ -491,11 +616,11 @@ void Plotter::plot_implicit(size_t funcid) {
                         func.type !=
                         Function::FUNC_TYPE_IMPLICIT) {
                     // Inequality region
-                    buf_add_rectangle(draw_buf, view,
+                    buf_add_screen_rectangle(draw_buf, view,
                             csx + (float)(- cxi + 1),
                             csy + (float)(- cyi + 1),
                             (float)cxi, (float)cyi,
-                            true, ineq_color);
+                            true, ineq_color, 0.0, funcid);
                 }
             }
             coarse_line[csx+1] = z;
@@ -507,7 +632,6 @@ void Plotter::plot_implicit(size_t funcid) {
 #else
     int sqr_id(0);
 #endif
-    int pad = (curr_func == funcid) ? 1 : 0;
     auto worker = [&]() {
         std::vector<double> line(view.swid + 2);
         std::vector<bool> fine_paint_below(view.swid + 2);
@@ -620,23 +744,23 @@ void Plotter::plot_implicit(size_t funcid) {
             if ((func.type & Function::FUNC_TYPE_MOD_INEQ_STRICT) == 0) {
                 // Draw function line (boundary)
                 for (auto& p : tdraws) {
-                    buf_add_rectangle(draw_buf, view,
-                            p[0] + (float)(- p[2] + 1 - pad),
-                            p[1] + (float)(- p[2] + 1 - pad),
-                            (float)(p[2] + pad),
-                            (float)(p[2] + pad),
-                            true, func.line_color);
+                    buf_add_screen_rectangle(draw_buf, view,
+                            p[0] + (float)(- p[2] + 1),
+                            p[1] + (float)(- p[2] + 1),
+                            (float)(p[2]),
+                            (float)(p[2]),
+                            true, func.line_color, 0.0, funcid);
                 }
             }
             for (auto& p : tdraws_ineq) {
                 // Draw inequality region
-                buf_add_rectangle(draw_buf, view,
+                buf_add_screen_rectangle(draw_buf, view,
                         p[0] + (float)(- p[2] + 1),
                         p[1] + (float)(- p[2] + 1),
                         (float)p[2],
                         (float)p[2],
                         true,
-                        ineq_color);
+                        ineq_color, 0.0, funcid);
             }
 
             size_t sz = pt_markers.size();
@@ -665,6 +789,9 @@ void Plotter::plot_implicit(size_t funcid) {
 } // void plot_implicit
 
 void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
+    const bool find_all_crit_pts = funcs.size() <= max_functions_find_all_crit_points
+                                     || funcid == curr_func;
+
     double xdiff = view.xmax - view.xmin, ydiff = view.ymax - view.ymin;
     float swid = view.swid, shigh = view.shigh;
     double xmin = view.xmin, xmax = view.xmax;
@@ -683,9 +810,9 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
 
     // Constants
     // Newton's method parameters
-    static const double EPS_STEP  = 1e-9 * xdiff;
-    static const double EPS_ABS   = 1e-10 * ydiff;
-    static const int    MAX_ITER  = 30;
+    const double EPS_STEP  = 1e-7 * xdiff;
+    const double EPS_ABS   = 1e-10 * ydiff;
+    static const int MAX_ITER  = 100;
     // Shorthand for Newton's method arguments
 #define NEWTON_ARGS var, x, env, EPS_STEP, EPS_ABS, MAX_ITER, \
     xmin - NEWTON_SIDE_ALLOW, xmax + NEWTON_SIDE_ALLOW
@@ -700,20 +827,20 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
     // Asymptote check constants:
     // Assume asymptote at discontinuity if slope between
     // x + ASYMPTOTE_CHECK_DELTA1, x + ASYMPTOTE_CHECK_DELTA2
-    const double ASYMPTOTE_CHECK_DELTA1 = xdiff * 1e-8;
-    const double ASYMPTOTE_CHECK_DELTA2 = xdiff * 1e-7;
-    const double ASYMPTOTE_CHECK_EPS    = xdiff * 1e-9;
+    const double ASYMPTOTE_CHECK_DELTA1 = xdiff * 1e-6;
+    const double ASYMPTOTE_CHECK_DELTA2 = xdiff * 1e-5;
+    const double ASYMPTOTE_CHECK_EPS    = ydiff * 1e-9;
     // Special eps for boundary of domain
-    const double ASYMPTOTE_CHECK_BOUNDARY_EPS = xdiff * 1e-3;
+    const double ASYMPTOTE_CHECK_BOUNDARY_EPS = ydiff * 1e-3;
 
     // For explicit functions
     // We will draw a function segment between every pair of adjacent
     // discontinuities (including 'edge of screen')
     // x-coordinate after a discontinuity to begin drawing function
-    static const float DISCONTINUITY_EPS = 1e-4f;
+    const float DISCONTINUITY_EPS = 1e-4f * xdiff;
 
     // Minimum x-distance between critical points
-    const double MIN_DIST_BETWEEN_ROOTS  = 1e-9 * xdiff;
+    const double MIN_DIST_BETWEEN_ROOTS  = 1e-7 * xdiff;
 
     env.vars[y_var] = std::numeric_limits<double>::quiet_NaN();
     // Discontinuity/root/extremum type enum
@@ -782,8 +909,7 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
                 (psx > curr_line.back()[0] || psy != curr_line.back()[1])) {
             if (curr_line.size() > 1 &&
                     (func.type & Function::FUNC_TYPE_MOD_INEQ_STRICT) == 0) {
-                buf_add_polyline(draw_buf, view, curr_line, func.line_color, funcid,
-                        curr_func == funcid ? 3 : 2.);
+                buf_add_screen_polyline(draw_buf, view, curr_line, func.line_color, funcid, 2.);
             }
             curr_line.resize(2);
             curr_line[0] = {psx, psy};
@@ -795,25 +921,28 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
         if (func.type & Function::FUNC_TYPE_MOD_INEQ) {
             if (func.type & Function::FUNC_TYPE_MOD_INEQ_LESS) {
                 if (reverse_xy) {
-                    buf_add_rectangle(draw_buf, view,
-                            0, psy, sx, sy - psy, true, ineq_color);
+                    buf_add_screen_rectangle(draw_buf, view,
+                            0, psy, sx, sy - psy, true, ineq_color, 0.0f, funcid);
                 } else {
-                    buf_add_rectangle(draw_buf, view,
-                            psx, sy, sx - psx, view.shigh - sy, true, ineq_color);
+                    buf_add_screen_rectangle(draw_buf, view,
+                            psx, sy, sx - psx, view.shigh - sy, true, ineq_color,
+                            0.0f, funcid);
                 }
             } else {
                 if (reverse_xy) {
-                    buf_add_rectangle(draw_buf, view,
-                            psx, psy, view.swid - psx, sy - psy, true, ineq_color);
+                    buf_add_screen_rectangle(draw_buf, view,
+                            psx, psy, view.swid - psx, sy - psy, true, ineq_color,
+                            0.0f, funcid);
                 } else {
-                    buf_add_rectangle(draw_buf, view,
-                            psx, 0, sx - psx, sy, true, ineq_color);
+                    buf_add_screen_rectangle(draw_buf, view,
+                            psx, 0, sx - psx, sy, true, ineq_color, 0.0f,
+                            funcid);
                 }
             }
         }
     };
     // ** Find roots, asymptotes, extrema
-    if (!func.diff.is_null()) {
+    if (!func.diff.is_null() && funcs.size() <= max_functions_find_crit_points) {
         double prev_x, prev_y = 0.;
         for (int sx = 0; sx < swid; sx += 4) {
             const double x = reverse_xy ? _SY_TO_Y(sx) : _SX_TO_X(sx);
@@ -822,19 +951,25 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
             const bool is_y_nan = std::isnan(y);
 
             if (!is_y_nan) {
+                env.vars[var] = x;
                 double dy = func.diff(env);
                 if (!std::isnan(dy)) {
-                    double root = func.expr.newton(NEWTON_ARGS, &func.diff, y, dy);
-                    push_critpt_if_valid(root, ROOT, roots_and_extrema);
+                    if (find_all_crit_pts) {
+                        double root = func.expr.newton(NEWTON_ARGS, &func.diff, y, dy);
+                        push_critpt_if_valid(root, ROOT, roots_and_extrema);
+                    }
                     double asymp = func.recip.newton(NEWTON_ARGS,
                             &func.drecip, 1. / y, -dy / (y*y));
                     push_critpt_if_valid(asymp, DISCONT_ASYMPT, discont);
 
-                    double ddy = func.ddiff(env);
-                    if (!std::isnan(ddy)) {
-                        double extr = func.diff.newton(NEWTON_ARGS,
-                                &func.ddiff, dy, ddy);
-                        push_critpt_if_valid(extr, EXTREMUM, roots_and_extrema);
+                    if (find_all_crit_pts) {
+                        env.vars[var] = x;
+                        double ddy = func.ddiff(env);
+                        if (!std::isnan(ddy)) {
+                            double extr = func.diff.newton(NEWTON_ARGS,
+                                    &func.ddiff, dy, ddy);
+                            push_critpt_if_valid(extr, EXTREMUM, roots_and_extrema);
+                        }
                     }
                 }
             }
@@ -962,133 +1097,140 @@ void Plotter::plot_explicit(size_t funcid, bool reverse_xy) {
 
     // Finish last line, if exists
     if (curr_line.size() > 1 && (func.type & Function::FUNC_TYPE_MOD_INEQ_STRICT) == 0) {
-        buf_add_polyline(draw_buf, view, curr_line, func.line_color, funcid,
-                curr_func == funcid ? 3 : 2.);
+        buf_add_screen_polyline(draw_buf, view, curr_line, func.line_color, funcid, 2.);
     }
-    std::vector<CritPoint> to_erase; // Save dubious points to delete from roots_and_extrama
-    // Helper to draw roots/extrema/y-int and add a marker for it
-    auto draw_extremum = [&](const CritPoint& cpt, double y) {
-        double dy = func.diff(env);
-        double ddy = func.ddiff(env);
-        double x; int type;
-        std::tie(x, type) = cpt;
-        auto label =
-            type == Y_INT ? (reverse_xy ? PointMarker::LABEL_X_INT : PointMarker::LABEL_Y_INT) :
-            type == ROOT ? (reverse_xy ? PointMarker::LABEL_Y_INT : PointMarker::LABEL_X_INT) :
-            (type == EXTREMUM && ddy > 2e-7 * ydiff) ? PointMarker::LABEL_LOCAL_MIN :
-            (type == EXTREMUM && ddy < -2e-7 * ydiff) ? PointMarker::LABEL_LOCAL_MAX:
-            type == EXTREMUM ? PointMarker::LABEL_INFLECTION_PT:
-            PointMarker::LABEL_NONE;
-        // Do not show
-        if (label == PointMarker::LABEL_INFLECTION_PT ||
-                label == PointMarker::LABEL_NONE) {
-            to_erase.push_back(cpt);
-            return;
-        }
+    if (funcs.size() <= max_functions_find_crit_points) {
+        if (find_all_crit_pts) {
+            std::vector<CritPoint> to_erase; // Save dubious points to delete from roots_and_extrama
+            // Helper to draw roots/extrema/y-int and add a marker for it
+            auto draw_extremum = [&](const CritPoint& cpt, double y) {
+                env.vars[var] = cpt.first;
+                double dy = func.diff(env);
+                double ddy = func.ddiff(env);
+                double x; int type;
+                std::tie(x, type) = cpt;
+                auto label =
+                    type == Y_INT ? (reverse_xy ? PointMarker::LABEL_X_INT : PointMarker::LABEL_Y_INT) :
+                    type == ROOT ? (reverse_xy ? PointMarker::LABEL_Y_INT : PointMarker::LABEL_X_INT) :
+                    (type == EXTREMUM && ddy > 1e-100 * ydiff) ? PointMarker::LABEL_LOCAL_MIN :
+                    (type == EXTREMUM && ddy < -1e-100 * ydiff) ? PointMarker::LABEL_LOCAL_MAX:
+                    type == EXTREMUM ? PointMarker::LABEL_INFLECTION_PT:
+                    PointMarker::LABEL_NONE;
+                // Do not show
+                if (label == PointMarker::LABEL_INFLECTION_PT ||
+                        label == PointMarker::LABEL_NONE) {
+                    to_erase.push_back(cpt);
+                    return;
+                }
 
-        PointMarker ptm;
-        ptm.label = label;
-        ptm.y = y; ptm.x = x;
-        if (reverse_xy) std::swap(ptm.x, ptm.y);
-        if (type == Y_INT) label = PointMarker::LABEL_X_INT;
-        else if (type == ROOT) label = PointMarker::LABEL_Y_INT;
-        ptm.passive = false;
-        ptm.rel_func = funcid;
-        ptm.drag_var_x = ptm.drag_var_y = -1;
-        pt_markers.push_back(std::move(ptm));
-    };
-    for (const CritPoint& cpt : roots_and_extrema) {
-        env.vars[var] = cpt.first;
-        double y = func.expr(env);
-        draw_extremum(cpt, y);
-    }
-    // Delete the "dubious" points
-    for (const CritPoint& x : to_erase) {
-        roots_and_extrema.erase(x);
-    }
-    if (!func.expr.is_null() && !func.diff.is_null()) {
-        env.vars[var] = 0;
-        double y = func.expr(env);
-        if (!std::isnan(y) && !std::isinf(y)) {
-            push_critpt_if_valid(0., Y_INT, roots_and_extrema); // y-int
-            auto cpt = CritPoint(0., Y_INT);
-            if (roots_and_extrema.count(cpt)) {
+                PointMarker ptm;
+                ptm.label = label;
+                ptm.y = y; ptm.x = x;
+                if (reverse_xy) std::swap(ptm.x, ptm.y);
+                if (type == Y_INT) label = PointMarker::LABEL_X_INT;
+                else if (type == ROOT) label = PointMarker::LABEL_Y_INT;
+                ptm.passive = false;
+                ptm.rel_func = funcid;
+                ptm.drag_var_x = ptm.drag_var_y = -1;
+                pt_markers.push_back(std::move(ptm));
+            };
+            for (const CritPoint& cpt : roots_and_extrema) {
+                env.vars[var] = cpt.first;
+                double y = func.expr(env);
                 draw_extremum(cpt, y);
             }
+            // Delete the "dubious" points
+            for (const CritPoint& x : to_erase) {
+                roots_and_extrema.erase(x);
+            }
+            if (!func.expr.is_null() && !func.diff.is_null()) {
+                env.vars[var] = 0;
+                double y = func.expr(env);
+                if (!std::isnan(y) && !std::isinf(y)) {
+                    push_critpt_if_valid(0., Y_INT, roots_and_extrema); // y-int
+                    auto cpt = CritPoint(0., Y_INT);
+                    if (roots_and_extrema.count(cpt)) {
+                        draw_extremum(cpt, y);
+                    }
+                }
+            }
         }
-    }
 
-    // Function intersection
-    if (!func.diff.is_null()) {
-        for (size_t funcid2 = 0; funcid2 < funcid; ++funcid2) {
-            auto& func2 = funcs[funcid2];
-            if (func2.diff.is_null()) continue;
-            int ft_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
-            int f2t_nomod = func2.type & ~Function::FUNC_TYPE_MOD_ALL;
-            if (ft_nomod == f2t_nomod) {
-                // Same direction, use Newton on difference.
-                Expr sub_expr = func.expr - func2.expr;
-                Expr diff_sub_expr = func.diff - func2.diff;
-                // diff_sub_expr.optimize();
-                if (diff_sub_expr.is_null()) continue;
-                std::set<double> st;
-                for (int sxd = 0; sxd < swid; sxd += 10) {
-                    const double x = reverse_xy ? _SY_TO_Y(sxd) : _SX_TO_X(sxd);
-                    double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
-                    push_if_valid(root, st);
-                }
-                for (double x : st) {
-                    env.vars[var] = x;
-                    double y = func.expr(env);
-                    size_t idx = pt_markers.size();
-                    PointMarker ptm;
-                    ptm.label = PointMarker::LABEL_INTERSECTION;
-                    ptm.x = x; ptm.y = y;
-                    if (reverse_xy) std::swap(ptm.x, ptm.y);
-                    ptm.passive = false;
-                    ptm.rel_func = -1;
-                    ptm.drag_var_x = ptm.drag_var_y = -1;
-                    pt_markers.push_back(std::move(ptm));
-                } // for x : st
-            } else if (ft_nomod + f2t_nomod == 8) {
-                // Inverse direction, use Newton on composition.
-                Expr comp_expr = func2.expr;
-                auto other_var = var == x_var ? y_var  : x_var;
-                comp_expr.sub_var(other_var, func.expr);
-                comp_expr = comp_expr - Expr::AST{Expr::ASTNode::varref(var)};
-                comp_expr.optimize();
+        // Function intersection
+        if (!func.diff.is_null() && funcs.size() <= max_functions_find_crit_points) {
+            if (find_all_crit_pts) {
+                for (size_t funcid2 = 0; funcid2 < (funcs.size() <= max_functions_find_all_crit_points
+                                                    ? funcid : funcs.size()); ++funcid2) {
+                    auto& func2 = funcs[funcid2];
+                    if (func2.diff.is_null()) continue;
+                    int ft_nomod = func.type & ~Function::FUNC_TYPE_MOD_ALL;
+                    int f2t_nomod = func2.type & ~Function::FUNC_TYPE_MOD_ALL;
+                    if (ft_nomod == f2t_nomod) {
+                        // Same direction, use Newton on difference.
+                        Expr sub_expr = func.expr - func2.expr;
+                        Expr diff_sub_expr = func.diff - func2.diff;
+                        // diff_sub_expr.optimize();
+                        if (diff_sub_expr.is_null()) continue;
+                        std::set<double> st;
+                        for (int sxd = 0; sxd < swid; sxd += 10) {
+                            const double x = reverse_xy ? _SY_TO_Y(sxd) : _SX_TO_X(sxd);
+                            double root = sub_expr.newton(NEWTON_ARGS, &diff_sub_expr);
+                            push_if_valid(root, st);
+                        }
+                        for (double x : st) {
+                            env.vars[var] = x;
+                            double y = func.expr(env);
+                            size_t idx = pt_markers.size();
+                            PointMarker ptm;
+                            ptm.label = PointMarker::LABEL_INTERSECTION;
+                            ptm.x = x; ptm.y = y;
+                            if (reverse_xy) std::swap(ptm.x, ptm.y);
+                            ptm.passive = false;
+                            ptm.rel_func = -1;
+                            ptm.drag_var_x = ptm.drag_var_y = -1;
+                            pt_markers.push_back(std::move(ptm));
+                        } // for x : st
+                    } else if (ft_nomod + f2t_nomod == 8) {
+                        // Inverse direction, use Newton on composition.
+                        Expr comp_expr = func2.expr;
+                        auto other_var = var == x_var ? y_var  : x_var;
+                        comp_expr.sub_var(other_var, func.expr);
+                        comp_expr = comp_expr - Expr::AST{Expr::ASTNode::varref(var)};
+                        comp_expr.optimize();
 
-                Expr diff_comp_expr = func2.diff;
-                diff_comp_expr.sub_var(other_var, func.expr);
-                diff_comp_expr = diff_comp_expr * func.diff - Expr::constant(1.);
-                diff_comp_expr.optimize();
-                if (diff_comp_expr.is_null()) continue;
-                std::set<double> st;
-                for (int sxd = 0; sxd < swid; sxd += 2) {
-                    const double x = reverse_xy ? _SY_TO_Y(sxd) : _SX_TO_X(sxd);
-                    double root = comp_expr.newton(
-                            var, x, env, EPS_STEP * 10.f, EPS_ABS * 10.f, MAX_ITER,
-                            xmin - NEWTON_SIDE_ALLOW, xmax + NEWTON_SIDE_ALLOW,
-                            &diff_comp_expr);
-                    push_if_valid(root, st);
-                }
-                for (double x : st) {
-                    env.vars[var] = x;
-                    double y = func.expr(env);
-                    size_t idx = pt_markers.size();
-                    PointMarker ptm;
-                    ptm.label = PointMarker::LABEL_INTERSECTION;
-                    ptm.x = x; ptm.y = y;
-                    if (reverse_xy) std::swap(ptm.x, ptm.y);
-                    ptm.passive = false;
-                    ptm.rel_func = -1;
-                    ptm.drag_var_x = ptm.drag_var_y = -1;
-                    pt_markers.push_back(std::move(ptm));
-                } // for x : st
-            } // if
-            // o.w. not supported.
-        } // for funcid2
-    } // if (!func.diff.is_null())
+                        Expr diff_comp_expr = func2.diff;
+                        diff_comp_expr.sub_var(other_var, func.expr);
+                        diff_comp_expr = diff_comp_expr * func.diff - Expr::constant(1.);
+                        diff_comp_expr.optimize();
+                        if (diff_comp_expr.is_null()) continue;
+                        std::set<double> st;
+                        for (int sxd = 0; sxd < swid; sxd += 2) {
+                            const double x = reverse_xy ? _SY_TO_Y(sxd) : _SX_TO_X(sxd);
+                            double root = comp_expr.newton(
+                                    var, x, env, EPS_STEP * 10.f, EPS_ABS * 10.f, MAX_ITER,
+                                    xmin - NEWTON_SIDE_ALLOW, xmax + NEWTON_SIDE_ALLOW,
+                                    &diff_comp_expr);
+                            push_if_valid(root, st);
+                        }
+                        for (double x : st) {
+                            env.vars[var] = x;
+                            double y = func.expr(env);
+                            size_t idx = pt_markers.size();
+                            PointMarker ptm;
+                            ptm.label = PointMarker::LABEL_INTERSECTION;
+                            ptm.x = x; ptm.y = y;
+                            if (reverse_xy) std::swap(ptm.x, ptm.y);
+                            ptm.passive = false;
+                            ptm.rel_func = -1;
+                            ptm.drag_var_x = ptm.drag_var_y = -1;
+                            pt_markers.push_back(std::move(ptm));
+                        } // for x : st
+                    } // if
+                    // o.w. not supported.
+                } // for funcid2
+            } // if (find_all_intersections || funcid == curr_func)
+        } // if (!func.diff.is_null())
+    } // if (funcs.size() <= max_functions_find_crit_points)
     // * End of function intersection code
 } // void plot_explicit
 

@@ -2,12 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iostream>
+// #include <iostream>
 
 #include "earcut.hpp"
-using Coord = float;
-using N = uint32_t;
-using Point = std::array<Coord, 2>;
+using ECCoord = float;
+using ECInt = uint32_t;
+using ECPoint = std::array<ECCoord, 2>;
 
 namespace nivalis {
 void ImGuiDrawListGraphicsAdaptor::line(float ax, float ay, float bx, float by,
@@ -15,56 +15,38 @@ void ImGuiDrawListGraphicsAdaptor::line(float ax, float ay, float bx, float by,
     draw_list->AddLine(ImVec2(ax, ay), ImVec2(bx, by),
             ImColor(c.r, c.g, c.b, c.a), thickness);
 }
-void ImGuiDrawListGraphicsAdaptor::polyline(const std::vector<std::array<float, 2> >& points,
+void ImGuiDrawListGraphicsAdaptor::polyline(const std::vector<point>& points,
         const color::color& c, float thickness, bool closed, bool fill) {
     if (fill) {
-        std::vector<std::vector<Point> > poly = {points};
-        std::vector<N> indices = mapbox::earcut<N>(poly);
+        std::vector<std::vector<ECPoint> > poly(1);
+        for (auto & p: points) poly[0].push_back({p[0], p[1]});
+        std::vector<ECInt> indices = mapbox::earcut<ECInt>(poly);
         for (size_t t = 0; t < indices.size(); t += 3) {
-            const uint32_t i = indices[t], j = indices[t+1], k = indices[t+2];
-            draw_list->AddTriangleFilled(ImVec2(points[i][0], points[i][1]),
-                                         ImVec2(points[j][0], points[j][1]),
-                                         ImVec2(points[k][0], points[k][1]),
+            const auto i = indices[t],
+                       j = indices[t+1],
+                       k = indices[t+2];
+            draw_list->AddTriangleFilled(ImVec2(poly[0][i][0], poly[0][i][1]),
+                                         ImVec2(poly[0][j][0], poly[0][j][1]),
+                                         ImVec2(poly[0][k][0], poly[0][k][1]),
                     ImColor(c.r, c.g, c.b, c.a));
         }
     } else {
-        std::vector<ImVec2> line(points.size());
-        size_t j = 0;
-        for (size_t i = 0; i < points.size(); ++i, ++j) {
-            line[j] = ImVec2(points[i][0], points[i][1]);
-            if (j >= 2) {
-                double ax = (line[j].x - line[j-1].x);
-                double ay = (line[j].y - line[j-1].y);
-                double bx = (line[j-1].x - line[j-2].x);
-                double by = (line[j-1].y - line[j-2].y);
-                double theta_a = std::fmod(std::atan2(ay, ax) + 2*M_PI, 2*M_PI);
-                double theta_b = std::fmod(std::atan2(by, bx) + 2*M_PI, 2*M_PI);
-                double angle_between = std::min(std::fabs(theta_a - theta_b),
-                        std::fabs(theta_a + 2*M_PI - theta_b));
-                if (std::fabs(angle_between - M_PI) < 1e-1) {
-                    // Near-colinear, currently ImGui's polyline drawing may will break
-                    // in this case. We split the line here.
-                    draw_list->AddPolyline(&line[0], (int)j, ImColor(c.r, c.g, c.b, c.a), closed, thickness);
-                    line[0] = line[j-1]; line[1] = line[j];
-                    j = 1;
-                }
-            }
-        }
-        line.resize(j);
-        draw_list->AddPolyline(&line[0], (int)j, ImColor(c.r, c.g, c.b, c.a), closed, thickness);
+        draw_list->AddPolyline<point>(&points[0], points.size(), ImColor(c.r, c.g, c.b, c.a), closed, thickness);
     }
 }
-void ImGuiDrawListGraphicsAdaptor::rectangle(float x, float y, float w, float h, bool fill, const color::color& c) {
+void ImGuiDrawListGraphicsAdaptor::rectangle(float x, float y, float w, float h, bool fill,
+        const color::color& c, float thickness) {
     if (fill) {
         draw_list->AddRectFilled(ImVec2(x,y), ImVec2(x+w, y+h),
                 ImColor(c.r, c.g, c.b, c.a));
     } else {
         draw_list->AddRect(ImVec2(x,y), ImVec2(x+w, y+h),
-                ImColor(c.r, c.g, c.b, c.a));
+                ImColor(c.r, c.g, c.b, c.a), 0.0f, ImDrawCornerFlags_All, thickness);
     }
 }
 void ImGuiDrawListGraphicsAdaptor::triangle(float x1, float y1, float x2, float y2,
         float x3, float y3, bool fill, const color::color& c) {
+
     if (fill) {
         draw_list->AddTriangleFilled(ImVec2(x1, y1), ImVec2(x2, y2), ImVec2(x3, y3),
                 ImColor(c.r, c.g, c.b, c.a));

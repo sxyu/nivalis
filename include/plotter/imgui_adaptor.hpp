@@ -5,18 +5,23 @@
 #include <vector>
 #include <array>
 #include <string>
+#include <limits>
 #include "imgui.h"
 #include "color.hpp"
+#include "point.hpp"
 
 namespace nivalis {
+
 // ImGUi drawlist graphics adaptor for Plotter
 struct ImGuiDrawListGraphicsAdaptor {
     void line(float ax, float ay, float bx, float by,
-            const color::color& c, float thickness = 1.);
-    void polyline(const std::vector<std::array<float, 2> >& points,
-            const color::color& c, float thickness = 1., bool closed = false,
+            const color::color& c, float thickness = 1.f);
+    // Polyline/polygon.
+    void polyline(const std::vector<point>& points,
+            const color::color& c, float thickness = 1.f, bool closed = false,
             bool fill = false);
-    void rectangle(float x, float y, float w, float h, bool fill, const color::color& c);
+    void rectangle(float x, float y, float w, float h, bool fill, const color::color& c,
+            float thickness = 1.f);
     void triangle(float x1, float y1, float x2, float y2,
                   float x3, float y3, bool fill, const color::color& c);
     void circle(float x, float y, float r, bool fill, const color::color& c);
@@ -27,6 +32,7 @@ struct ImGuiDrawListGraphicsAdaptor {
                 const std::string& s, const color::color& c,
                 float align_x = 0.0, float align_y = 0.0);
     ImDrawList* draw_list = nullptr;
+    int swid, shigh;
 };
 
 // Font range with Greek characters

@@ -117,6 +117,8 @@ bool redraw_canvas(bool worker_req_update) {
 
         ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
         adaptor.draw_list = draw_list;
+        adaptor.shigh = plot.view.shigh;
+        adaptor.swid = plot.view.swid;
         // Redraw
         plot.require_update = false;
         // Redraw the grid and functions
@@ -523,7 +525,7 @@ int main(int argc, char ** argv) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     font_md = io.Fonts->AddFontFromMemoryCompressedTTF(
-            ROBOTO_compressed_data, ROBOTO_compressed_size, 18.0f, NULL,
+            ROBOTO_compressed_data, ROBOTO_compressed_size, 20.0f, NULL,
             GetGlyphRangesGreek());
     // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);

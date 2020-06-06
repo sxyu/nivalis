@@ -387,7 +387,7 @@ std::istream& DrawBufferObject::from_bin(std::istream& is) {
 }
 
 bool Function::uses_parameter_t() const{
- return type == Function::FUNC_TYPE_POLAR ||
+ return (type & ~Function::FUNC_TYPE_MOD_ALL) == Function::FUNC_TYPE_POLAR ||
             type == Function::FUNC_TYPE_PARAMETRIC;
 }
 
@@ -404,15 +404,7 @@ Plotter::Plotter(bool use_latex)
     : view{SCREEN_WIDTH, SCREEN_HEIGHT, 0., 0., 0., 0.}, use_latex(use_latex)
 {
     reset_view();
-    curr_func = 0;
-    {
-        Function f;
-        f.name = gen_func_name(use_latex, next_func_name++);
-        f.expr_str = "";
-        f.line_color = color::from_int(last_expr_color++);
-        f.type = Function::FUNC_TYPE_EXPLICIT;
-        funcs.push_back(f);
-    }
+    add_func();
     drag_trace = drag_view = false;
     drag_marker = -1;
 
@@ -420,7 +412,6 @@ Plotter::Plotter(bool use_latex)
     y_var = env.addr_of("y", false);
     t_var = env.addr_of("t", false);
     r_var = env.addr_of("r", false);
-    set_curr_func(0);
 }
 
 void Plotter::reparse_expr(size_t idx) {
@@ -448,10 +439,6 @@ void Plotter::reparse_expr(size_t idx) {
                         true, // mode explicit
                         true, // quiet
                         0, &func_error);
-            if (ftype_nomod == Function::FUNC_TYPE_POLAR &&
-                    ftype_nomod != func.type) {
-                func_error.append("Polar inequalities not currently supported");
-            }
             break;
         case Function::FUNC_TYPE_IMPLICIT:
             func.expr = parse("(" + lhs + ")-(" + rhs + ")",
@@ -629,7 +616,6 @@ void Plotter::reparse_expr(size_t idx) {
                 reparse_expr(i);
             }
         }
-        require_update = true;
     }
     loss_detail = false;
     require_update = true;
@@ -638,15 +624,15 @@ void Plotter::reparse_expr(size_t idx) {
 void Plotter::set_curr_func(size_t func_id) {
     if (func_id != curr_func)
         func_error.clear();
-    reparse_expr(curr_func);
-    curr_func = func_id;
-    if (curr_func == -1) {
-        curr_func = 0;
+    if (curr_func < funcs.size())
+        reparse_expr(curr_func);
+    if (curr_func != func_id) {
+        curr_func = func_id;
+        if (~curr_func) focus_on_editor = true;
+        require_update = true;
     }
-    else if (curr_func >= funcs.size()) {
+    if (curr_func == funcs.size()) {
         // New function
-        std::string tmp = funcs.back().expr_str;
-        util::trim(tmp);
         Function f;
         f.type = Function::FUNC_TYPE_EXPLICIT;
         if (reuse_colors.empty()) {
@@ -659,8 +645,6 @@ void Plotter::set_curr_func(size_t func_id) {
         f.name = gen_func_name(use_latex, next_func_name++);
         funcs.push_back(std::move(f));
     }
-    focus_on_editor = true;
-    require_update = true;
 }
 
 void Plotter::add_func() {
@@ -934,6 +918,7 @@ void Plotter::handle_mouse_down(int px, int py) {
             // Begin dragging view
             drag_view = true;
             dragx = px; dragy = py;
+            set_curr_func(-1);
         }
     }
 }
@@ -1373,7 +1358,7 @@ void Plotter::detect_marker_click(int px, int py, bool no_passive, bool drag_var
     if (ptm.passive && no_passive) return;
     marker_posx = px; marker_posy = py + 20;
     std::ostringstream ss;
-    ss << std::fixed << std::setprecision(4) <<
+    ss << std::fixed << std::setprecision(3) <<
         PointMarker::label_repr(ptm.label) << ptm.x << ", " << ptm.y;
     marker_text = ss.str();
     if (drag_var) {
@@ -1382,7 +1367,6 @@ void Plotter::detect_marker_click(int px, int py, bool no_passive, bool drag_var
     if (ptm.passive && ~ptm.rel_func && ptm.rel_func != curr_func) {
         // Switch to function
         set_curr_func(ptm.rel_func);
-        require_update = true;
     }
 }
 }  // namespace nivalis

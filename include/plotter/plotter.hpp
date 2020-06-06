@@ -27,6 +27,7 @@
 #include "env.hpp"
 #include "expr.hpp"
 #include "color.hpp"
+#include "point.hpp"
 #include "util.hpp"
 
 namespace nivalis {
@@ -187,6 +188,10 @@ struct DrawBufferObject {
         RECT,
         FILLED_RECT,
 
+        // Triangle
+        TRIANGLE,
+        FILLED_TRIANGLE,
+
         // Circle
         CIRCLE,
         FILLED_CIRCLE,
@@ -234,7 +239,7 @@ public:
     /* Draw axes and grid onto given graphics adaptor
      * * Required Graphics adaptor API
      * void line(float ax, float ay, float bx, float by, const color::color&, float thickness = 1.0);               draw line (ax, ay) -- (bx, by)
-     * void polyline(const std::vector<std::array<float, 2> >& points, const color::color&, float thickness = 1., bool closed, bool fill);  draw polyline/polygon (filled or non-filled; if filled set then closed is ignored)
+     * void polyline(const std::vector<point>& points, const color::color&, float thickness = 1., bool closed, bool fill);  draw polyline/polygon (filled or non-filled; if filled set then closed is ignored)
      * void rectangle(float x, float y, float w, float h, bool fill, const color::color&);                          draw rectangle (filled or non-filled)
      * void triangle(float x1, float y1, float x2, float y2,
                   float x3, float y3, bool fill, const color::color& c);
@@ -544,8 +549,8 @@ public:
             return;
         }
 
-        std::vector<std::array<float, 2> > points;
-        for (auto& obj : draw_buf) {
+        std::vector<point> points;
+        auto draw_single_obj = [&points, &graph, &view](const DrawBufferObject& obj, bool is_curr_func) {
             points.resize(obj.points.size());
             // Coordinate conversion: re-position all points in obj.points
             // onto current view in  output to points
@@ -558,13 +563,22 @@ public:
             // Draw the object
             if (obj.type <= DrawBufferObject::FILLED_POLYGON) {
                 // Polyline
-                graph.polyline(points, obj.c, obj.thickness, obj.type == DrawBufferObject::POLYGON,
+                graph.polyline(points, obj.c, obj.thickness + (float)is_curr_func,
+                        obj.type != DrawBufferObject::POLYLINE,
                         obj.type == DrawBufferObject::FILLED_POLYGON);
             } else if (obj.type <= DrawBufferObject::FILLED_RECT) {
                 // Rectangle
                 graph.rectangle(points[0][0], points[0][1],
                                   points[1][0] - points[0][0], points[1][1] - points[0][1],
-                                  obj.type == DrawBufferObject::FILLED_RECT, obj.c);
+                                  obj.type == DrawBufferObject::FILLED_RECT,
+                                  is_curr_func && obj.c.a <= .8f ?
+                                  color::color(obj.c.r, obj.c.g, obj.c.b, obj.c.a + .2f) : obj.c,
+                                  obj.thickness);
+            } else if (obj.type <= DrawBufferObject::FILLED_TRIANGLE) {
+                // Triangle
+                graph.triangle(points[0][0], points[0][1], points[1][0], points[1][1],
+                        points[2][0], points[2][1],
+                        obj.type == DrawBufferObject::FILLED_TRIANGLE, obj.c);
             } else if (obj.type <= DrawBufferObject::FILLED_CIRCLE) {
                 // Circle
                 graph.circle(points[0][0], points[0][1], points[1][0] - points[0][0],
@@ -578,8 +592,21 @@ public:
                 // String
                 graph.string(points[0][0], points[0][1], obj.str, obj.c, 0.5f, 0.5f /* Center text */);
             }
+        };
+        std::vector<size_t> curr_func_obj_idxs;
+        for (size_t i = 0; i < draw_buf.size(); ++i) {
+            auto& obj = draw_buf[i];
+            if (obj.rel_func == curr_func) {
+                // Draw on top
+                curr_func_obj_idxs.push_back(i);
+            } else {
+                draw_single_obj(draw_buf[i], false);
+            }
         }
-        for(size_t i = pt_markers.size() - 1; ~i; --i) {
+        for (size_t i : curr_func_obj_idxs) {
+            draw_single_obj(draw_buf[i], true);
+        }
+        for (size_t i = pt_markers.size() - 1; ~i; --i) {
             auto& ptm = pt_markers[i];
             // Draw point markers (crit points, polyline points)
             // do backwards so that draggables are on top
@@ -724,6 +751,9 @@ public:
     // it may not be reliable
     const bool use_latex;
 
+    // Set curr_func to this to indicate no current function (i.e. select background)
+    static const size_t CURR_FUNC_NONE = -1;
+
     // Public plotter state data
     View view;                              // Curr view data
     size_t curr_func = 0;                   // Currently selected function
@@ -777,6 +807,14 @@ public:
        PASSIVE_MARKER_CLICK_DRAG_VIEW
     } passive_marker_click_behavior = PASSIVE_MARKER_CLICK_DRAG_TRACE;
 
+    // Intersection/crit point finding
+    // Number of functions above which to stop looking for function intersections and crit points
+    // EXCEPT for critical points of curr_func and intersections of curr_func with other functions
+    size_t max_functions_find_all_crit_points = 5;
+
+    // Number of functions above which to stop looking for intersections and critical points
+    // also disables asymptote detection (quality may worsen)
+    size_t max_functions_find_crit_points = 50;
 
     // The environment object, contains defined functions and variables
     // (owned)
@@ -787,7 +825,7 @@ public:
     std::mutex mtx;
 #endif
 
-    std::vector<DrawBufferObject> draw_buf;       // Function draw buffer
+    std::vector<DrawBufferObject> draw_buf;  // Function draw buffer
                                              // render() populates it
                                              // draw() draws these shapes to
                                              // an adaptor

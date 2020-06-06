@@ -182,96 +182,98 @@ private:
                 break;
             case PRI_MUL_DIV:
                 {
-                    if (~tok_link[left] &&
-                            tok_link[left]+1 < static_cast<int64_t>(expr.size()) &&
-                            (expr[tok_link[left]+1] == '(' &&
-                             tok_link[tok_link[left]+1] < right - 1)) {
-                        // Special form
-                        int64_t funname_end = tok_link[left] + 1;
-                        int64_t arg_end =
-                            expr[tok_link[left]+1] == '(' ?
-                            tok_link[tok_link[left]+1] + 1 :
-                            tok_link[left] + 1;
-                        const std::string func_name = expr.substr(left, funname_end - left);
+                    if (left < right - 1) {
+                        if (~tok_link[left] &&
+                                tok_link[left]+1 < static_cast<int64_t>(expr.size()) &&
+                                (expr[tok_link[left]+1] == '(' &&
+                                 tok_link[tok_link[left]+1] < right - 1)) {
+                            // Special form
+                            int64_t funname_end = tok_link[left] + 1;
+                            int64_t arg_end =
+                                expr[tok_link[left]+1] == '(' ?
+                                tok_link[tok_link[left]+1] + 1 :
+                                tok_link[left] + 1;
+                            const std::string func_name = expr.substr(left, funname_end - left);
 
-                        size_t var_end = -1, comma_pos = -1;
-                        for (size_t k = funname_end+1; k < static_cast<size_t>(arg_end - 1); ++k) {
-                            if (expr[k] == '=') var_end = k;
-                            else if (~var_end && expr[k] == ',') comma_pos = k;
-                        }
-                        if (func_name == "sum" || func_name == "prod") {
-                            // Sum/prod special forms
-                            if (!~var_end || !~comma_pos) {
-                                PARSE_ERR(func_name << " expected argument syntax "
-                                        "(<var>=<begin>,<end>)\n");
+                            size_t var_end = -1, comma_pos = -1;
+                            for (size_t k = funname_end+1; k < static_cast<size_t>(arg_end - 1); ++k) {
+                                if (expr[k] == '=') var_end = k;
+                                else if (~var_end && expr[k] == ',') comma_pos = k;
                             }
-                            result.ast.push_back(func_name[0] == 's' ?
-                                    OpCode::sums : OpCode::prods);
-                            std::string varname =
-                                expr.substr(funname_end + 1, var_end -
-                                        funname_end-1);
-                            result.ast.back().ref = env.addr_of(varname, false);
-                            if (!_parse(var_end+1, comma_pos, _PRI_LOWEST)) return false;
-
-                            if (!_parse(comma_pos+1, arg_end-1, _PRI_LOWEST)) return false;
-                            begin_thunk();
-                            if (!_parse(arg_end, right, pri)) return false;
-                            end_thunk();
-                            return true;
-                        } else if (func_name == "int") {
-                            PARSE_ERR("Integral is not implemented yet\n");
-                        } else if (func_name.size() >= 4 &&
-                                func_name.substr(0, 4) == "diff") {
-                            // Derivative special form
-                            std::string ord_str = func_name.substr(4);
-                            int ord = 1;
-                            if (ord_str.size()) {
-                                if (!util::is_whole_number(ord_str)) {
-                                    ord = -1;
-                                } else {
-                                    ord = std::atoi(ord_str.c_str());
-                                }
-                                if (ord > 5) {
-                                    PARSE_ERR("Derivative order is too high\n");
-                                }
-                            }
-                            if (ord >= 0) {
-                                std::string varname;
-                                if (~var_end) varname = expr.substr(funname_end + 1, var_end - funname_end - 1);
-                                else varname = expr.substr(funname_end + 1, arg_end - funname_end-2);
-                                if (varname.empty() || !util::is_varname(varname)) {
+                            if (func_name == "sum" || func_name == "prod") {
+                                // Sum/prod special forms
+                                if (!~var_end || !~comma_pos) {
                                     PARSE_ERR(func_name << " expected argument syntax "
-                                            "(<var>)\n");
+                                            "(<var>=<begin>,<end>)\n");
                                 }
-                                auto addr = env.addr_of(varname, false);
-                                decltype(result.ast) tmp;
-                                tmp.swap(result.ast);
+                                result.ast.push_back(func_name[0] == 's' ?
+                                        OpCode::sums : OpCode::prods);
+                                std::string varname =
+                                    expr.substr(funname_end + 1, var_end -
+                                            funname_end-1);
+                                result.ast.back().ref = env.addr_of(varname, false);
+                                if (!_parse(var_end+1, comma_pos, _PRI_LOWEST)) return false;
+
+                                if (!_parse(comma_pos+1, arg_end-1, _PRI_LOWEST)) return false;
+                                begin_thunk();
                                 if (!_parse(arg_end, right, pri)) return false;
-                                Expr diff = result;
-                                for (int i = 0; i < ord; ++i) {
-                                    diff = diff.diff(addr, env);
-                                    diff.optimize();
-                                }
-                                tmp.swap(result.ast);
-                                size_t sz = result.ast.size();
-                                result.ast.resize(sz + diff.ast.size());
-                                std::copy(diff.ast.begin(), diff.ast.end(), result.ast.begin() + sz);
+                                end_thunk();
                                 return true;
+                            } else if (func_name == "int") {
+                                PARSE_ERR("Integral is not implemented yet\n");
+                            } else if (func_name.size() >= 4 &&
+                                    func_name.substr(0, 4) == "diff") {
+                                // Derivative special form
+                                std::string ord_str = func_name.substr(4);
+                                int ord = 1;
+                                if (ord_str.size()) {
+                                    if (!util::is_whole_number(ord_str)) {
+                                        ord = -1;
+                                    } else {
+                                        ord = std::atoi(ord_str.c_str());
+                                    }
+                                    if (ord > 5) {
+                                        PARSE_ERR("Derivative order is too high\n");
+                                    }
+                                }
+                                if (ord >= 0) {
+                                    std::string varname;
+                                    if (~var_end) varname = expr.substr(funname_end + 1, var_end - funname_end - 1);
+                                    else varname = expr.substr(funname_end + 1, arg_end - funname_end-2);
+                                    if (varname.empty() || !util::is_varname(varname)) {
+                                        PARSE_ERR(func_name << " expected argument syntax "
+                                                "(<var>)\n");
+                                    }
+                                    auto addr = env.addr_of(varname, false);
+                                    decltype(result.ast) tmp;
+                                    tmp.swap(result.ast);
+                                    if (!_parse(arg_end, right, pri)) return false;
+                                    Expr diff = result;
+                                    for (int i = 0; i < ord; ++i) {
+                                        diff = diff.diff(addr, env);
+                                        diff.optimize();
+                                    }
+                                    tmp.swap(result.ast);
+                                    size_t sz = result.ast.size();
+                                    result.ast.resize(sz + diff.ast.size());
+                                    std::copy(diff.ast.begin(), diff.ast.end(), result.ast.begin() + sz);
+                                    return true;
+                                }
                             }
                         }
-                    }
-                    if (util::is_varname_first(expr[left])) {
-                        size_t space_pos = expr.find(' ', left);
-                        if (space_pos != std::string::npos && space_pos < right - 1) {
-                            std::string_view sv = std::string_view(expr).substr(left, space_pos - left);
-                            if (util::is_varname(sv)) {
-                                const auto& func_opcodes = OpCode::funcname_to_opcode_map();
-                                auto it = func_opcodes.find(sv);
-                                if (it != func_opcodes.end() && ~it->second &&
-                                        OpCode::n_args(it->second) == 1) {
-                                    // Single argument function with no bracket, e.g. sin x
-                                    result.ast.push_back(it->second);
-                                    return _parse(space_pos + 1, right, pri);
+                        if (util::is_varname_first(expr[left])) {
+                            size_t space_pos = expr.find(' ', left);
+                            if (space_pos != std::string::npos && space_pos < right - 1) {
+                                std::string_view sv = std::string_view(expr).substr(left, space_pos - left);
+                                if (util::is_varname(sv)) {
+                                    const auto& func_opcodes = OpCode::funcname_to_opcode_map();
+                                    auto it = func_opcodes.find(sv);
+                                    if (it != func_opcodes.end() && ~it->second &&
+                                            OpCode::n_args(it->second) == 1) {
+                                        // Single argument function with no bracket, e.g. sin x
+                                        result.ast.push_back(it->second);
+                                        return _parse(space_pos + 1, right, pri);
+                                    }
                                 }
                             }
                         }

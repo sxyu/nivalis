@@ -97,6 +97,7 @@ bool Shell::eval_line(std::string line) {
                 if (util::is_arith_operator(var.back())) {
                     assn_opcode = OpCode::from_char(var.back());
                     var.pop_back();
+                    util::trim(var);
                 }
                 if (var.back() == ')') {
                     auto brpos = var.find('(');

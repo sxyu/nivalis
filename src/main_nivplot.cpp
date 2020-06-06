@@ -173,6 +173,8 @@ void main_loop_step() {
 
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     adaptor.draw_list = draw_list;
+    adaptor.shigh = plot.view.shigh;
+    adaptor.swid = plot.view.swid;
     if (plot.require_update) {
         // Redraw
         plot.require_update = false;

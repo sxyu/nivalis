@@ -1,0 +1,3 @@
+[submodule "3rdparty/glfw3"]
+	path = 3rdparty/glfw3
+	url = https://github.com/glfw/glfw

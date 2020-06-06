@@ -2,7 +2,7 @@
 
 #include <cmath>
 #include <unordered_set>
-#include <iostream>
+// #include <iostream>
 #include "opcodes.hpp"
 #include "util.hpp"
 #include "env.hpp"
@@ -10,6 +10,15 @@
 
 namespace nivalis {
 namespace {
+
+// Uncomment to enable debug prints in newton's method
+// #define NEWTON_DEBUG
+
+#ifdef NEWTON_DEBUG
+#define NEWTON_PRINT(x) std::cout << (x)
+#else
+#define NEWTON_PRINT(x)
+#endif
 
 #define DIFF_NEXT if (!diff(ast, diff_arg_id)) return false
 #define PUSH(v) out.push_back(v)
@@ -23,7 +32,11 @@ namespace {
 
 void skip_ast(const Expr::ASTNode** ast) {
     const auto* init_pos = ast;
-    auto n_args = OpCode::n_args((*ast)->opcode);
+    auto opc = (*ast)->opcode;
+    size_t n_args = OpCode::n_args(opc);
+    if (opc == OpCode::call) {
+        n_args = (*ast)->call_info[1];
+    }
     ++*ast;
     for (size_t i = 0; i < n_args; ++i) skip_ast(ast);
 }
@@ -89,6 +102,9 @@ struct Differentiator {
         if (ast == nullptr) ast = &ast_root;
         using namespace OpCode;
         uint32_t opcode = (*ast)->opcode;
+        // std::cout << opcode << " " << diff_arg_id << " " << out.size() << " :: ";
+        // for (auto& i : out) { std::cout << i.opcode << " "; }
+        // std::cout << "\n";
         ++*ast;
         switch(opcode) {
             case null: PUSH(null); break;
@@ -102,8 +118,6 @@ struct Differentiator {
 
                           const auto& fexpr = env.funcs[fid].expr;
                           if (vis_asts.count(&fexpr.ast[0])) {
-                              std::cerr << "Differentiator: Recursion detected, stop ("
-                                  "This shouldn't happen, fix input validation in def_func!)\n";
                               // Prevent recursion/cycles
                               return false;
                           }
@@ -115,6 +129,15 @@ struct Differentiator {
                                   tmp = copy_ast(tmp, call_args[i]);
                               }
                               argv.push_back(std::move(call_args));
+                          }
+                          {
+                              if (n_args > 0) out.push_back(add);
+                              const Expr::ASTNode* f_astptr = &fexpr.ast[0];
+                              vis_asts.insert(&fexpr.ast[0]);
+                              if (!diff(&f_astptr)) {
+                                  return false;
+                              }
+                              vis_asts.erase(&fexpr.ast[0]);
                           }
                           for (size_t i = 0; i < n_args; ++i) {
                               if (i < n_args - 1) out.push_back(add);
@@ -211,7 +234,9 @@ struct Differentiator {
                           const Expr::ASTNode* tmp1 = *ast;
                           PUSH(mul); DIFF_NEXT; // df *
                           copy_ast(*ast, out); // g
-                          PUSH(mul); DIFF_NEXT; copy_ast(tmp1, out); // + dg * f
+                          PUSH(mul);
+                          DIFF_NEXT;
+                          copy_ast(tmp1, out); // + dg * f
                       }
                 break;
             case divi: {
@@ -442,30 +467,36 @@ double Expr::newton(uint64_t var_addr, double x0, Environment& env,
         return newton(var_addr, x0, env, eps_step,
                 eps_abs, max_iter, xmin, xmax, &deriv_expr, fx0, dfx0);
     }
+    NEWTON_PRINT("\n init@"); NEWTON_PRINT(x0);
     for (int i = 0; i < max_iter; ++i) {
         if (i || dfx0 == std::numeric_limits<double>::max()) {
             env.vars[var_addr] = x0;
             if (i || fx0 == std::numeric_limits<double>::max()) {
                 fx0 = (*this)(env);
                 if(std::isnan(fx0)) {
+                    NEWTON_PRINT(" FAIL f=NAN");
                     return std::numeric_limits<double>::quiet_NaN(); // Fail
                 }
             }
             dfx0 = (*deriv)(env);
             if(std::isnan(dfx0) || dfx0 == 0.) {
+                NEWTON_PRINT(" FAIL d=NAN");
                 return std::numeric_limits<double>::quiet_NaN(); // Fail
             }
         }
         double delta = fx0 / dfx0;
         x0 -= delta;
+        NEWTON_PRINT(" "); NEWTON_PRINT(x0);
         if (std::fabs(delta) < eps_step && std::fabs(fx0) < eps_abs) {
             // Found root
             return x0;
         }
         if (x0 < xmin || x0 > xmax) {
+            NEWTON_PRINT(" FAIL bounds");
             return std::numeric_limits<double>::quiet_NaN(); // Fail
         }
     }
+    NEWTON_PRINT(" FAIL iter");
     return std::numeric_limits<double>::quiet_NaN(); // Fail
 }
 }  // namespace nivalis

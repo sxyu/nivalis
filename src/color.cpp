@@ -66,7 +66,7 @@ std::string color::to_hex() const {
     strm << std::hex << t;
     std::string s;
     for (int i = 0; i < 6 - (int)strm.tellp(); ++i) {
-        s.push_back('0');        
+        s.push_back('0');
     }
     return s + strm.str();
 }

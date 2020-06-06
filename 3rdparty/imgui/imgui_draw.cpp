@@ -46,6 +46,9 @@ Index of this file:
 #endif
 #endif
 
+// Support for custom point type
+#include "point.hpp"
+
 // Visual Studio warnings
 #ifdef _MSC_VER
 #pragma warning (disable: 4127) // condition expression is constant
@@ -611,7 +614,8 @@ void ImDrawList::PrimQuadUV(const ImVec2& a, const ImVec2& b, const ImVec2& c, c
 
 // FIXME: Thickness anti-aliased lines cap are missing their AA fringe.
 // We avoid using the ImVec2 math operators here to reduce cost to a minimum for debug/non-inlined builds.
-void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32 col, bool closed, float thickness)
+template<class Vec2>
+void ImDrawList::AddPolyline(const Vec2* points, const int points_count, ImU32 col, bool closed, float thickness)
 {
     if (points_count < 2)
         return;
@@ -637,8 +641,8 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
         for (int i1 = 0; i1 < count; i1++)
         {
             const int i2 = (i1+1) == points_count ? 0 : i1+1;
-            const ImVec2& p1 = points[i1];
-            const ImVec2& p2 = points[i2];
+            const Vec2& p1 = points[i1];
+            const Vec2& p2 = points[i2];
 
             float dx = p2.x - p1.x;
             float dy = p2.y - p1.y;
@@ -690,9 +694,9 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
 
         for (int i1 = 0; i1 < points_count; i1++)
         {
-            const ImVec2& p1 = points[i1];
+            const Vec2& p1 = points[i1];
             const int i2 = (i1 + 1 == points_count) ? 0 : i1 + 1;
-            const ImVec2& p2 = points[i2];
+            const Vec2& p2 = points[i2];
             float dx2 = p1.x - p2.x;
             float dy2 = p1.y - p2.y;
             float sqlen2 = dx2 * dx2 + dy2 * dy2;
@@ -874,6 +878,10 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
         PrimUnreserve((int)unused_indices, (int)unused_vertices);
     }
 }
+
+// Explicit instantiation
+template void ImDrawList::AddPolyline<ImVec2>(const ImVec2* points, const int points_count, ImU32 col, bool closed, float thickness);
+template void ImDrawList::AddPolyline<nivalis::point>(const nivalis::point* points, const int points_count, ImU32 col, bool closed, float thickness);
 
 // We intentionally avoid using ImVec2 and its math operators here to reduce cost to a minimum for debug/non-inlined builds.
 void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_count, ImU32 col)
@@ -1170,10 +1178,17 @@ void ImDrawList::AddTriangleFilled(const ImVec2& p1, const ImVec2& p2, const ImV
 {
     if ((col & IM_COL32_A_MASK) == 0)
         return;
+    float det = (p2.y - p1.y) * (p3.x - p2.x) -
+              (p2.x - p1.x) * (p3.y - p2.y);
 
     PathLineTo(p1);
-    PathLineTo(p2);
-    PathLineTo(p3);
+    if (det < 0) {
+        PathLineTo(p2);
+        PathLineTo(p3);
+    } else {
+        PathLineTo(p3);
+        PathLineTo(p2);
+    }
     PathFillConvex(col);
 }
 

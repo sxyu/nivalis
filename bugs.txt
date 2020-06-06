@@ -1,0 +1,15 @@
+- Fix random crashes when making many mutual references (?)
+- Generally, derivative does not update when function definition updates
+    - Since derivatives are evaluated and optimized at parse time
+    - Currently, have hack when updates derivatives used to find crit points
+- When removing definition in GUI, function defined is not deleted
+- Sum/prod currently modify the iterating variable, which is unexpected
+- Need to implement expression output (if expression evals to constant)
+- Error should be associated with function, not at bottom of screen
+
+- Need to implement integral
+- Implement fractals
+- Implement 3D
+- UI
+    - Need to integrate sliders into expression editor
+    - Need folders
