@@ -385,6 +385,8 @@ let onInit = function() {
         handle: '.draggable',
         filter: '.inactive',
         animation: 150,
+        delay: 100,
+        delayOnTouchOnly: true,
         onMove: function (e) {
             if ($(e.related).hasClass('inactive')) return false;
             let from_name = e.dragged.id.substr(16);
