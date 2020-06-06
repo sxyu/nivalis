@@ -180,33 +180,33 @@ svg.icon {
 #sidebar .comment .function-name span{
     position: relative; top:-3px;
 }
-#sidebar .function-widget.inactive .pickr,
-#sidebar .function-widget.comment .pickr {
+#sidebar .color-picker {
+    padding: 0;
+    box-shadow: none;
+    width: 100%;
+    position: relative;
+    padding: 10px 0;
+    top: -3px;
+}
+#sidebar .color-picker .color-picker-icon {
+    display:block;
+    position:relative;
+    height: 5px;
+    overflow: hidden;
+    margin: auto;
+    border-radius: 0.2em;
+    width:2.2em;
+}
+#sidebar .function-widget.inactive .color-picker svg,
+#sidebar .function-widget.comment .color-picker svg {
     display:none;
 }
-#sidebar .function-widget .pickr {
-    position: relative;
-    left: 50%;
-    transform: translate(-50%, 0);
-    min-width: 60%;
-    max-height: 25px;
-    min-height: 25px;
-    border-radius: 0;
-    box-shadow: none;
-    overflow: hidden;
-    padding: 0;
-    line-height: 0.5;
-    top: 0;
-    opacity: 0.8;
-}
-#sidebar .function-widget .pickr button {
-    position: relative;
-    min-height: 25px;
-    max-height: 25px;
-    padding: 0;
-    z-index: 10;
-    border-top: 10px solid transparent;
-    border-bottom: 10px solid transparent;
+#sidebar .function-widget .color-picker svg {
+    width: 100%;
+    height: 100%;
+    position:absolute;
+    top:0;
+    left:0;
 }
 #sidebar .function-expr-wrapper {
     flex-grow: 2;

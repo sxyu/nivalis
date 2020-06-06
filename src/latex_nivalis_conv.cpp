@@ -268,7 +268,7 @@ std::string latex_to_nivalis(const std::string& expr_in) {
                 if (!std::isalpha(last_nonspace) || expr[i] != '(')  // not beginning of call
                     tmp.push_back('*');
             } else if (sub_level == 0 &&
-                       util::is_identifier(expr[i]) &&
+                       util::is_identifier(expr[i]) && last_nonspace != '$' && last_nonspace != '@' &&
                        util::is_identifier(last_nonspace) &&
                        util::is_numeric(expr[i]) !=
                        util::is_numeric(last_nonspace)) {

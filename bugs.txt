@@ -1,15 +1,36 @@
-- Fix random crashes when making many mutual references (?)
-- Generally, derivative does not update when function definition updates
-    - Since derivatives are evaluated and optimized at parse time
+- Generally, derivatives of dependent functions do not update when function definition updates
+  (also applies to use of f0, f1, etc)
+    - Happens because derivatives are evaluated and optimized at parse time
     - Currently, have hack when updates derivatives used to find crit points
-- When removing definition in GUI, function defined is not deleted
-- Sum/prod currently modify the iterating variable, which is unexpected
-- Need to implement expression output (if expression evals to constant)
-- Error should be associated with function, not at bottom of screen
+        - Slow, incomplete bc doesn't work for d/dx notation
+    - Solution: keep definition dependency tree, update tree on definition change
+- Sum/prod currently define the iterating variable, which is unexpected
+  In a similar vein, plotter currently defines x,y,t which is not ideal
+    - Cause: currently need to define variable (explicit off) for parser to parse without erroring
+    - Solution: add 'relocate' mode in addition to explicit on/off where undefined variables added to 'parser relocation table' but not env
+    - Solution: add temp variables stack in parser or similar solution
+- Implement expression output display (if expression evals to constant AND is not an equation)
+    - e.g. 3+3 should output 6 rather than draw line y=6
+- Error should be associated with function, not at bottom of functions section
 
-- Need to implement integral
-- Implement fractals
-- Implement 3D
 - UI
+    - When deleting definition/using function for something else in GUI, function defined in env is not deleted
     - Need to integrate sliders into expression editor
-    - Need folders
+    - Folders
+    - GUI to add polygon, text, etc
+    - Duplicate function
+- Vector/matrix-based evaluation
+- Implement Julia set
+- Implement integrals
+- Mobile keyboard
+- Data I/O and data plotting
+- Graph visualization
+- Implement 3D plot
+- Spcial handling for conic sections
+- Basic equation solving before plot
+- Improve polygon triangulation/fill quality
+- Shell:
+    - Add methods to manage functions (add function, update expression)
+    - Ban changing definitions made in plotter from shell
+    - Add if, while
+    - Advanced CAS capabilities

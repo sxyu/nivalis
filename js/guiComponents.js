@@ -50,7 +50,7 @@ var FuncEdit = {
             case Nivalis.FUNC_TYPE_PARAMETRIC:
                 return '<span title="Parametric">(x,y)</span>';
             case Nivalis.FUNC_TYPE_POLAR:
-                return '<span title="Polar"><svg style="width:22px;height:22px" viewBox="0 0 24 24"><path fill="#888" d="M20,19H4.09L14.18,4.43L15.82,5.57L11.28,12.13C12.89,12.96 14,14.62 14,16.54C14,16.7 14,16.85 13.97,17H20V19M7.91,17H11.96C12,16.85 12,16.7 12,16.54C12,15.28 11.24,14.22 10.14,13.78L7.91,17Z" /></svg></span>';
+                return '<span title="Polar"><svg style="width:100%;height:100%" viewBox="0 0 24 24"><path fill="#888" d="M20,19H4.09L14.18,4.43L15.82,5.57L11.28,12.13C12.89,12.96 14,14.62 14,16.54C14,16.7 14,16.85 13.97,17H20V19M7.91,17H11.96C12,16.85 12,16.7 12,16.54C12,15.28 11.24,14.22 10.14,13.78L7.91,17Z" /></svg></span>';
             case Nivalis.FUNC_TYPE_FUNC_DEFINITION:
                 return '<span title="Definition" style="color:#999">def</span>';
             case Nivalis.FUNC_TYPE_COMMENT:
@@ -61,7 +61,7 @@ var FuncEdit = {
                 else
                     return '<span title="Point/polyline"><svg style="width:22px;height:22px" viewBox="0 0 24 24"><path fill="#888" d="M2 3V9H4.95L6.95 15H6V21H12V16.41L17.41 11H22V5H16V9.57L10.59 15H9.06L7.06 9H8V3M4 5H6V7H4M18 7H20V9H18M8 17H10V19H8Z" /></svg></span>';
             case Nivalis.FUNC_TYPE_GEOM_RECT:
-                    return '<span title="Rectangle"><svg style="width:22px;height:22px" viewBox="0 0 24 24"><path fill="#888" d="M4,6V19H20V6H4M18,17H6V8H18V17Z"/></svg></span>';
+                    return '<span title="Rectangle"><svg style="width:22px;height:22px" viewBox="0 0 24 24"><path fill="#888" d="M2,2H8V4H16V2H22V8H20V16H22V22H16V20H8V22H2V16H4V8H2V2M16,8V6H8V8H6V16H8V18H16V16H18V8H16M4,4V6H6V4H4M18,4V6H20V4H18M4,18V20H6V18H4M18,18V20H20V18H18Z" /></svg></span>';
             case Nivalis.FUNC_TYPE_GEOM_CIRCLE:
                     return '<span title="Circle"><svg style="width:22px;height:22px" viewBox="0 0 24 24"><path fill="#888" d="M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/><svg></span>';
             case Nivalis.FUNC_TYPE_GEOM_ELLIPSE:
@@ -79,6 +79,7 @@ var FuncEdit = {
             $('#function-widget-' +  name).removeClass('comment');
         }
     },
+    last_focus: 0,
     new_func: function(add) {
         let fidx = FuncEdit.func_names.length;
         if (add) {
@@ -189,6 +190,7 @@ var FuncEdit = {
                 Nivalis.set_curr_func(idx);
             }
             FuncEdit.func_mfields[idx].focus();
+            FuncEdit.last_focus = idx;
         };
         $('#function-expr-wrapper-' + fname).click(tb_mousedown);
         editor_tb.mousedown(tb_mousedown);
@@ -546,6 +548,7 @@ var resync = function() {
         Sliders.new_slider(false);
     }
     FuncEdit.func_mfields[Nivalis.get_curr_func()].focus();
+    FuncEdit.last_focus = Nivalis.num_funcs() - 2;
     ViewConfig.updateViewBounds();
     ViewConfig.updateViewOptions();
 };

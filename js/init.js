@@ -20,8 +20,7 @@ let setupHandlers = function() {
         }
         Nivalis.on_key(e.which, e.ctrlKey, e.shiftKey, e.altKey);
         if (e.which === 69) {
-            let tb = $('#function-expr-' + FuncEdit.func_names[
-                Nivalis.get_curr_func()]);
+            let tb = $('#function-expr-' + FuncEdit.func_names[FuncEdit.last_focus]);
             tb.mousedown();
             tb.mouseup();
             e.preventDefault();
