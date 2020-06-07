@@ -6,7 +6,7 @@ body {
 body h5, body h6 {
     font-weight: 400;
 }
-.emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+.emscripten { padding-right: 0; margin: 0; display: block; }
 div.emscripten { text-align: center; }
 div.emscripten_border { border: none; }
 canvas.emscripten { border: 0px none; background-color: black }
