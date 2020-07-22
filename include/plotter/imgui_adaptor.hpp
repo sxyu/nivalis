@@ -31,6 +31,7 @@ struct ImGuiDrawListGraphicsAdaptor {
     void string(float x, float y,
                 const std::string& s, const color::color& c,
                 float align_x = 0.0, float align_y = 0.0);
+    void image(float x, float y, float w, float h, char* data_rgb, int cols, int rows);
     ImDrawList* draw_list = nullptr;
     int swid, shigh;
 };

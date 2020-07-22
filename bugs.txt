@@ -16,11 +16,12 @@
 - UI
     - When deleting definition/using function for something else in GUI, function defined in env is not deleted
     - Need to integrate sliders into expression editor
+    - tmin/max, slider bounds should be math fields, rather than numbers
     - Folders
     - GUI to add polygon, text, etc
     - Duplicate function
-- Vector/matrix-based evaluation
-- Implement Julia set
+- Vector/matrix support (need to modify evaluation)
+- Implement Mandelbrot/Julia set
 - Implement integrals
 - Mobile keyboard
 - Data I/O and data plotting
@@ -34,3 +35,6 @@
     - Ban changing definitions made in plotter from shell
     - Add if, while
     - Advanced CAS capabilities
+    - Replace ImGui, at least for web; unnecessary since no longer using it for GUI
+        - Need to build string, polyline, ellipse drawing
+- Weird crash on firefox after waking from sleep (seems to be an emscripten issue)

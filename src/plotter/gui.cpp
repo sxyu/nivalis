@@ -71,6 +71,7 @@ int detect_func_type(const std::string& expr_str, std::string& lhs, std::string&
             else if (cmd == "circ" || cmd == "circle")
                 return Function::FUNC_TYPE_GEOM_CIRCLE | type_mod;
             else if (cmd == "ellipse") return Function::FUNC_TYPE_GEOM_ELLIPSE | type_mod;
+            else if (cmd == "mandelbrot") return Function::FUNC_TYPE_FRACTAL_MANDELBROT;
             lhs.clear();
         }
     }

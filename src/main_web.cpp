@@ -508,7 +508,6 @@ bool init_gl() {
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
     glClearColor(1., 1., 1., 1.); // Clear white
     return true;
 }

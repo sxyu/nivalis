@@ -94,6 +94,8 @@ struct Function {
         FUNC_TYPE_GEOM_ELLIPSE = 152,            // ellipse
         FUNC_TYPE_GEOM_TEXT = 160,               // text (no modifiers)
 
+        FUNC_TYPE_FRACTAL_MANDELBROT = 224,      // Mandelbrot (lol)
+
         FUNC_TYPE_COMMENT = 256,         // comment
     };
     int type;
@@ -829,6 +831,7 @@ public:
                                              // render() populates it
                                              // draw() draws these shapes to
                                              // an adaptor
+    std::string bg_bitmap;                   // Background bitmap
 
     std::vector<PointMarker> pt_markers;    // Point markers
                                             // render() populates non-passive

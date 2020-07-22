@@ -156,8 +156,8 @@ std::string latex_to_nivalis(const std::string& expr_in) {
     expr = util::str_replace(expr, "\\le", "<=");
     expr = util::str_replace(expr, "\\ge", ">=");
     expr = util::str_replace(expr, "\\ne", "!=");
-    expr = util::str_replace(expr, "\\wedge", "&");
-    expr = util::str_replace(expr, "\\vee", "|");
+    expr = util::str_replace(expr, "\\operatorname{and}", "&");
+    expr = util::str_replace(expr, "\\operatorname{or}", "|");
     expr = util::str_replace(expr, "\\operatorname{at}", "@");
 
     static const char*  SPECIAL_COMMANDS[] = {
@@ -165,7 +165,8 @@ std::string latex_to_nivalis(const std::string& expr_in) {
         "rect", "frect", "Frect",
         "circ", "fcirc", "Fcirc",
         "ellipse", "fellipse", "Fellipse",
-        "text"
+        "text",
+        "mandelbrot"
     };
 
     // Remove operatorname
@@ -179,7 +180,7 @@ std::string latex_to_nivalis(const std::string& expr_in) {
     // Remap drawing commands
     for (size_t i = 0; i < sizeof(SPECIAL_COMMANDS) / sizeof(SPECIAL_COMMANDS[0]); ++i) {
         const size_t len = strlen(SPECIAL_COMMANDS[i]);
-        if (expr.size() > len + 1 &&
+        if (expr.size() > len &&
                 expr[0] == '\\' && expr.compare(1, len, SPECIAL_COMMANDS[i]) == 0) {
             expr[0] = '%';
         }

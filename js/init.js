@@ -289,8 +289,8 @@ let onInit = function() {
         supSubsRequireOperand: true,
         charsThatBreakOutOfSupSub: '=<>',
         autoSubscriptNumerals: true,
-        autoCommands: 'pi Pi theta vartheta Theta alpha beta gamma Gamma delta Delta zeta psi Psi phi Phi mu nu epsilon varepsilon eta kappa Kappa chi omega Omega tau Tau rho varrho iota xi Xi sqrt nthroot sum prod int choose binom and or',
-        autoOperatorNames: 'sin cos tan arcsin arccos arctan sinh cosh tanh sgn exp log ln mod gcd lcm floor ceil round poly fpoly Fpoly rect frect Frect circ fcirc Fcirc ellipse fellipse Fellipse text lgamma fact ifact rifact fafact at',
+        autoCommands: 'pi Pi theta vartheta Theta alpha beta gamma Gamma delta Delta zeta psi Psi phi Phi mu nu epsilon varepsilon eta kappa Kappa chi omega Omega tau Tau rho varrho iota xi Xi sqrt nthroot sum prod int choose binom',
+        autoOperatorNames: 'sin cos tan arcsin arccos arctan sinh cosh tanh sgn exp log ln mod gcd lcm floor ceil round poly fpoly Fpoly rect frect Frect circ fcirc Fcirc ellipse fellipse Fellipse text lgamma fact ifact rifact fafact at mandelbrot and or',
         maxDepth: 1,
         // substituteTextarea: function() {
         //     return document.createElement('textarea');

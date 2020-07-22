@@ -398,6 +398,7 @@ void Plotter::render(const View& view) {
                         draw_buf.push_back(std::move(obj));
                     }
                 }
+                break;
             case Function::FUNC_TYPE_GEOM_TEXT:
                 {
                     if (func.exprs.size() != 2) break;
@@ -408,6 +409,10 @@ void Plotter::render(const View& view) {
                     obj.points = { { func.exprs[0](env), func.exprs[1](env) } };
                     obj.str = func.str;
                     draw_buf.push_back(std::move(obj));
+                }
+                break;
+            case Function::FUNC_TYPE_FRACTAL_MANDELBROT:
+                {
                 }
                 break;
         }
