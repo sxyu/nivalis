@@ -1,24 +1,25 @@
 #include "parser.hpp"
 
-#include<iostream>
-#include<vector>
-#include<map>
-#include<string>
-#include<sstream>
-#include<cmath>
-#include<cctype>
-#include<algorithm>
+#include <iostream>
+#include <vector>
+#include <map>
+#include <string>
+#include <sstream>
+#include <cmath>
+#include <cctype>
+#include <algorithm>
 #include "util.hpp"
 namespace nivalis {
 
-    // Set error message and return false
-#define PARSE_ERR(errmsg) do { \
-     std::stringstream error_msg_stream; \
-     error_msg_stream << errmsg;\
-     if (error_msg) error_msg->append(error_msg_stream.str()); \
-     if(!quiet) std::cout << errmsg; \
-     return false; \
-   } while(false)
+// Set error message and return false
+#define PARSE_ERR(errmsg)                                         \
+    do {                                                          \
+        std::stringstream error_msg_stream;                       \
+        error_msg_stream << errmsg;                               \
+        if (error_msg) error_msg->append(error_msg_stream.str()); \
+        if (!quiet) std::cout << errmsg;                          \
+        return false;                                             \
+    } while (false)
 
 struct ParseSession {
     enum Priority {
@@ -37,11 +38,15 @@ struct ParseSession {
     // env: parsing environment (to check/define variables)
     // mode_explicit: if true, errors when encounters undefined variable;
     //                else defines it
-    ParseSession(const std::string& expr, Environment& env, std::string* error_msg,
-                 bool mode_explicit, bool quiet, size_t max_args)
-        : env(env), expr(expr), error_msg(error_msg),
-            mode_explicit(mode_explicit), quiet(quiet), max_args(max_args) {
-    }
+    ParseSession(const std::string& expr, Environment& env,
+                 std::string* error_msg, bool mode_explicit, bool quiet,
+                 size_t max_args)
+        : env(env),
+          expr(expr),
+          error_msg(error_msg),
+          mode_explicit(mode_explicit),
+          quiet(quiet),
+          max_args(max_args) {}
 
     Expr parse() {
         tok_link.resize(expr.size(), -1);
@@ -54,7 +59,7 @@ struct ParseSession {
         return result;
     }
 
-private:
+   private:
     // Make token link table
     bool _mk_tok_link() {
         // Parenthesis matching
@@ -67,8 +72,8 @@ private:
                 if (lit_start == -1) lit_start = pos;
             } else {
                 if (lit_start != -1) {
-                    tok_link[lit_start] = pos-1;
-                    tok_link[pos-1] = lit_start;
+                    tok_link[lit_start] = pos - 1;
+                    tok_link[pos - 1] = lit_start;
                     lit_start = -1;
                 }
             }
@@ -102,66 +107,71 @@ private:
     // Recursive parse procedure
     bool _parse(int64_t left, int64_t right, int pri) {
         // Remove spaces
-        while (std::isspace(expr[right-1])) --right;
+        while (std::isspace(expr[right - 1])) --right;
         while (std::isspace(expr[left])) ++left;
         if (pri >= (int)PRI_MUL_DIV) {
             // Unary minus/plus on left
-            while (left < right &&
-                    (expr[left] == '+' || expr[left] == '-')) {
-                if (expr[left] == '-')
-                    result.ast.push_back(OpCode::unaryminus);
+            while (left < right && (expr[left] == '+' || expr[left] == '-')) {
+                if (expr[left] == '-') result.ast.push_back(OpCode::unaryminus);
                 ++left;
             }
         }
-        switch(pri) {
-            case PRI_AND: case PRI_OR: case PRI_POW:
-                {
-                    const uint32_t opc =
-                        pri == PRI_AND ? OpCode::land :
-                        pri == PRI_OR ? OpCode::lor :
-                        OpCode::power;
-                    const char pat = OpCode::to_char(opc);
-                    for (int64_t i = left; i < right; ++i) {
-                        const char c = expr[i];
-                        if (c == pat) {
-                            result.ast.push_back(opc);
-                            return _parse(left, i, pri + 1) &&
-                                   _parse(i + 1, right, pri);
-                        }
-                        else if (tok_link[i] > i) {
-                            i = tok_link[i];
-                        }
+        switch (pri) {
+            case PRI_AND:
+            case PRI_OR:
+            case PRI_POW: {
+                const uint32_t opc =
+                    pri == PRI_AND
+                        ? OpCode::land
+                        : pri == PRI_OR ? OpCode::lor : OpCode::power;
+                const char pat = OpCode::to_char(opc);
+                for (int64_t i = left; i < right; ++i) {
+                    const char c = expr[i];
+                    if (c == pat) {
+                        result.ast.push_back(opc);
+                        return _parse(left, i, pri + 1) &&
+                               _parse(i + 1, right, pri);
+                    } else if (tok_link[i] > i) {
+                        i = tok_link[i];
                     }
                 }
-                break;
+            } break;
             case PRI_COMPARISON:
                 for (int64_t i = right - 1; i >= left; --i) {
                     const char c = expr[i];
                     if ((c == '<' || c == '>' || c == '=')) {
                         uint32_t opcode;
                         int64_t off = 0;
-                        if (c == '='){
+                        if (c == '=') {
                             if (i > left) {
-                                const char pre_c = expr[i-1];
+                                const char pre_c = expr[i - 1];
                                 off = 1;
-                                switch(pre_c) {
-                                    case '!': opcode = OpCode::ne; break;
-                                    case '=': opcode = OpCode::eq; break;
-                                    case '<': opcode = OpCode::le; break;
-                                    case '>': opcode = OpCode::ge; break;
+                                switch (pre_c) {
+                                    case '!':
+                                        opcode = OpCode::ne;
+                                        break;
+                                    case '=':
+                                        opcode = OpCode::eq;
+                                        break;
+                                    case '<':
+                                        opcode = OpCode::le;
+                                        break;
+                                    case '>':
+                                        opcode = OpCode::ge;
+                                        break;
                                     default:
-                                     off = 0;
-                                     opcode = OpCode::eq;
+                                        off = 0;
+                                        opcode = OpCode::eq;
                                 }
-                            } else opcode = OpCode::eq;
+                            } else
+                                opcode = OpCode::eq;
                         } else {
                             opcode = c == '<' ? OpCode::lt : OpCode::gt;
                         }
                         result.ast.push_back(opcode);
                         return _parse(left, i - off, pri) &&
                                _parse(i + 1, right, pri + 1);
-                    }
-                    else if (~tok_link[i] && tok_link[i] < i) {
+                    } else if (~tok_link[i] && tok_link[i] < i) {
                         i = tok_link[i];
                     }
                 }
@@ -169,389 +179,377 @@ private:
             case PRI_ADD_SUB:
                 for (int64_t i = right - 1; i >= left; --i) {
                     const char c = expr[i];
-                    if ((c == '+' || c == '-') &&
-                            i > left && !util::is_operator(expr[i-1])) {
-                        result.ast.push_back(c == '+' ? OpCode::add :
-                                OpCode::sub);
-                        return _parse(left, i, pri) && _parse(i + 1, right, pri + 1);
-                    }
-                    else if (~tok_link[i] && tok_link[i] < i) {
+                    if ((c == '+' || c == '-') && i > left &&
+                        !util::is_operator(expr[i - 1])) {
+                        result.ast.push_back(c == '+' ? OpCode::add
+                                                      : OpCode::sub);
+                        return _parse(left, i, pri) &&
+                               _parse(i + 1, right, pri + 1);
+                    } else if (~tok_link[i] && tok_link[i] < i) {
                         i = tok_link[i];
                     }
                 }
                 break;
-            case PRI_MUL_DIV:
-                {
-                    if (left < right - 1) {
-                        if (~tok_link[left] &&
-                                tok_link[left]+1 < static_cast<int64_t>(expr.size()) &&
-                                (expr[tok_link[left]+1] == '(' &&
-                                 tok_link[tok_link[left]+1] < right - 1)) {
-                            // Special form
-                            int64_t funname_end = tok_link[left] + 1;
-                            int64_t arg_end =
-                                expr[tok_link[left]+1] == '(' ?
-                                tok_link[tok_link[left]+1] + 1 :
-                                tok_link[left] + 1;
-                            const std::string func_name = expr.substr(left, funname_end - left);
+            case PRI_MUL_DIV: {
+                if (left < right - 1) {
+                    if (~tok_link[left] &&
+                        tok_link[left] + 1 <
+                            static_cast<int64_t>(expr.size()) &&
+                        (expr[tok_link[left] + 1] == '(' &&
+                         tok_link[tok_link[left] + 1] < right - 1)) {
+                        // Special form
+                        int64_t funname_end = tok_link[left] + 1;
+                        int64_t arg_end = expr[tok_link[left] + 1] == '('
+                                              ? tok_link[tok_link[left] + 1] + 1
+                                              : tok_link[left] + 1;
+                        const std::string func_name =
+                            expr.substr(left, funname_end - left);
 
-                            size_t var_end = -1, comma_pos = -1;
-                            for (size_t k = funname_end+1; k < static_cast<size_t>(arg_end - 1); ++k) {
-                                if (expr[k] == '=') var_end = k;
-                                else if (~var_end && expr[k] == ',') comma_pos = k;
-                            }
-                            if (func_name == "sum" || func_name == "prod") {
-                                // Sum/prod special forms
-                                if (!~var_end || !~comma_pos) {
-                                    PARSE_ERR(func_name << " expected argument syntax "
-                                            "(<var>=<begin>,<end>)\n");
-                                }
-                                result.ast.push_back(func_name[0] == 's' ?
-                                        OpCode::sums : OpCode::prods);
-                                std::string varname =
-                                    expr.substr(funname_end + 1, var_end -
-                                            funname_end-1);
-                                result.ast.back().ref = env.addr_of(varname, false);
-                                if (!_parse(var_end+1, comma_pos, _PRI_LOWEST)) return false;
-
-                                if (!_parse(comma_pos+1, arg_end-1, _PRI_LOWEST)) return false;
-                                begin_thunk();
-                                if (!_parse(arg_end, right, pri)) return false;
-                                end_thunk();
-                                return true;
-                            } else if (func_name == "int") {
-                                PARSE_ERR("Integral is not implemented yet\n");
-                            } else if (func_name.size() >= 4 &&
-                                    func_name.substr(0, 4) == "diff") {
-                                // Derivative special form
-                                std::string ord_str = func_name.substr(4);
-                                int ord = 1;
-                                if (ord_str.size()) {
-                                    if (!util::is_whole_number(ord_str)) {
-                                        ord = -1;
-                                    } else {
-                                        ord = std::atoi(ord_str.c_str());
-                                    }
-                                    if (ord > 5) {
-                                        PARSE_ERR("Derivative order is too high\n");
-                                    }
-                                }
-                                if (ord >= 0) {
-                                    std::string varname;
-                                    if (~var_end) varname = expr.substr(funname_end + 1, var_end - funname_end - 1);
-                                    else varname = expr.substr(funname_end + 1, arg_end - funname_end-2);
-                                    if (varname.empty() || !util::is_varname(varname)) {
-                                        PARSE_ERR(func_name << " expected argument syntax "
-                                                "(<var>)\n");
-                                    }
-                                    auto addr = env.addr_of(varname, false);
-                                    decltype(result.ast) tmp;
-                                    tmp.swap(result.ast);
-                                    if (!_parse(arg_end, right, pri)) return false;
-                                    Expr diff = result;
-                                    for (int i = 0; i < ord; ++i) {
-                                        diff = diff.diff(addr, env);
-                                        diff.optimize();
-                                    }
-                                    tmp.swap(result.ast);
-                                    size_t sz = result.ast.size();
-                                    result.ast.resize(sz + diff.ast.size());
-                                    std::copy(diff.ast.begin(), diff.ast.end(), result.ast.begin() + sz);
-                                    return true;
-                                }
-                            }
+                        size_t var_end = -1, comma_pos = -1;
+                        for (size_t k = funname_end + 1;
+                             k < static_cast<size_t>(arg_end - 1); ++k) {
+                            if (expr[k] == '=')
+                                var_end = k;
+                            else if (~var_end && expr[k] == ',')
+                                comma_pos = k;
                         }
-                        if (util::is_varname_first(expr[left])) {
-                            size_t space_pos = expr.find(' ', left);
-                            if (space_pos != std::string::npos && space_pos < right - 1) {
-                                std::string_view sv = std::string_view(expr).substr(left, space_pos - left);
-                                if (util::is_varname(sv)) {
-                                    const auto& func_opcodes = OpCode::funcname_to_opcode_map();
-                                    auto it = func_opcodes.find(sv);
-                                    if (it != func_opcodes.end() && ~it->second &&
-                                            OpCode::n_args(it->second) == 1) {
-                                        // Single argument function with no bracket, e.g. sin x
-                                        result.ast.push_back(it->second);
-                                        return _parse(space_pos + 1, right, pri);
-                                    }
-                                }
+                        if (func_name == "sum" || func_name == "prod") {
+                            // Sum/prod special forms
+                            if (!~var_end || !~comma_pos) {
+                                PARSE_ERR(func_name
+                                          << " expected argument syntax "
+                                             "(<var>=<begin>,<end>)\n");
                             }
+                            result.ast.push_back(func_name[0] == 's'
+                                                     ? OpCode::sums
+                                                     : OpCode::prods);
+                            std::string varname = expr.substr(
+                                funname_end + 1, var_end - funname_end - 1);
+                            result.ast.back().ref = env.addr_of(varname, false);
+                            if (!_parse(var_end + 1, comma_pos, _PRI_LOWEST))
+                                return false;
+
+                            if (!_parse(comma_pos + 1, arg_end - 1,
+                                        _PRI_LOWEST))
+                                return false;
+                            begin_thunk();
+                            if (!_parse(arg_end, right, pri)) return false;
+                            end_thunk();
+                            return true;
                         }
                     }
-
-                    for (int64_t i = right - 1; i >= left; --i) {
-                        const char c = expr[i];
-                        if (c == '*' || c == '/' || c == '%') {
-                            result.ast.push_back(c == '*' ? OpCode::mul : (
-                                        c == '/' ? OpCode::divi : OpCode::mod));
-                            return _parse(left, i, pri) && _parse(i + 1, right, pri);
-                        }
-                        else if (~tok_link[i] && tok_link[i] < i) {
-                            i = tok_link[i];
+                    if (util::is_varname_first(expr[left])) {
+                        size_t space_pos = expr.find(' ', left);
+                        if (space_pos != std::string::npos &&
+                            space_pos < right - 1) {
+                            std::string_view sv = std::string_view(expr).substr(
+                                left, space_pos - left);
+                            if (util::is_varname(sv)) {
+                                const auto& func_opcodes =
+                                    OpCode::funcname_to_opcode_map();
+                                auto it = func_opcodes.find(sv);
+                                if (it != func_opcodes.end() && ~it->second &&
+                                    OpCode::n_args(it->second) == 1) {
+                                    // Single argument function with no bracket,
+                                    // e.g. sin x
+                                    result.ast.push_back(it->second);
+                                    return _parse(space_pos + 1, right, pri);
+                                }
+                            }
                         }
                     }
                 }
-                break;
-            case PRI_BRACKETS:
-                {
-                    // Fact
-                    while (left < right && expr[right-1] == '!') {
-                        // result.ast.push_back(OpCode::factb); // integer
-                        result.ast.push_back(OpCode::tgammab);  // gamma
-                        result.ast.push_back(OpCode::add);
-                        result.ast.push_back(1.0);
-                        --right;
-                    }
-                    const char c = expr[left], cr = expr[right-1];
-                    if (left >= right) {
-                        PARSE_ERR("Incomplete expression, please make sure you filled in all arguments\n");
-                    }
-                    if ((c == '(' && cr == ')') ||
-                            (c == '[' && cr == ']')) {
-                        // Parentheses
-                        if (tok_link[left] != right - 1) {
-                            PARSE_ERR("We couldn't parse '" <<
-                                    expr.substr(left, right - left) <<
-                                    "'\n");;
-                        }
-                        return _parse(left + 1, right - 1, _PRI_LOWEST);
-                    } if (c == '{' && cr == '}') {
-                        // Conditional clause
-                        int64_t stkh = 0, last_begin = left+1;
-                        bool last_colon = false;
-                        size_t thunk_beg;
-                        size_t nest_depth = 0;
-                        for (int64_t i = left + 1; i < right - 1; ++i) {
-                            const char cc = expr[i];
-                            if (util::is_open_bracket(cc)) {
-                                ++stkh;
-                            } else if (util::is_close_bracket(cc)) {
-                                --stkh;
-                            } else if (stkh == 0) {
-                                if (cc == ':') {
-                                    if (last_colon) {
-                                        PARSE_ERR("Syntax error: consecutive : "
-                                                "in conditional clause\n");
-                                    }
-                                    result.ast.push_back(OpCode::bnz);
-                                    if (!_parse(last_begin, i, _PRI_LOWEST)) return false;
-                                    last_begin = i+1;
-                                    while(std::isspace(expr[last_begin]))
-                                        ++last_begin;
-                                    last_colon = true;
-                                    begin_thunk();
-                                }
-                                else if (cc == ',') {
-                                    if (!last_colon && i > left+1) {
-                                        PARSE_ERR("Syntax error: consecutive , "
-                                                "in conditional clause\n");
-                                    }
-                                    if (!_parse(last_begin, i, _PRI_LOWEST)) return false;
-                                    end_thunk();
-                                    begin_thunk();
-                                    ++nest_depth;
-                                    last_begin = i+1;
-                                    while(std::isspace(expr[last_begin])) ++last_begin;
-                                    last_colon = false;
-                                }
-                            }
-                        }
-                        if (!_parse(last_begin, right - 1, _PRI_LOWEST)) return false;
-                        if (last_colon) {
-                            thunk_beg = result.ast.size();
-                            end_thunk();
-                            begin_thunk();
-                            result.ast.push_back(OpCode::null);
-                            end_thunk();
-                        }
-                        for (size_t t = 0; t < nest_depth; ++t) {
-                            end_thunk();
-                        }
-                        return true;
-                    } else if (cr == ')' && ~tok_link[left]) {
-                        // Function
-                        int64_t funname_end = tok_link[left] + 1;
-                        int64_t funname_end_nospace = funname_end;
-                        while (funname_end < right && std::isspace(expr[funname_end]))
-                            ++funname_end;
-                        if (expr[funname_end] != '(') {
-                            PARSE_ERR("Invalid function call syntax\n");
-                        }
-                        const std::string func_name =
-                            expr.substr(left, funname_end_nospace - left);
 
-                        uint32_t func_opcode = -1;
-                        size_t expected_argcount = -1;
-
-                        // First look at user-defined functions
-                        auto func_addr = env.addr_of_func(func_name);
-                        if (func_addr != -1) {
-                            expected_argcount = env.funcs[func_addr].n_args;
-                            // Add call
-                            result.ast.push_back(Expr::ASTNode::call((uint32_t) func_addr,
-                                        (uint32_t)expected_argcount));
-                        } else {
-                            // Else, look at built-in functions
-                            const auto& func_opcodes = OpCode::funcname_to_opcode_map();
-                            auto it = func_opcodes.find(func_name);
-                            if (it != func_opcodes.end()) {
-                                func_opcode = it->second;
-                                if (func_opcode == -1) {
-                                    // Special handling of fake commands
-                                    if (func_name[0] == 'f') {
-                                        result.ast.push_back(OpCode::tgammab);
-                                        result.ast.push_back(OpCode::add);
-                                        result.ast.push_back(1.0);
-                                    } else if (func_name[0] == 'N') {
-                                        result.ast.push_back(OpCode::mul);
-                                        result.ast.push_back(1. / sqrt(2* M_PI));
-                                        result.ast.push_back(OpCode::expb);
-                                        result.ast.push_back(OpCode::mul);
-                                        result.ast.push_back(-0.5);
-                                        result.ast.push_back(OpCode::sqrb);
-                                    }
-                                } else {
-                                    result.ast.push_back(func_opcode);
+                for (int64_t i = right - 1; i >= left; --i) {
+                    const char c = expr[i];
+                    if (c == '*' || c == '/' || c == '%') {
+                        result.ast.push_back(c == '*' ? OpCode::mul
+                                                      : OpCode::divi);
+                        return _parse(left, i, pri) &&
+                               _parse(i + 1, right, pri);
+                    } else if (~tok_link[i] && tok_link[i] < i) {
+                        i = tok_link[i];
+                    }
+                }
+            } break;
+            case PRI_BRACKETS: {
+                // Conj
+                while (left < right && expr[right - 1] == '\'') {
+                    result.ast.push_back(OpCode::conjb);
+                    --right;
+                }
+                const char c = expr[left], cr = expr[right - 1];
+                if (left >= right) {
+                    PARSE_ERR(
+                        "Incomplete expression, please make sure you filled in "
+                        "all arguments\n");
+                }
+                if ((c == '(' && cr == ')') || (c == '[' && cr == ']')) {
+                    // Parentheses
+                    if (tok_link[left] != right - 1) {
+                        PARSE_ERR("We couldn't parse '"
+                                  << expr.substr(left, right - left) << "'\n");
+                        ;
+                    }
+                    return _parse(left + 1, right - 1, _PRI_LOWEST);
+                }
+                if (c == '{' && cr == '}') {
+                    // Conditional clause
+                    int64_t stkh = 0, last_begin = left + 1;
+                    bool last_colon = false;
+                    size_t thunk_beg;
+                    size_t nest_depth = 0;
+                    for (int64_t i = left + 1; i < right - 1; ++i) {
+                        const char cc = expr[i];
+                        if (util::is_open_bracket(cc)) {
+                            ++stkh;
+                        } else if (util::is_close_bracket(cc)) {
+                            --stkh;
+                        } else if (stkh == 0) {
+                            if (cc == ':') {
+                                if (last_colon) {
+                                    PARSE_ERR(
+                                        "Syntax error: consecutive : "
+                                        "in conditional clause\n");
                                 }
-                                expected_argcount = OpCode::n_args(func_opcode);
-                            }
-                        }
-                        if (~expected_argcount) {
-                            // Valid function, process args
-                            int64_t stkh = 0, last_begin = funname_end + 1;
-                            size_t argcount = 0, non_space_count = 0;
-                            for (int64_t i = funname_end + 1; i < right - 1; ++i) {
-                                const char cc = expr[i];
-                                if (cc == '(') {
-                                    ++stkh;
-                                } else if (cc == ')') {
-                                    --stkh;
-                                } else if (cc == ',') {
-                                    if (stkh == 0) {
-                                        if (!_parse(last_begin, i, _PRI_LOWEST)) return false;
-                                        last_begin = i+1;
-                                        ++argcount;
-                                    }
-                                } else if (!std::isspace(cc)) {
-                                    ++non_space_count;
-                                }
-                            }
-                            if (non_space_count) {
-                                ++argcount;
-                                if (!_parse(last_begin, right-1, _PRI_LOWEST)) return false;
-                            } // else: function call with no args
-                            if (argcount != expected_argcount) {
-                                if (func_opcode == OpCode::logbase &&
-                                        argcount == 1) {
-                                    // log: use ln if only 1 arg (HACK)
-                                    result.ast.push_back(M_E);
-                                } else {
-                                    PARSE_ERR(func_name << ": wrong number of "
-                                            "arguments (expecting " <<
-                                            expected_argcount << ")\n");
+                                result.ast.push_back(OpCode::bnz);
+                                if (!_parse(last_begin, i, _PRI_LOWEST))
                                     return false;
+                                last_begin = i + 1;
+                                while (std::isspace(expr[last_begin]))
+                                    ++last_begin;
+                                last_colon = true;
+                                begin_thunk();
+                            } else if (cc == ',') {
+                                if (!last_colon && i > left + 1) {
+                                    PARSE_ERR(
+                                        "Syntax error: consecutive , "
+                                        "in conditional clause\n");
                                 }
+                                if (!_parse(last_begin, i, _PRI_LOWEST))
+                                    return false;
+                                end_thunk();
+                                begin_thunk();
+                                ++nest_depth;
+                                last_begin = i + 1;
+                                while (std::isspace(expr[last_begin]))
+                                    ++last_begin;
+                                last_colon = false;
                             }
-                            return true;
-                        } else {
-                            PARSE_ERR("'" << func_name << "' is not a function\n");
                         }
-                    } else if (util::is_numeric(c)) {
-                        // Number
-                        std::string tmp = expr.substr(left, right - left);
-                        char* endptr;
-                        result.ast.push_back( // val
-                                std::strtod(tmp.c_str(), &endptr));
-                        if (endptr != tmp.c_str() + (right-left)) {
-                            PARSE_ERR("'" << tmp << "' is not a valid number\n");
+                    }
+                    if (!_parse(last_begin, right - 1, _PRI_LOWEST))
+                        return false;
+                    if (last_colon) {
+                        thunk_beg = result.ast.size();
+                        end_thunk();
+                        begin_thunk();
+                        result.ast.push_back(OpCode::null);
+                        end_thunk();
+                    }
+                    for (size_t t = 0; t < nest_depth; ++t) {
+                        end_thunk();
+                    }
+                    return true;
+                } else if (cr == ')' && ~tok_link[left]) {
+                    // Function
+                    int64_t funname_end = tok_link[left] + 1;
+                    int64_t funname_end_nospace = funname_end;
+                    while (funname_end < right &&
+                           std::isspace(expr[funname_end]))
+                        ++funname_end;
+                    if (expr[funname_end] != '(') {
+                        PARSE_ERR("Invalid function call syntax\n");
+                    }
+                    const std::string func_name =
+                        expr.substr(left, funname_end_nospace - left);
+
+                    uint32_t func_opcode = -1;
+                    size_t expected_argcount = -1;
+
+                    // First look at user-defined functions
+                    auto func_addr = env.addr_of_func(func_name);
+                    if (func_addr != -1) {
+                        expected_argcount = env.funcs[func_addr].n_args;
+                        // Add call
+                        result.ast.push_back(Expr::ASTNode::call(
+                            (uint32_t)func_addr, (uint32_t)expected_argcount));
+                    } else {
+                        // Else, look at built-in functions
+                        const auto& func_opcodes =
+                            OpCode::funcname_to_opcode_map();
+                        auto it = func_opcodes.find(func_name);
+                        if (it != func_opcodes.end()) {
+                            func_opcode = it->second;
+                            result.ast.push_back(func_opcode);
+                            expected_argcount = OpCode::n_args(func_opcode);
                         }
-                        return true;
-                    } else if ((util::is_varname_first(c) ||
-                                (c=='@' && left < right - 1)) &&
-                               util::is_identifier(cr)) {
-                        // Variable name
-                        std::string varname =
-                            expr.substr(left, right - left);
-                        uint64_t addr = env.addr_of(varname, true);
-                        if (addr == -1) {
-                            // If variable not found, try finding function with 0 args
-                            addr = env.addr_of_func(varname);
-                            if (addr == -1 || env.funcs[addr].n_args > 0) {
-                                const auto& func_opcodes = OpCode::funcname_to_opcode_map();
-                                auto fnit = func_opcodes.find(varname);
-                                // If valid function not found, look for parse-time constant like pi
-                                const auto& constant_values =
-                                    OpCode::constant_value_map();
-                                auto it = constant_values.find(varname);
-                                if (it != constant_values.end()) {
-                                    if (std::isnan(it->second)) {
-                                        result.ast.push_back(OpCode::null);
-                                    } else {
-                                        result.ast.push_back(// val
-                                                it->second);
-                                    }
-                                    return true;
+                    }
+                    if (~expected_argcount) {
+                        // Valid function, process args
+                        int64_t stkh = 0, last_begin = funname_end + 1;
+                        size_t argcount = 0, non_space_count = 0;
+                        for (int64_t i = funname_end + 1; i < right - 1; ++i) {
+                            const char cc = expr[i];
+                            if (cc == '(') {
+                                ++stkh;
+                            } else if (cc == ')') {
+                                --stkh;
+                            } else if (cc == ',') {
+                                if (stkh == 0) {
+                                    if (!_parse(last_begin, i, _PRI_LOWEST))
+                                        return false;
+                                    last_begin = i + 1;
+                                    ++argcount;
                                 }
-                                // If no constant not found either,
-                                // (1) mode explicit: return error
-                                // (2) else: create the variable in env
-                                if (!mode_explicit) {
-                                    result.ast.push_back(Expr::ASTNode(OpCode::ref,
-                                                env.addr_of(varname, false)));
-                                } else {
-                                    if (OpCode::funcname_to_opcode_map().count(varname)) {
-                                        PARSE_ERR("\"" << varname + "\" is not a variable; you may need to place parentheses around its argument\n");
-                                    } else {
-                                        PARSE_ERR("\"" << varname + "\" is not a variable or "
-                                                "argumentless function; use * to multiply variables\n");
-                                    }
-                                }
+                            } else if (!std::isspace(cc)) {
+                                ++non_space_count;
+                            }
+                        }
+                        if (non_space_count) {
+                            ++argcount;
+                            if (!_parse(last_begin, right - 1, _PRI_LOWEST))
+                                return false;
+                        }  // else: function call with no args
+                        if (argcount != expected_argcount) {
+                            if (func_opcode == OpCode::logbase &&
+                                argcount == 1) {
+                                // log: use ln if only 1 arg (HACK)
+                                result.ast.push_back(M_E);
                             } else {
-                                // 0-arg user function call
-                                result.ast.push_back(Expr::ASTNode::call((uint32_t) addr, uint32_t(0)));
+                                PARSE_ERR(func_name << ": wrong number of "
+                                                       "arguments (expecting "
+                                                    << expected_argcount
+                                                    << ")\n");
+                                return false;
+                            }
+                        }
+                        return true;
+                    } else {
+                        PARSE_ERR("'" << func_name << "' is not a function\n");
+                    }
+                } else if (util::is_numeric(c)) {
+                    // Number
+                    bool is_imag = false;
+                    if (expr[right - 1] == 'i') {
+                        --right;
+                        is_imag = true;
+                    }
+                    std::string tmp = expr.substr(left, right - left);
+                    char* endptr;
+                    if (is_imag) {
+                        result.ast.push_back(  // val
+                            std::complex(0.0,
+                                         std::strtod(tmp.c_str(), &endptr)));
+                    } else {
+                        result.ast.push_back(  // val
+                            std::strtod(tmp.c_str(), &endptr));
+                    }
+                    if (endptr != tmp.c_str() + (right - left)) {
+                        PARSE_ERR("'" << tmp << "' is not a valid number\n");
+                    }
+                    return true;
+                } else if ((util::is_varname_first(c) ||
+                            (c == '@' && left < right - 1)) &&
+                           util::is_identifier(cr)) {
+                    // Variable name
+                    std::string varname = expr.substr(left, right - left);
+                    uint64_t addr = env.addr_of(varname, true);
+                    if (addr == -1) {
+                        // If variable not found, try finding function with 0
+                        // args
+                        addr = env.addr_of_func(varname);
+                        if (addr == -1 || env.funcs[addr].n_args > 0) {
+                            const auto& func_opcodes =
+                                OpCode::funcname_to_opcode_map();
+                            auto fnit = func_opcodes.find(varname);
+                            // If valid function not found, look for parse-time
+                            // constant like pi
+                            const auto& constant_values =
+                                OpCode::constant_value_map();
+                            auto it = constant_values.find(varname);
+                            if (it != constant_values.end()) {
+                                if (std::isnan(it->second.real())) {
+                                    result.ast.push_back(OpCode::null);
+                                } else {
+                                    result.ast.push_back(  // val
+                                        it->second);
+                                }
+                                return true;
+                            }
+                            // If no constant not found either,
+                            // (1) mode explicit: return error
+                            // (2) else: create the variable in env
+                            if (!mode_explicit) {
+                                result.ast.push_back(Expr::ASTNode(
+                                    OpCode::ref, env.addr_of(varname, false)));
+                            } else {
+                                if (OpCode::funcname_to_opcode_map().count(
+                                        varname)) {
+                                    PARSE_ERR(
+                                        "\""
+                                        << varname +
+                                               "\" is not a variable; you may "
+                                               "need to place parentheses "
+                                               "around its argument\n");
+                                } else {
+                                    PARSE_ERR(
+                                        "\""
+                                        << varname +
+                                               "\" is not a variable or "
+                                               "argumentless function; use * "
+                                               "to multiply variables\n");
+                                }
                             }
                         } else {
-                            // Variable reference
-                            result.ast.push_back(Expr::ASTNode(OpCode::ref, addr));
-                        }
-                        if (result.ast.back().opcode == OpCode::ref &&
-                            result.ast.back().ref >= env.vars.size()) {
-                            PARSE_ERR("Internal error: variable address out of bounds \"" <<
-                                    result.ast.back().ref <<
-                                    "\" (should not happen)\n");
-                            result.ast.back().opcode = OpCode::null;
-                        }
-                        return true;
-                    } else if (c == '$' && cr >= '0' && cr <= '9' &&
-                               util::is_whole_number(
-                                   expr.substr(left + 1, right - left - 1))) {
-                        // Explicit function argument
-                        int64_t idx = std::atoll(expr.substr(left + 1, right - left - 1).c_str());
-                        if (idx < 0 || (size_t)idx >= max_args) {
-                            PARSE_ERR("Invalid explicit function argument $" << idx << "\n");
-                        }
-                        result.ast.emplace_back(OpCode::arg, idx);
-                        return true;
-                    } else if (c == '`' &&
-                               util::is_varname_first(expr[left + 1])) {
-                        // Embed variable value as constant
-                        const std::string varname =
-                            expr.substr(left + 1, right - left - 1);
-                        auto idx = env.addr_of(varname, true);
-                        if (~idx) {
-                            result.ast.push_back(env.vars[idx]);
-                            return true;
-                        } else {
-                            PARSE_ERR("Undefined variable \"" << varname <<
-                                      "\", cannot use as constant\n");
+                            // 0-arg user function call
+                            result.ast.push_back(Expr::ASTNode::call(
+                                (uint32_t)addr, uint32_t(0)));
                         }
                     } else {
-                        PARSE_ERR("Unrecognized expression '" <<
-                            expr.substr(left, right - left) << "'\n");
+                        // Variable reference
+                        result.ast.push_back(Expr::ASTNode(OpCode::ref, addr));
                     }
+                    if (result.ast.back().opcode == OpCode::ref &&
+                        result.ast.back().ref >= env.vars.size()) {
+                        PARSE_ERR(
+                            "Internal error: variable address out of bounds \""
+                            << result.ast.back().ref
+                            << "\" (should not happen)\n");
+                        result.ast.back().opcode = OpCode::null;
+                    }
+                    return true;
+                } else if (c == '$' && cr >= '0' && cr <= '9' &&
+                           util::is_whole_number(
+                               expr.substr(left + 1, right - left - 1))) {
+                    // Explicit function argument
+                    int64_t idx = std::atoll(
+                        expr.substr(left + 1, right - left - 1).c_str());
+                    if (idx < 0 || (size_t)idx >= max_args) {
+                        PARSE_ERR("Invalid explicit function argument $"
+                                  << idx << "\n");
+                    }
+                    result.ast.emplace_back(OpCode::arg, idx);
+                    return true;
+                } else if (c == '`' && util::is_varname_first(expr[left + 1])) {
+                    // Embed variable value as constant
+                    const std::string varname =
+                        expr.substr(left + 1, right - left - 1);
+                    auto idx = env.addr_of(varname, true);
+                    if (~idx) {
+                        result.ast.push_back(env.vars[idx]);
+                        return true;
+                    } else {
+                        PARSE_ERR("Undefined variable \""
+                                  << varname << "\", cannot use as constant\n");
+                    }
+                } else {
+                    PARSE_ERR("Unrecognized expression '"
+                              << expr.substr(left, right - left) << "'\n");
                 }
+            }
         }
-        return _parse(left, right, pri+1);
+        return _parse(left, right, pri + 1);
     }
     Environment& env;
     const std::string& expr;
@@ -567,7 +565,7 @@ private:
     }
     void end_thunk() {
         result.ast.emplace_back(OpCode::thunk_jmp,
-                    result.ast.size() - thunks.back());
+                                result.ast.size() - thunks.back());
         thunks.pop_back();
     }
 
@@ -582,15 +580,14 @@ private:
 };
 
 // Parse an expression
-Expr parse(const std::string& expr, Environment& env,
-        bool mode_explicit, bool quiet, size_t max_args,
-       std::string* error_msg) {
+Expr parse(const std::string& expr, Environment& env, bool mode_explicit,
+           bool quiet, size_t max_args, std::string* error_msg) {
     if (expr.empty()) return Expr();
     // If already error, add newline
-    if (error_msg && error_msg->size() && error_msg->back() != '\n') error_msg->push_back('\n');
-    if (expr.size() && expr[0] == '#') return Expr::AST(1); // Comment
-    ParseSession sess(
-            expr, env, error_msg, mode_explicit, quiet, max_args);
+    if (error_msg && error_msg->size() && error_msg->back() != '\n')
+        error_msg->push_back('\n');
+    if (expr.size() && expr[0] == '#') return Expr::AST(1);  // Comment
+    ParseSession sess(expr, env, error_msg, mode_explicit, quiet, max_args);
     return sess.parse();
 }
 

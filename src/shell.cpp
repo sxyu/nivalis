@@ -13,8 +13,10 @@
 namespace {
 std::string get_word(std::string& str_to_parse) {
     size_t i = 0;
-    for (; i < str_to_parse.size(); ++i) if (!std::isspace(str_to_parse[i])) break;
-    for (; i < str_to_parse.size(); ++i) if (std::isspace(str_to_parse[i])) break;
+    for (; i < str_to_parse.size(); ++i)
+        if (!std::isspace(str_to_parse[i])) break;
+    for (; i < str_to_parse.size(); ++i)
+        if (std::isspace(str_to_parse[i])) break;
     std::string word = str_to_parse.substr(0, i);
     str_to_parse = str_to_parse.substr(i);
     return word;
@@ -33,7 +35,8 @@ std::vector<std::string> get_args(std::string& str_to_parse) {
 namespace nivalis {
 
 Shell::Shell(Environment& env, std::ostream& os) : env(env), os(os) {
-    os << "Nivalis " NIVALIS_VERSION " " NIVALIS_COPYRIGHT << std::endl;
+    os << "Nivalis (complex engine) " NIVALIS_VERSION " " NIVALIS_COPYRIGHT
+       << std::endl;
 }
 bool Shell::eval_line(std::string line) {
     int assn_opcode = OpCode::bsel;
@@ -78,7 +81,8 @@ bool Shell::eval_line(std::string line) {
         uint64_t diff_var_addr;
         if (do_diff) {
             std::string diff_var = get_word(line);
-            util::trim(diff_var); util::trim(line);
+            util::trim(diff_var);
+            util::trim(line);
             if (!util::is_varname(diff_var)) {
                 os << diff_var << " is not a valid variable name\n";
                 return false;
@@ -107,8 +111,8 @@ bool Shell::eval_line(std::string line) {
                         size_t prev_comma = brpos + 1;
                         for (size_t i = brpos + 1; i < var.size(); ++i) {
                             if (var[i] == ',' || var[i] == ')') {
-                                def_fn_args.push_back(var.substr(
-                                            prev_comma, i - prev_comma));
+                                def_fn_args.push_back(
+                                    var.substr(prev_comma, i - prev_comma));
                                 util::trim(def_fn_args.back());
                                 if (var[i] == ')' && def_fn_args.size() == 1 &&
                                     def_fn_args.back().empty()) {
@@ -118,9 +122,9 @@ bool Shell::eval_line(std::string line) {
                                 }
                                 if (def_fn_args.back().empty() ||
                                     (def_fn_args.back()[0] != '$' &&
-                                    !util::is_varname(def_fn_args.back()))) {
-                                    os << "'" << def_fn_args.back() <<
-                                        "': invalid argument variable name\n";
+                                     !util::is_varname(def_fn_args.back()))) {
+                                    os << "'" << def_fn_args.back()
+                                       << "': invalid argument variable name\n";
                                     def_fn = false;
                                     break;
                                 }
@@ -143,11 +147,12 @@ bool Shell::eval_line(std::string line) {
             env.addr_of(def_fn_args[i], false);
         }
         std::string parse_err;
-        Expr expr = parse(will_use_latex ?  latex_to_nivalis(str_to_parse)
-                : str_to_parse, env, !(do_diff || do_optim), // expicit
-                true, // quiet
-                def_fn_args.size(), // max args
-                &parse_err);
+        Expr expr = parse(
+            will_use_latex ? latex_to_nivalis(str_to_parse) : str_to_parse, env,
+            !(do_diff || do_optim),  // expicit
+            true,                    // quiet
+            def_fn_args.size(),      // max args
+            &parse_err);
         if (parse_err.size()) {
             os << parse_err;
             return false;
@@ -156,11 +161,13 @@ bool Shell::eval_line(std::string line) {
             expr.optimize();
             expr.repr(os, env) << "\n";
         } else if (do_diff) {
-            Expr diff = expr.diff(diff_var_addr, env);
-            diff.repr(os, env) << "\n";
+            os << "Diff not implemented\n";
+            return false;
+            // Expr diff = expr.diff(diff_var_addr, env);
+            // diff.repr(os, env) << "\n";
         } else {
-            double output;
-            if (def_fn || !std::isnan(output = expr(env))) {
+            complex output;
+            if (def_fn || !std::isnan((output = expr(env)).real())) {
                 // Assignment statement
                 if (var.size() && parse_err.empty()) {
                     if (def_fn) {
@@ -168,8 +175,9 @@ bool Shell::eval_line(std::string line) {
                         std::vector<uint64_t> bindings;
                         for (size_t i = 0; i < def_fn_args.size(); ++i) {
                             bindings.push_back(
-                                    def_fn_args[i][0] == '$' ? -1 :
-                                    env.addr_of(def_fn_args[i]));
+                                def_fn_args[i][0] == '$'
+                                    ? -1
+                                    : env.addr_of(def_fn_args[i]));
                         }
                         auto addr = env.def_func(var, expr, bindings);
                         if (~addr) {
@@ -184,27 +192,30 @@ bool Shell::eval_line(std::string line) {
 
                     } else {
                         // Define variable
-                        double var_val;
+                        complex var_val;
                         if (assn_opcode != OpCode::bsel) {
                             // Operator assignment
                             auto addr = env.addr_of(var, true);
                             if (addr == -1) {
                                 os << "Undefined variable \"" << var
-                                    << "\" (operator assignment)\n";
+                                   << "\" (operator assignment)\n";
                                 return false;
                             }
                             var_val = Expr::constant(env.vars[addr])
-                                .combine(assn_opcode,
-                                        Expr::constant(output))(env);
+                                          .combine(assn_opcode,
+                                                   Expr::constant(output))(env);
                         } else {
                             // Usual assignment
                             var_val = output;
                         }
                         env.set(var, var_val);
-                        os << var << " = " << var_val << std::endl;
+                        os << var << " = ";
+                        util::print_complex(os, var_val);
+                        os << std::endl;
                     }
                 } else {
-                    os << output << std::endl;
+                    util::print_complex(os, output);
+                    os << std::endl;
                 }
             }
         }

@@ -1,17 +1,7 @@
-# Nivalis Plotter
+# Nivalis Plotter (Complex number version)
 
 A Desmos-like interactive function plotter in C++ supporting implicit functions and real-time critical point/intersection finding.
 Under the hood: features an expression parser, expression (AST) evaluator, symbolic differentiator and expression simplifier, which can be used directly through the shell.
-
-- **Live online demo** using WebAssembly:
-<https://funcplot.com>
-Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
-
-- **Pre-built binaries** for Windows 10 and Ubuntu 16/18 LTS (x86-64) in
-<https://github.com/sxyu/nivalis/releases>
-
-![Screenshot of plotter GUI](https://github.com/sxyu/nivalis/blob/master/readme_img/screenshot.png?raw=true)
-![Screenshot of plotter GUI's virtual shell](https://github.com/sxyu/nivalis/blob/master/readme_img/shell.png?raw=true)
 
 ## Dependencies
 - C++ 17

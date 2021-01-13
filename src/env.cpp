@@ -22,7 +22,7 @@ bool check_for_cycle(const std::vector<Environment::UserFunction>& funcs,
 
 }  // namespace
 
-Environment::Environment() { }
+Environment::Environment() {}
 
 bool Environment::is_set(const std::string& var_name) {
     error_msg.clear();
@@ -33,9 +33,9 @@ uint64_t Environment::addr_of(const std::string& var_name, bool mode_explicit) {
     if (var_name[0] == '@') {
         // Address
         int64_t addr = std::atoll(var_name.substr(1).c_str());
-        return (addr < 0 ||
-                static_cast<size_t>(addr) >= vars.size()) ?
-            -1 : static_cast<uint64_t>(addr);
+        return (addr < 0 || static_cast<size_t>(addr) >= vars.size())
+                   ? -1
+                   : static_cast<uint64_t>(addr);
     }
     auto it = vreg.find(var_name);
     if (it != vreg.end()) {
@@ -56,24 +56,26 @@ uint64_t Environment::addr_of(const std::string& var_name, bool mode_explicit) {
     }
 }
 uint64_t Environment::addr_of(const std::string& var_name,
-        bool mode_explicit) const {
+                              bool mode_explicit) const {
     error_msg.clear();
     if (var_name[0] == '&') {
         // Address
         int64_t addr = std::atoll(var_name.substr(1).c_str());
-        return (addr < 0 || static_cast<size_t>(addr) >= vars.size()) ?
-            -1 : static_cast<uint64_t>(addr);
+        return (addr < 0 || static_cast<size_t>(addr) >= vars.size())
+                   ? -1
+                   : static_cast<uint64_t>(addr);
     }
     auto it = vreg.find(var_name);
     return it != vreg.end() ? it->second : -1;
 }
-void Environment::set(const std::string& var_name, double value) {
+void Environment::set(const std::string& var_name, complex value) {
     auto idx = addr_of(var_name, false);
     if (~idx) vars[idx] = value;
 }
-double Environment::get(const std::string& var_name) const {
+complex Environment::get(const std::string& var_name) const {
     auto idx = addr_of(var_name);
-    if (~idx) return vars[idx];
+    if (~idx)
+        return vars[idx];
     else {
         return std::numeric_limits<double>::quiet_NaN();
     }
@@ -81,7 +83,7 @@ double Environment::get(const std::string& var_name) const {
 bool Environment::del(const std::string& var_name) {
     auto idx = addr_of(var_name, true);
     if (~idx) {
-        if (idx == vars.size()-1) {
+        if (idx == vars.size() - 1) {
             vars.pop_back();
             varname.pop_back();
         } else {
@@ -92,13 +94,12 @@ bool Environment::del(const std::string& var_name) {
         }
         vreg.erase(var_name);
         return true;
-    }
-    else return false;
+    } else
+        return false;
 }
 
-uint64_t Environment::def_func(const std::string& func_name,
-                  const Expr& expr,
-                  const std::vector<uint64_t>& arg_bindings) {
+uint64_t Environment::def_func(const std::string& func_name, const Expr& expr,
+                               const std::vector<uint64_t>& arg_bindings) {
     error_msg.clear();
     size_t idx = 0;
     auto it = freg.find(func_name);
@@ -113,7 +114,7 @@ uint64_t Environment::def_func(const std::string& func_name,
     UserFunction& func = funcs[idx];
     func.deps.clear();
     Expr func_expr = expr;
-    func_expr.optimize(); // Optimize function expression
+    func_expr.optimize();  // Optimize function expression
     auto& ast = func_expr.ast;
     // Invert argument mapping
     std::vector<uint64_t> arg_vars(vars.size(), -1);
@@ -125,8 +126,7 @@ uint64_t Environment::def_func(const std::string& func_name,
     // Sub arguments
     for (size_t i = 0; i < ast.size(); ++i) {
         auto& nd = ast[i];
-        if (OpCode::has_ref(nd.opcode) &&
-            nd.opcode != OpCode::arg &&
+        if (OpCode::has_ref(nd.opcode) && nd.opcode != OpCode::arg &&
             ~arg_vars[nd.ref]) {
             // Set argument
             nd.opcode = OpCode::arg;
@@ -138,14 +138,15 @@ uint64_t Environment::def_func(const std::string& func_name,
         }
     }
     std::sort(func.deps.begin(), func.deps.end());
-    func.deps.resize(std::unique(func.deps.begin(), func.deps.end()) - func.deps.begin());
+    func.deps.resize(std::unique(func.deps.begin(), func.deps.end()) -
+                     func.deps.begin());
     func.n_args = arg_bindings.size();
     func.expr = std::move(func_expr);
 
     // Check for recursion
     if (check_for_cycle(funcs, idx)) {
         // Found cycle
-        func.expr.ast = { OpCode::null };
+        func.expr.ast = {OpCode::null};
         func.deps.clear();
         error_msg = "Cycle found in definition of " + func_name + "(...)\n";
         return -1;
