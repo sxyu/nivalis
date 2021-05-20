@@ -4,6 +4,7 @@
 #include <ostream>
 #include <istream>
 #include <vector>
+#include <limits>
 
 #include "opcodes.hpp"
 namespace nivalis {
