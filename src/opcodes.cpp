@@ -92,6 +92,9 @@ const char* repr(uint32_t opcode) {
         case trigammab: return "trigamma(@)";
         case erfb:      return "erf(@)";
         case zetab:     return "zeta(@)";
+        case sigmoidb:     return "sigmoid(@)";
+        case softplusb:     return "softplus(@)";
+        case gausspdfb:     return "gausspdf(@)";
         case thunk_jmp: return "";
         case thunk_ret: return "@@";
         case arg: return "$";
@@ -165,6 +168,9 @@ const char* latex_repr(uint32_t opcode) {
         case trigammab: return "\\psi_{1}\\left(@\\right)";
         case erfb:      return "\\erf\\left(@\\right)";
         case zetab:     return "\\zeta\\left(@\\right)";
+        case sigmoidb:     return "\\sigmoid\\left(@\\right)";
+        case softplusb:     return "\\softplus\\left(@\\right)";
+        case gausspdfb:     return "\\gausspdf\\left(@\\right)";
         case thunk_jmp: return "";
         case thunk_ret: return "@@";
         case arg: return "$";
@@ -264,6 +270,9 @@ const std::map<std::string, uint32_t, std::less<> >& funcname_to_opcode_map() {
         {"choose", OpCode::choose},
         {"fafact", OpCode::fafact},
         {"rifact", OpCode::rifact},
+        {"softplus", OpCode::softplusb},
+        {"sigmoid", OpCode::sigmoidb},
+        {"gausspdf", OpCode::gausspdfb},
 
         // -1 means fake command handled in parser
         {"fact", -1},

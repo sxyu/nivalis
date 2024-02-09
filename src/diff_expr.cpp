@@ -399,6 +399,40 @@ struct Differentiator {
                                  PUSH(mul); PUSH(2.0 / sqrt(M_PI));
                                  PUSH(expb); PUSH(unaryminus); PUSH(sqrb),);
                          break;
+            case sigmoidb: 
+                         {
+                            PUSH(mul);
+                            PUSH(mul);
+                            PUSH(sigmoidb);
+                            copy_ast(*ast, out);
+                            PUSH(sub);
+                            PUSH(1.);
+                            PUSH(sigmoidb);
+                            copy_ast(*ast, out);
+                            DIFF_NEXT;
+                         }
+                        ; 
+                        break;
+            case softplusb: 
+                         {
+                            PUSH(mul);
+                            PUSH(sigmoidb);
+                            copy_ast(*ast, out);
+                            DIFF_NEXT;
+                         }
+                         break;
+
+            case gausspdfb: 
+                         {
+                            PUSH(mul);
+                            PUSH(mul);
+                            PUSH(unaryminus);
+                            copy_ast(*ast, out);
+                            PUSH(gausspdfb);
+                            copy_ast(*ast, out);
+                            DIFF_NEXT;
+                         }
+                         break;
 
             case zetab:  return false; // Derivative not available
         }

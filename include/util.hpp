@@ -3,6 +3,7 @@
 #define _UTIL_H_4EB09B11_F909_45C4_AD5D_8AA7A6644106
 #include <string>
 #include <string_view>
+#include <cstdint>
 #include <vector>
 #include <ostream>
 #include <istream>

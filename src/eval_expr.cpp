@@ -274,7 +274,15 @@ double eval_ast(Environment& env, const Expr::AST& ast,
             case digammab: case trigammab: case zetab:
                 ARG1 = NONE; print_boost_warning(node.opcode); break;
 #endif
-            case erfb: ARG1 = erf(ARG1); break; break;
+            case erfb: ARG1 = erf(ARG1); break;
+            case sigmoidb: ARG1 = 1.f / (1.f + exp(-ARG1)); break;
+            case softplusb: {
+                                if (ARG1 < 15.f) {
+                                    ARG1 = log(1.f + exp(ARG1));
+                                }
+                            }
+                            break;
+            case gausspdfb: ARG1 = 1.f / sqrt(M_PI * 2.f) * exp(pow(ARG1, 2.f) * 0.5f); break;
         }
     }
     return stk[top--];

@@ -776,6 +776,9 @@ void optim_link_nodes_final_pass(Environment& env,
 
 // Implementation of optimize in Expr class
 void Expr::optimize(int num_passes) {
+    // TOO bugged, not doing
+    return;
+
     // std::cout << *this << std::endl;
     std::vector<ASTLinkNode> nodes;
     ast_to_link_nodes(ast, nodes);

@@ -61,6 +61,10 @@ enum _OpCode {
     sinb, cosb, tanb, asinb, acosb, atanb, sinhb, coshb, tanhb,
     tgammab, lgammab, digammab, trigammab,
     erfb, zetab,
+
+    sigmoidb,
+    softplusb,
+    gausspdfb,
 };
 
 // Get # args the operator takes

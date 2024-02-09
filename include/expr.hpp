@@ -2,6 +2,7 @@
 #ifndef _EXPR_H_331EE476_6D57_4B33_8148_D5EA882BC818
 #define _EXPR_H_331EE476_6D57_4B33_8148_D5EA882BC818
 #include <ostream>
+#include <limits>
 #include <istream>
 #include <vector>
 
