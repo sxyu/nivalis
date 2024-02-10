@@ -51,6 +51,7 @@ Mirror: <https://www.ocf.berkeley.edu/~sxyu/plot/>
 - Build project: `cmake --build . --config Release`, or open the solution in VS and build in "Release" configuration manually
 
 ### Emscripten (building on Ubuntu)
+- Install emscripten 3.1.16. Support for later emscripten is not guaranteed. https://emscripten.org/docs/getting_started/downloads.html (replace latest with 3.1.16)
 - Configure project with CMake:
     - `cd build-emcc && emcmake cmake ..`
 - Build: `make -j8`

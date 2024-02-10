@@ -1,4 +1,4 @@
-cmake_minimum_required( VERSION 2.8 )
+cmake_minimum_required( VERSION 3.6 )
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -154,7 +154,8 @@ if (EMSCRIPTEN)
     )
     list(TRANSFORM SOURCES_JS PREPEND ${JS_SRC_DIR}/)
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 --bind -s EXPORT_NAME=\"'Nivalis'\" -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s USE_BOOST_HEADERS=1 -std=c++17")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -std=c++17 -s USE_BOOST_HEADERS=1")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --bind -s EXPORT_NAME=\"'Nivalis'\" -s USE_WEBGL2=1 -s USE_GLFW=3 -s FULL_ES3=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1")
     #-s EXTRA_EXPORTED_RUNTIME_METHODS='[\"cwrap\"]'
     set(_EMSCRIPTEN_ "")
     if ( USE_BOOST_MATH )
@@ -175,7 +176,7 @@ if (EMSCRIPTEN)
     target_link_libraries( worker
         ${LIB_PROJ_NAME} ${PROJ_DEPENDENCIES} )
     set_target_properties( worker
-        PROPERTIES COMPILE_FLAGS "-s EXPORTED_FUNCTIONS='[\"_webworker_sync\"]' -s BUILD_AS_WORKER=1")
+        PROPERTIES COMPILE_FLAGS "")
     set_target_properties( worker
         PROPERTIES LINK_FLAGS "-s EXPORTED_FUNCTIONS='[\"_webworker_sync\"]' -s BUILD_AS_WORKER=1")
 
