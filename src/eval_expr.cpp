@@ -282,7 +282,7 @@ double eval_ast(Environment& env, const Expr::AST& ast,
                                 }
                             }
                             break;
-            case gausspdfb: ARG1 = 1.f / sqrt(M_PI * 2.f) * exp(pow(ARG1, 2.f) * 0.5f); break;
+            case gausspdfb: ARG1 = 1.f / sqrt(M_PI * 2.f) * exp(-pow(ARG1, 2.f) * 0.5f); break;
         }
     }
     return stk[top--];
